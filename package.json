@@ -17,7 +17,7 @@
     "verify:multi-instance": "node scripts/verify-multi-instance.mjs",
     "check:mobile": "node scripts/check-mobile-toolchain.mjs",
     "setup:android:cn": "mkdir -p $HOME/.gradle/init.d && cp clients/flutter_app/android/aliyun-mirrors.init.gradle $HOME/.gradle/init.d/susong-aliyun-mirrors.gradle",
-    "build:android:cn": "npm run setup:android:cn && cd clients/flutter_app && flutter build apk --debug",
+    "build:android:cn": "npm run setup:android:cn && cd clients/flutter_app && FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn flutter build apk --debug",
     "test": "node --test",
     "check": "npm run lint && npm run typecheck && npm run validate:protocol && npm run validate:contracts && npm run validate:migrations && npm test"
   },
