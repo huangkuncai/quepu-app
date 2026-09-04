@@ -1,0 +1,350 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:susong_protocol_client/client.dart';
+import 'package:susong_protocol_client/protocol.dart';
+
+import 'package:susong_app/src/fake_transport.dart';
+
+void main() {
+  test('session controller recovers a room after transport loss', () async {
+    final transport = FakeTransport();
+    final client = ClientSessionController(
+      transport: transport,
+      deviceId: 'test-device',
+      platform: 'web',
+    );
+
+    await client.login('13800000000', '000000');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(client.snapshot.phase, ConnectionPhase.online);
+
+    await client.createRoom();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(client.snapshot.roomId, 'demo-room');
+    expect(client.snapshot.roomVersion, 0);
+    expect(client.snapshot.pendingCommandCount, 0);
+
+    await client.joinRoom('demo-room');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(client.snapshot.roomVersion, 1);
+
+    transport.simulateDisconnect();
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+    expect(client.snapshot.phase, ConnectionPhase.disconnected);
+
+    await client.connect();
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(client.snapshot.phase, ConnectionPhase.online);
+    await client.reconnectRoom('demo-room');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(client.snapshot.roomVersion, 1);
+    expect(client.snapshot.syncRequired, isFalse);
+
+    await client.dispose();
+  });
+
+  test(
+    'business commands are blocked until online and gaps request sync',
+    () async {
+      final transport = FakeTransport();
+      final client = ClientSessionController(
+        transport: transport,
+        deviceId: 'test-device',
+        platform: 'web',
+      );
+
+      await expectLater(client.createRoom(), throwsA(isA<ProtocolException>()));
+      await client.login('13800000000', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.createRoom();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      transport.inject({
+        'protocolVersion': '1.0',
+        'type': 'room_event',
+        'eventId': newProtocolId(),
+        'roomId': 'demo-room',
+        'roomVersion': 3,
+        'payload': {
+          'snapshot': {'roomVersion': 3},
+        },
+        'occurredAt': DateTime.now().toUtc().toIso8601String(),
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(client.snapshot.phase, ConnectionPhase.online);
+      expect(client.snapshot.syncRequired, isFalse);
+      expect(client.snapshot.roomVersion, 0);
+
+      await client.dispose();
+    },
+  );
+
+  test('idempotent room command remains in outbox across disconnect', () async {
+    final transport = FakeTransport();
+    final client = ClientSessionController(
+      transport: transport,
+      deviceId: 'test-device',
+      platform: 'web',
+    );
+    await client.login('13800000000', '000000');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    final pendingCreate = client.createRoom();
+    transport.simulateDisconnect();
+    await pendingCreate;
+    expect(client.snapshot.pendingCommandCount, 1);
+
+    await client.connect();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(client.snapshot.phase, ConnectionPhase.online);
+    expect(client.snapshot.roomId, 'demo-room');
+    expect(client.snapshot.pendingCommandCount, 0);
+
+    await client.dispose();
+  });
+
+  test(
+    'room events do not ACK commands and timeout retry keeps commandId',
+    () async {
+      final transport = FakeTransport()..emitCommandAcks = false;
+      final client = ClientSessionController(
+        transport: transport,
+        deviceId: 'test-device',
+        platform: 'web',
+        commandTimeout: const Duration(milliseconds: 20),
+        retryBackoff: const Duration(milliseconds: 2),
+      );
+
+      await client.login('13800000000', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.createRoom();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      final commandId = await client.joinRoom('demo-room');
+      expect(client.snapshot.pendingCommandCount, 1);
+      await Future<void>.delayed(const Duration(milliseconds: 45));
+
+      final attempts = transport.sentMessages
+          .where((message) => message['type'] == 'join_room')
+          .toList();
+      expect(attempts.length, greaterThanOrEqualTo(2));
+      expect(attempts.map((message) => message['commandId']).toSet(), {
+        commandId,
+      });
+      expect(client.snapshot.pendingCommandCount, 1);
+
+      await client.dispose();
+    },
+  );
+
+  test(
+    'disconnect keeps replayable commands and reconnect reuses envelope',
+    () async {
+      final transport = FakeTransport()..emitCommandAcks = false;
+      final client = ClientSessionController(
+        transport: transport,
+        deviceId: 'test-device',
+        platform: 'web',
+      );
+
+      await client.login('13800000000', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.createRoom();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      final commandId = await client.joinRoom('demo-room');
+
+      transport.simulateDisconnect();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      expect(client.snapshot.pendingCommandCount, 1);
+
+      await client.connect();
+      await Future<void>.delayed(const Duration(milliseconds: 90));
+      final attempts = transport.sentMessages
+          .where((message) => message['type'] == 'join_room')
+          .toList();
+      expect(attempts.length, greaterThanOrEqualTo(2));
+      expect(attempts.map((message) => message['commandId']).toSet(), {
+        commandId,
+      });
+
+      await client.dispose();
+    },
+  );
+
+  test(
+    'transport failure leaves the command queued for a safe retry',
+    () async {
+      final transport = FakeTransport()..emitCommandAcks = false;
+      final client = ClientSessionController(
+        transport: transport,
+        deviceId: 'test-device',
+        platform: 'web',
+        retryBackoff: const Duration(milliseconds: 5),
+      );
+
+      await client.login('13800000000', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.createRoom();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      transport.failNextSends = 1;
+      final command = client.joinRoom('demo-room');
+      await expectLater(command, throwsA(isA<StateError>()));
+      expect(client.snapshot.pendingCommandCount, 1);
+
+      await Future<void>.delayed(const Duration(milliseconds: 35));
+      final attempts = transport.sentMessages
+          .where((message) => message['type'] == 'join_room')
+          .toList();
+      expect(attempts.length, greaterThanOrEqualTo(2));
+      expect(
+        attempts.map((message) => message['commandId']).toSet(),
+        hasLength(1),
+      );
+
+      await client.dispose();
+    },
+  );
+
+  test(
+    'ordinary commands are rejected while room synchronization is active',
+    () async {
+      final transport = FakeTransport();
+      final client = ClientSessionController(
+        transport: transport,
+        deviceId: 'test-device',
+        platform: 'web',
+      );
+
+      await client.login('13800000000', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.createRoom();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      transport.inject({
+        'protocolVersion': '1.0',
+        'type': 'room_event',
+        'eventId': newProtocolId(),
+        'roomId': 'demo-room',
+        'roomVersion': 3,
+        'payload': {
+          'snapshot': {'roomVersion': 3},
+        },
+        'occurredAt': DateTime.now().toUtc().toIso8601String(),
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(client.snapshot.phase, ConnectionPhase.syncing);
+      await expectLater(
+        client.action('demo-room', 'pass'),
+        throwsA(isA<ProtocolException>()),
+      );
+
+      await client.dispose();
+    },
+  );
+
+  test(
+    'maintenance pauses the outbox and manual retry reconnects safely',
+    () async {
+      final transport = FakeTransport();
+      final client = ClientSessionController(
+        transport: transport,
+        deviceId: 'test-device',
+        platform: 'web',
+      );
+
+      await client.login('13800000000', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.createRoom();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      // Keep a command pending so maintenance must pause, rather than drop,
+      // an operation that may already have reached the server.
+      transport.emitCommandAcks = false;
+      final commandId = await client.joinRoom('demo-room');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      transport.simulateMaintenance();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      expect(client.snapshot.phase, ConnectionPhase.maintenance);
+      expect(client.snapshot.pendingCommandCount, 1);
+      expect(client.pendingCommands.single['commandId'], commandId);
+
+      await client.retryConnection();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(client.snapshot.phase, ConnectionPhase.online);
+      expect(client.snapshot.pendingCommandCount, 1);
+
+      await client.dispose();
+    },
+  );
+
+  test(
+    'version conflict triggers sync and refreshes the queued command version',
+    () async {
+      final transport = FakeTransport();
+      final client = ClientSessionController(
+        transport: transport,
+        deviceId: 'test-device',
+        platform: 'web',
+      );
+
+      await client.login('13800000000', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.createRoom();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.joinRoom('demo-room');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      transport.emitCommandAcks = false;
+      final commandId = await client.action('demo-room', 'pass');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      transport.simulateVersionConflict(commandId: commandId);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(client.snapshot.phase, ConnectionPhase.online);
+      expect(client.snapshot.hasVersionConflict, isTrue);
+      expect(client.snapshot.pendingCommandCount, 1);
+      final pending = client.pendingCommands.single;
+      final before = pending['roomVersion'];
+      expect(before, 1);
+
+      // Explicit retry clears the conflict marker and preserves commandId,
+      // while binding the envelope to the freshly synchronized room version.
+      await client.retryCommand(commandId);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(client.pendingCommands.single['commandId'], commandId);
+      expect(client.pendingCommands.single['roomVersion'], 2);
+
+      await client.dispose();
+    },
+  );
+
+  test('foreground resume requests an authoritative room sync', () async {
+    final transport = FakeTransport();
+    final client = ClientSessionController(
+      transport: transport,
+      deviceId: 'test-device',
+      platform: 'web',
+    );
+
+    await client.login('13800000000', '000000');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await client.createRoom();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await client.joinRoom('demo-room');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final reconnectCount = transport.sentMessages
+        .where((message) => message['type'] == 'reconnect')
+        .length;
+
+    await client.resumeFromBackground();
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(client.snapshot.phase, ConnectionPhase.online);
+    expect(client.snapshot.syncRequired, isFalse);
+    expect(
+      transport.sentMessages
+          .where((message) => message['type'] == 'reconnect')
+          .length,
+      greaterThan(reconnectCount),
+    );
+
+    await client.dispose();
+  });
+}

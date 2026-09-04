@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/create-room-payload.schema.json",
+  "title": "Create room payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "clubId": { "type": ["string", "null"], "maxLength": 64 },
+    "floorId": { "type": ["string", "null"], "maxLength": 64 },
+    "gameType": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "ruleId": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "ruleVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "ruleConfig": { "type": "object", "additionalProperties": true },
+    "ruleSnapshot": { "type": "object", "additionalProperties": true },
+    "accessPolicy": { "type": "string", "enum": ["MEMBERS_ONLY", "INVITE_ONLY", "PUBLIC_CODE"] },
+    "roomAccessPolicy": { "type": "string", "enum": ["MEMBERS_ONLY", "INVITE_ONLY", "PUBLIC_CODE"] },
+    "totalRounds": { "type": "integer", "minimum": 1, "maximum": 256 },
+    "roundCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+    "maxPlayers": { "type": "integer", "minimum": 2, "maximum": 4 },
+    "deadlinePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "actionDeadlineMs": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+        "turnDeadlineMs": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+        "turnTimeoutMs": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+        "timeoutAction": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "defaultAction": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/auth-payload.schema.json",
+  "title": "WebSocket authentication payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["accessToken"],
+  "properties": {
+    "accessToken": { "type": "string", "minLength": 1, "maxLength": 4096 }
+  }
+}

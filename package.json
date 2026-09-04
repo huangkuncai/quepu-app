@@ -1,0 +1,35 @@
+{
+  "name": "susong-mahjong-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "宿松麻将第一版服务端骨架",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "lint": "node scripts/lint.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
+    "validate:protocol": "node scripts/validate-protocol.mjs",
+    "validate:contracts": "node scripts/validate-contracts.mjs",
+    "validate:migrations": "node scripts/validate-migrations.mjs",
+    "scan:secrets": "node scripts/scan-secrets.mjs",
+    "verify:real": "node scripts/verify-real-adapters.mjs",
+    "verify:multi-instance": "node scripts/verify-multi-instance.mjs",
+    "check:mobile": "node scripts/check-mobile-toolchain.mjs",
+    "setup:android:cn": "mkdir -p $HOME/.gradle/init.d && cp clients/flutter_app/android/aliyun-mirrors.init.gradle $HOME/.gradle/init.d/susong-aliyun-mirrors.gradle",
+    "build:android:cn": "npm run setup:android:cn && cd clients/flutter_app && flutter build apk --debug",
+    "test": "node --test",
+    "check": "npm run lint && npm run typecheck && npm run validate:protocol && npm run validate:contracts && npm run validate:migrations && npm test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.23.0",
+    "redis": "^5.12.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "yaml": "^2.9.0"
+  }
+}

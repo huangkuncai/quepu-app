@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/login-payload.schema.json",
+  "title": "Development login payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "phone": { "type": "string", "minLength": 5, "maxLength": 32 },
+    "code": { "type": "string", "minLength": 1, "maxLength": 16 },
+    "playerId": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "deviceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "platform": { "type": "string", "maxLength": 32 }
+  },
+  "oneOf": [
+    {
+      "required": ["phone", "code"],
+      "properties": {
+        "phone": { "type": "string", "minLength": 5, "maxLength": 32 },
+        "code": { "type": "string", "minLength": 1, "maxLength": 16 },
+        "deviceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "platform": { "type": "string", "maxLength": 32 }
+      }
+    },
+    {
+      "required": ["playerId"],
+      "properties": {
+        "playerId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "deviceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "platform": { "type": "string", "maxLength": 32 }
+      }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+# CL-101/103 协议消费与连接核心（POC）
+
+`clients/dart_protocol` 是不依赖 Flutter、ArkUI 或平台插件的 Dart 消费层。它现在包含 `protocol.dart` 的 envelope/reducer 和 `client.dart` 的会话控制器，验证四件事：
+
+- command/event envelope 的版本、UUID、未知字段和 payload 基础校验；
+- `roomVersion` 重复/乱序/缺口检测，缺口只触发 sync，不由客户端自行补事件；
+- 连接状态 `DISCONNECTED -> CONNECTING -> AUTHENTICATING -> SYNCING -> ONLINE`、退避和维护态。
+- 传输接口、登录/刷新/退出、命令 outbox、ACK 清理、断线后的重新鉴权和房间同步；token 只保存在控制器内部。
+- 原生 `IoWebSocketTransport`（`dart:io`）支持 Android/iOS 等 native runtime 的 WSS 收发、请求头、非法帧关闭、并发连接去重和关闭竞态；Web 构建仍需单独 transport adapter。
+
+运行：
+
+```bash
+cd clients/dart_protocol
+dart run tool/test.dart
+dart run tool/io_transport_test.dart
+```
+
+Flutter 壳的 mock 联调与回归：
+
+```bash
+cd clients/flutter_app
+flutter pub get
+flutter test
+flutter build web --release
+```
+
+当前 Flutter 壳只使用 `FakeTransport`，用于本机 POC；它不代表 Android/iOS/HarmonyOS 真机、WSS、平台安全存储、推送或签名已经通过。三端工具链和设备条件按 [DEVICE_MATRIX.md](DEVICE_MATRIX.md) 登记后，才能把 `CL-102/CL-103` 标为完成。
+
+这不是最终 Flutter App，也没有牌局裁判、计分、钻石扣费、充值、支付、提现或现金兑换能力。Android/iOS/HarmonyOS 包构建仍受 [DEVICE_MATRIX.md](DEVICE_MATRIX.md) 的 SDK、真机和签名条件约束。

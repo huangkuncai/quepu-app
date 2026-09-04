@@ -1,0 +1,28 @@
+{
+  "protocolVersion": "1.0",
+  "supportedMajorVersions": [1],
+  "commands": {
+    "hello": "hello-payload.schema.json",
+    "auth": "auth-payload.schema.json",
+    "login": "login-payload.schema.json",
+    "refresh": "refresh-payload.schema.json",
+    "logout": "logout-payload.schema.json",
+    "create_room": "create-room-payload.schema.json",
+    "join_room": "join-room-payload.schema.json",
+    "leave_room": "leave-room-payload.schema.json",
+    "ready": "ready-room-payload.schema.json",
+    "begin_playing": "begin-playing-payload.schema.json",
+    "action": "action-payload.schema.json",
+    "settle_round": "settle-room-payload.schema.json",
+    "next_round": "next-round-payload.schema.json",
+    "disband_room": "disband-room-payload.schema.json",
+    "reconnect": "reconnect-payload.schema.json",
+    "subscribe": "subscribe-payload.schema.json",
+    "unsubscribe": "subscribe-payload.schema.json"
+  },
+  "envelopes": {
+    "command": "command-envelope.schema.json",
+    "event": "event-envelope.schema.json",
+    "error": "error-envelope.schema.json"
+  }
+}

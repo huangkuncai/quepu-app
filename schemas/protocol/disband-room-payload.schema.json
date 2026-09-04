@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/disband-room-payload.schema.json",
+  "title": "Disband room payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "reason": { "type": "string", "maxLength": 256 }
+  }
+}

@@ -1,0 +1,40 @@
+asyncapi: 2.6.0
+info:
+  title: Susong Mahjong WebSocket Protocol
+  version: 1.0.0-draft
+  description: |
+    Draft WSS contract. The server remains authoritative for room state,
+    turn order, reconnect replay and all future rule settlement.
+defaultContentType: application/json
+channels:
+  client.commands:
+    publish:
+      operationId: receiveCommand
+      message:
+        $ref: '#/components/messages/Command'
+  server.events:
+    subscribe:
+      operationId: receiveEvent
+      message:
+        oneOf:
+          - $ref: '#/components/messages/Event'
+          - $ref: '#/components/messages/Error'
+components:
+  messages:
+    Command:
+      name: CommandEnvelope
+      title: Client command
+      summary: Versioned command sent by an authenticated client
+      payload:
+        $ref: '../../schemas/protocol/command-envelope.schema.json'
+    Event:
+      name: EventEnvelope
+      title: Server event
+      summary: Viewer-scoped event with a monotonic roomVersion
+      payload:
+        $ref: '../../schemas/protocol/event-envelope.schema.json'
+    Error:
+      name: ErrorEnvelope
+      title: Protocol error
+      payload:
+        $ref: '../../schemas/protocol/error-envelope.schema.json'

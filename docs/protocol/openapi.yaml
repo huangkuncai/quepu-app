@@ -1,0 +1,1197 @@
+openapi: 3.1.0
+info:
+  title: Susong Mahjong API
+  version: 1.0.0-draft
+  description: |
+    Language-neutral REST contract for the modular monolith. Authentication,
+    rule settlement and diamond operations remain sandboxed until their gates pass.
+servers:
+  - url: https://staging.example.invalid/api
+    description: Placeholder staging endpoint; replace during G0/G1.
+tags:
+  - name: health
+  - name: auth
+  - name: users
+  - name: rooms
+  - name: support
+paths:
+  /v1/health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/ready:
+    get:
+      tags: [health]
+      operationId: getReadiness
+      responses:
+        '200':
+          description: Dependencies are ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '503':
+          description: Dependency is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Development stub login response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Rotated session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Session revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/me:
+    get:
+      tags: [users]
+      operationId: getCurrentUser
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Current authenticated principal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/rooms:
+    post:
+      tags: [rooms]
+      operationId: createRoom
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+      responses:
+        '200':
+          description: Replayed room creation; the original room is returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '201':
+          description: Room created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/rooms/{roomId}:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    get:
+      tags: [rooms]
+      operationId: getRoom
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Viewer-scoped room snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '304':
+          description: Viewer snapshot has not changed; no response body
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            X-Room-Version:
+              $ref: '#/components/headers/RoomVersion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/rooms/{roomId}/join:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [rooms]
+      operationId: joinRoom
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinRoomRequest'
+      responses:
+        '200':
+          description: Joined room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomCommandResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/rooms/{roomId}/leave:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [rooms]
+      operationId: leaveRoom
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveRoomRequest'
+      responses:
+        '200':
+          description: Left room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomCommandResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/rooms/{roomId}/ready:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [rooms]
+      operationId: readyRoom
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadyRoomRequest'
+      responses:
+        '200':
+          description: Ready state changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomCommandResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/rooms/{roomId}/start:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [rooms]
+      operationId: startRoom
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomVersionRequest'
+      responses:
+        '200':
+          description: Room started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomCommandResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/rooms/{roomId}/begin:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [rooms]
+      operationId: beginRoom
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomVersionRequest'
+      responses:
+        '200':
+          description: Playing phase started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomCommandResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/rooms/{roomId}/action:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [rooms]
+      operationId: applyRoomAction
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionRoomRequest'
+      responses:
+        '200':
+          description: Room action applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomCommandResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/rooms/{roomId}/settle:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [rooms]
+      operationId: settleRoom
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettleRoomRequest'
+      responses:
+        '200':
+          description: Round settlement applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomCommandResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/rooms/{roomId}/next:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [rooms]
+      operationId: nextRoomRound
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NextRoundRequest'
+      responses:
+        '200':
+          description: Next round started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomCommandResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/rooms/{roomId}/disband:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [rooms]
+      operationId: disbandRoom
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisbandRoomRequest'
+      responses:
+        '200':
+          description: Room disbanded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomCommandResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/rooms/{roomId}/commands:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [rooms]
+      operationId: submitRoomCommand
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandEnvelope'
+      responses:
+        '200':
+          description: Command committed by the room actor and returned with its current snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomCommandResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '426':
+          $ref: '#/components/responses/UnsupportedVersion'
+  /v1/support/tickets:
+    post:
+      tags: [support]
+      operationId: createSupportTicket
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportCreateRequest'
+      responses:
+        '201':
+          description: Plain-text support ticket created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportTicketResponse'
+        '200':
+          description: Idempotent replay of an earlier ticket creation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportTicketResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      tags: [support]
+      operationId: listMySupportTickets
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [OPEN, WAITING_USER, RESOLVED, CLOSED]
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Tickets owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportTicketListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/support/tickets/{ticketId}:
+    parameters:
+      - $ref: '#/components/parameters/TicketId'
+    get:
+      tags: [support]
+      operationId: getMySupportTicket
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Ticket and plain-text messages owned by the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportTicketResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    
+  /v1/support/tickets/{ticketId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/TicketId'
+    get:
+      tags: [support]
+      operationId: listMySupportMessages
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Plain-text messages for an owned ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportMessagesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [support]
+      operationId: replyToSupportTicket
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportReplyRequest'
+      responses:
+        '201':
+          description: Plain-text message appended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportMessageResponse'
+        '200':
+          description: Idempotent replay of an earlier reply
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportMessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /v1/support/tickets/{ticketId}/close:
+    parameters:
+      - $ref: '#/components/parameters/TicketId'
+    post:
+      tags: [support]
+      operationId: closeMySupportTicket
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportCloseRequest'
+      responses:
+        '200':
+          description: Ticket closed or already closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportTicketResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+components:
+  responses:
+    Unauthorized:
+      description: Authentication is required or the supplied token is invalid/expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: The authenticated principal is not allowed to perform this operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: The requested resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: The request conflicts with current room state, version, or idempotency data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationFailed:
+      description: The request payload or command envelope is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: The request body exceeds the configured limit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnsupportedVersion:
+      description: The protocol major version is unsupported
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: The requested module is not available in this deployment
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  headers:
+    ETag:
+      description: Strong snapshot hash for optimistic concurrency and cache validation
+      schema:
+        type: string
+        minLength: 3
+        maxLength: 256
+    RequestId:
+      description: Request correlation identifier
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+    RoomVersion:
+      description: Monotonic room version represented by the response
+      schema:
+        type: integer
+        minimum: 0
+  parameters:
+    RoomId:
+      name: roomId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: '^[A-Za-z0-9_-]+$'
+    TicketId:
+      name: ticketId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9_-]+$'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >-
+        Stable client command key; replays return the original result. The
+        generic room endpoints accept opaque keys. For /rooms/{roomId}/commands
+        the value is also used as CommandEnvelope.commandId and therefore must
+        be a UUID when supplied.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: Snapshot ETag precondition for optimistic concurrency.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: Return 304 when the viewer snapshot ETag has not changed.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: >-
+        Optional request correlation identifier. The generic room endpoints
+        accept opaque values; the /commands envelope validator requires a UUID
+        when this header is supplied.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: access-token
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, checkedAt]
+      properties:
+        status: { type: string, enum: [ok] }
+        checkedAt: { type: string, format: date-time }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      description: Development stub accepts either a phone/code pair or a stable playerId.
+      oneOf:
+        - required: [phone, code]
+        - required: [playerId]
+      properties:
+        phone: { type: string, minLength: 5, maxLength: 32 }
+        code: { type: string, minLength: 1, maxLength: 16 }
+        playerId: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
+        deviceId: { type: string, minLength: 1, maxLength: 128 }
+        platform: { type: string, minLength: 1, maxLength: 32 }
+        displayName: { type: string, minLength: 1, maxLength: 64 }
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string, minLength: 1, maxLength: 4096 }
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [requestId, error]
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 256 }
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$' }
+            message: { type: string, minLength: 1, maxLength: 256 }
+            retryable: { type: boolean }
+            details: {}
+    AuthSession:
+      type: object
+      additionalProperties: false
+      required: [accessToken, refreshToken, sessionId, expiresIn, user]
+      properties:
+        accessToken: { type: string, minLength: 1 }
+        refreshToken: { type: string, minLength: 1 }
+        sessionId: { type: string, format: uuid }
+        expiresIn: { type: integer, minimum: 1 }
+        user:
+          type: object
+          additionalProperties: false
+          required: [id, displayName]
+          properties:
+            id: { type: string, minLength: 1, maxLength: 64 }
+            displayName: { type: string, minLength: 1, maxLength: 64 }
+    AuthSessionResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthSession'
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Health'
+    CurrentUser:
+      type: object
+      additionalProperties: false
+      required: [id, displayName, sessionId, deviceId, platform]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 64 }
+        displayName: { type: [string, 'null'], maxLength: 64 }
+        sessionId: { type: string, format: uuid }
+        deviceId: { type: string, minLength: 1, maxLength: 128 }
+        platform: { type: string, minLength: 1, maxLength: 32 }
+    CurrentUserResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/CurrentUser'
+    ApiResponse:
+      type: object
+      additionalProperties: false
+      required: [requestId, data]
+      properties:
+        requestId: { type: string, minLength: 1 }
+        data: {}
+        meta: { type: object, additionalProperties: true }
+    RoomResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Room'
+    RoomCommandResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties: true
+              required: [accepted, room, roomVersion]
+              properties:
+                accepted: { type: boolean }
+                room: { $ref: '#/components/schemas/Room' }
+                roomVersion: { type: integer, minimum: 0 }
+                replay: { type: boolean }
+                event: { type: object, additionalProperties: true }
+    SupportCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      description: >-
+        Development/fake-staging plain-text ticket. Attachments, external
+        channels and payment fields are intentionally not part of this schema.
+      properties:
+        subject: { type: string, minLength: 1, maxLength: 120, default: 联系客服 }
+        category: { type: string, enum: [ACCOUNT, ROOM, CLUB, RULES, OTHER], default: OTHER }
+        message: { type: string, minLength: 1, maxLength: 2000 }
+        description: { type: string, minLength: 1, maxLength: 2000 }
+        roomId: { type: [string, 'null'], minLength: 1, maxLength: 128 }
+        clientVersion: { type: [string, 'null'], minLength: 1, maxLength: 64 }
+    SupportReplyRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 2000 }
+        body: { type: string, minLength: 1, maxLength: 2000 }
+    SupportCloseRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    SupportMessage:
+      type: object
+      additionalProperties: false
+      required: [id, ticketId, authorUserId, authorType, body, createdAt]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 128 }
+        ticketId: { type: string, minLength: 1, maxLength: 128 }
+        authorUserId: { type: string, minLength: 1, maxLength: 128 }
+        authorType: { type: string, enum: [USER, ADMIN, SYSTEM, SERVICE] }
+        body: { type: string, minLength: 1, maxLength: 2000 }
+        createdAt: { type: string, format: date-time }
+    SupportTicket:
+      type: object
+      additionalProperties: false
+      required: [id, ownerUserId, userId, subject, category, status, roomId, clientVersion, createdAt, updatedAt, closedAt, messageCount, messages]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 128 }
+        ownerUserId: { type: string, minLength: 1, maxLength: 128 }
+        userId: { type: string, minLength: 1, maxLength: 128 }
+        subject: { type: string, minLength: 1, maxLength: 120 }
+        category: { type: string, enum: [ACCOUNT, ROOM, CLUB, RULES, OTHER] }
+        status: { type: string, enum: [OPEN, WAITING_USER, RESOLVED, CLOSED] }
+        roomId: { type: [string, 'null'], maxLength: 128 }
+        clientVersion: { type: [string, 'null'], maxLength: 64 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        closedAt: { type: [string, 'null'], format: date-time }
+        lastMessageAt: { type: [string, 'null'], format: date-time }
+        messageCount: { type: integer, minimum: 0 }
+        messages:
+          type: array
+          items: { $ref: '#/components/schemas/SupportMessage' }
+    SupportTicketResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/SupportTicket'
+    SupportTicketList:
+      type: object
+      additionalProperties: false
+      required: [tickets, items, totalReturned]
+      properties:
+        tickets:
+          type: array
+          items: { $ref: '#/components/schemas/SupportTicket' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SupportTicket' }
+        nextOffset: { type: [integer, 'null'], minimum: 0 }
+        totalReturned: { type: integer, minimum: 0 }
+    SupportTicketListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/SupportTicketList'
+    SupportMessages:
+      type: object
+      additionalProperties: false
+      required: [ticketId, messages]
+      properties:
+        ticketId: { type: string, minLength: 1, maxLength: 128 }
+        messages:
+          type: array
+          items: { $ref: '#/components/schemas/SupportMessage' }
+    SupportMessagesResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/SupportMessages'
+    SupportMessageResult:
+      type: object
+      additionalProperties: false
+      required: [ticket, message, replay]
+      properties:
+        ticket: { $ref: '#/components/schemas/SupportTicket' }
+        message: { $ref: '#/components/schemas/SupportMessage' }
+        replay: { type: boolean }
+    SupportMessageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/SupportMessageResult'
+    LeaveRoomRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        roomVersion: { type: integer, minimum: 0 }
+        expectedRoomVersion: { type: integer, minimum: 0 }
+        transferOwnerTo: { type: string, minLength: 1, maxLength: 128 }
+    ReadyRoomRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        roomVersion: { type: integer, minimum: 0 }
+        expectedRoomVersion: { type: integer, minimum: 0 }
+        ready: { type: boolean }
+    RoomVersionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        roomVersion: { type: integer, minimum: 0 }
+        expectedRoomVersion: { type: integer, minimum: 0 }
+    DisbandRoomRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        roomVersion: { type: integer, minimum: 0 }
+        expectedRoomVersion: { type: integer, minimum: 0 }
+        reason: { type: string, maxLength: 256 }
+    CreateRoomRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        clubId: { type: [string, 'null'], maxLength: 64 }
+        floorId: { type: [string, 'null'], maxLength: 64 }
+        gameType: { type: string, minLength: 1, maxLength: 64 }
+        ruleId: { type: string, minLength: 1, maxLength: 64 }
+        ruleVersion: { type: string, minLength: 1, maxLength: 64 }
+        ruleConfig: { type: object, additionalProperties: true }
+        ruleSnapshot: { type: object, additionalProperties: true }
+        accessPolicy: { type: string, enum: [MEMBERS_ONLY, INVITE_ONLY, PUBLIC_CODE] }
+        roomAccessPolicy: { type: string, enum: [MEMBERS_ONLY, INVITE_ONLY, PUBLIC_CODE] }
+        totalRounds: { type: integer, minimum: 1, maximum: 256 }
+        roundCount: { type: integer, minimum: 1, maximum: 256 }
+        maxPlayers: { type: integer, minimum: 2, maximum: 16 }
+        deadlinePolicy:
+          type: object
+          additionalProperties: false
+          properties:
+            enabled: { type: boolean }
+            actionDeadlineMs: { type: integer, minimum: 1, maximum: 86400000 }
+            turnDeadlineMs: { type: integer, minimum: 1, maximum: 86400000 }
+            turnTimeoutMs: { type: integer, minimum: 1, maximum: 86400000 }
+            timeoutAction: { type: string, minLength: 1, maxLength: 64 }
+            defaultAction: { type: string, minLength: 1, maxLength: 64 }
+    JoinRoomRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        seat: { type: integer, minimum: 0, maximum: 3 }
+        membershipApproved: { type: boolean }
+        isMember: { type: boolean }
+        invited: { type: boolean }
+        inviteToken: { type: string, minLength: 1, maxLength: 256 }
+    ActionRoomRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        roomVersion: { type: integer, minimum: 0 }
+        expectedRoomVersion: { type: integer, minimum: 0 }
+        action: { type: string, minLength: 1, maxLength: 64 }
+        args: { type: object, additionalProperties: true }
+    SettleRoomRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        roomVersion: { type: integer, minimum: 0 }
+        expectedRoomVersion: { type: integer, minimum: 0 }
+        result: { type: object, additionalProperties: true }
+        settlement: { type: object, additionalProperties: true }
+    NextRoundRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        roomVersion: { type: integer, minimum: 0 }
+        expectedRoomVersion: { type: integer, minimum: 0 }
+        autoDeal: { type: boolean }
+    CommandEnvelope:
+      type: object
+      description: >-
+        Versioned command envelope shared with WebSocket. The REST adapter
+        validates protocolVersion and synthesizes omitted requestId/commandId
+        from X-Request-Id and Idempotency-Key (or UUIDs); supplied IDs must be
+        UUIDs because they pass through the protocol envelope validator.
+      externalDocs:
+        url: ../../schemas/protocol/command-envelope.schema.json
+      additionalProperties: false
+      required: [protocolVersion, type, requestId, commandId, payload]
+      properties:
+        protocolVersion: { type: string, pattern: '^1\\.[0-9]+$' }
+        type:
+          type: string
+          enum: [hello, auth, login, refresh, logout, create_room, join_room, leave_room, ready, start_round, begin_playing, action, settle_round, next_round, disband_room, reconnect, subscribe, unsubscribe, ping]
+        requestId: { type: string, format: uuid }
+        commandId: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        roomId: { type: string, minLength: 1, maxLength: 64 }
+        roomVersion: { type: integer, minimum: 0 }
+        clientTime: { type: string, format: date-time }
+        payload: { type: object }
+    CommandAck:
+      type: object
+      additionalProperties: false
+      required: [requestId, commandId, accepted]
+      properties:
+        requestId: { type: string, format: uuid }
+        commandId: { type: string, format: uuid }
+        accepted: { type: boolean }
+    Room:
+      type: object
+      additionalProperties: true
+      required: [id, roomId, status, roomVersion]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 64 }
+        roomId: { type: string, minLength: 1, maxLength: 64 }
+        status: { type: string }
+        roomVersion: { type: integer, minimum: 0 }

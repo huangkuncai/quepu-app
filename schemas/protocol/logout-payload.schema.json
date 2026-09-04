@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/logout-payload.schema.json",
+  "title": "Logout payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "accessToken": { "type": "string", "minLength": 1, "maxLength": 4096 }
+  }
+}

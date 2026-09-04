@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+coverage/
+dist/
+*.log
+.local-backups/
+.DS_Store
+
+# Dart/Flutter tool state is generated per client package.
+**/.dart_tool/
+**/.flutter-plugins-dependencies

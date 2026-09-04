@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/action-payload.schema.json",
+  "title": "Room action payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action"],
+  "properties": {
+    "action": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "args": { "type": "object", "additionalProperties": true }
+  }
+}

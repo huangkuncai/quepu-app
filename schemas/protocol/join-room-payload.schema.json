@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/join-room-payload.schema.json",
+  "title": "Join room payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "seat": { "type": "integer", "minimum": 0, "maximum": 3 },
+    "membershipApproved": { "type": "boolean" },
+    "isMember": { "type": "boolean" },
+    "invited": { "type": "boolean" },
+    "inviteToken": { "type": "string", "minLength": 1, "maxLength": 256 }
+  }
+}

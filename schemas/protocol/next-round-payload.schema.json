@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/next-round-payload.schema.json",
+  "title": "Next round payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "autoDeal": { "type": "boolean" }
+  }
+}

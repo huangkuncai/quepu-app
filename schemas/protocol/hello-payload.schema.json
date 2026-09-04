@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/hello-payload.schema.json",
+  "title": "Hello payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deviceId", "platform", "clientVersion"],
+  "properties": {
+    "deviceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "platform": { "type": "string", "enum": ["android", "ios", "harmonyos", "web", "unknown"] },
+    "clientVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "lastSessionId": { "type": "string", "format": "uuid" }
+  }
+}

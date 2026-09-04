@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/event-envelope.schema.json",
+  "title": "Susong server event envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "type", "eventId", "roomVersion", "payload", "occurredAt"],
+  "properties": {
+    "protocolVersion": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "type": {
+      "type": "string",
+      "enum": [
+        "hello_ack",
+        "auth_ok",
+        "login_ok",
+        "refresh_ok",
+        "logout_ok",
+        "command_ack",
+        "room_created",
+        "room_event",
+        "room_sync",
+        "pong",
+        "error"
+      ]
+    },
+    "eventId": { "type": "string", "format": "uuid" },
+    "requestId": { "type": "string", "format": "uuid" },
+    "commandId": { "type": "string", "format": "uuid" },
+    "roomId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "roomVersion": { "type": "integer", "minimum": 0 },
+    "visibility": { "type": "string", "enum": ["public", "player", "admin"] },
+    "payload": { "type": "object", "additionalProperties": true },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  }
+}

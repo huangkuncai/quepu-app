@@ -1,0 +1,155 @@
+# 决策索引与 G0/W0 记录
+
+> 计划版本：0.1.2-draft
+> 建立日期：2026-08-28
+> 最近更新：2026-09-04（BE-207 客服纯文本 MVP、CL-201 四客户端 fake 夹具、Node 108/108）
+> 状态：ACTIVE（I1 开发基线已建立；I2/BE-201～204、BE-206/QA-201 内存/fake-rule 纵切完成；BE-204 presence overlay、异步装配和 deadline claim/lease 基础、真实本地 PG/Redis adapter 与双实例 smoke 已完成，生产滚动重启/故障演练仍待；G0/G1 仍进行中）
+> 关联计划：[IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md)
+> 关联规格：[DEVELOPMENT.md](../DEVELOPMENT.md)
+
+这份文件是产品、规则、技术和发布决策的唯一索引。实现代码不得把未确认的 `Q` 项或截图中的示例值当成生产默认值。
+
+## 1. 记录约定
+
+- `M`：用户明确提出的正式范围。
+- `S`：截图或其他参考资料，只用于提取候选信息，不代表已签字规则。
+- `Q`：目前缺少确认；只能使用 `TBD`、fake、sandbox 或 feature flag。
+- `D`：开发建议；需要产品/规则负责人确认后才升级为正式决策。
+- 决策状态：`TODO`、`PROPOSED`、`CONFIRMED`、`REJECTED`、`DEFERRED`。
+- 每条确认必须留下日期、确认人和证据（会议纪要、消息、规则表或测试样例）。
+
+## 2. G0 出口检查表
+
+- [x] 正式项目目录已确认；分支和提交策略仍需补充。
+- [ ] 每个 M 需求已关联 `REQ-*`、验收条件和 DRI。
+- [ ] 每个 P0 `Q` 已指定 owner、截止日期、临时降级和解除证据。
+- [ ] 登录的正式供应商及年龄/地区/实名边界已记录（开发期 fake auth 已确认）。
+- [ ] 俱乐部申请、楼层和房间访问边界已记录（角色细则仍待确认）。
+- [x] 积分账本与钻石账本隔离；首版钻石仅 sandbox、不产生真实扣费。
+- [ ] 客服渠道、隐私留存和响应 SLA 已记录。
+- [ ] Android、iOS、HarmonyOS 的目标设备/API 和签名条件已记录。
+- [ ] 宿松规则负责人已指定；规则未签字前仅允许 fake/draft 牌局。
+- [x] 已完成“无充值入口、无支付、无提现、无现金兑换”的范围检查；真实钻石仍仅 sandbox。
+- [x] 基线命令、输出和已知限制已归档；三端 SDK/真机和签名仍待补齐。
+
+## 3. 产品与平台决策登记
+
+| ID | 决策问题 | 当前答案 | 来源 | DRI | 截止 | 状态 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DEC-001 | 正式目录继续使用 `宿松app.migrated-backup`，还是迁移/重命名为 `宿松app`？ | 继续使用 `宿松app.migrated-backup` | M/技术 | USER | G0 | CONFIRMED | 用户确认 2026-08-28 |
+| DEC-002 | 登录方式及实名、地区、年龄边界 | 开发期使用模拟手机号验证码（验证码 `000000`）；正式供应商、实名/地区/年龄边界 TBD | M/Q | USER + LEGAL | G0 | CONFIRMED（范围部分） | 用户确认 2026-08-28；ADR-002 |
+| DEC-003 | 俱乐部申请是创建、加入，还是两者；审批主体和状态 | 创建俱乐部由平台审批；加入俱乐部由会长/管理员审批 | M/Q | USER/PM | G0 | CONFIRMED | 用户确认 2026-08-28 |
+| DEC-004 | 会长、管理员、房主、成员的权限及邀请/踢人/解散规则 | TBD | M/Q | USER/PM | G0 | TODO | — |
+| DEC-005 | 楼层模板/固定桌、`ruleSnapshot` 冻结时点、跨楼层加入 | 楼层为规则模板；创建房间时冻结 `ruleSnapshot`；跨楼层加入 TBD | M/Q | USER/PM | G0 | CONFIRMED（范围部分） | 用户确认 2026-08-28 |
+| DEC-006 | 房间访问模式：`MEMBERS_ONLY`、`INVITE_ONLY`、`PUBLIC_CODE` | 仅俱乐部成员可通过房号进入 | M/Q | USER/PM | G0 | CONFIRMED（范围部分） | 用户确认 2026-08-28 |
+| DEC-007 | 积分是否每场归零、是否跨场累计、负分/展示/重置方式 | 每场从 0 开始；允许负分；只用于战绩；不跨场消费 | M/Q | USER/PM | G0 | CONFIRMED | 用户确认 2026-08-28 |
+| DEC-008 | 钻石归属、费用承担、单价和扣费时机 | 首版仅使用钻石 sandbox；真实归属、费用、单价和时机 TBD | M/Q | USER + OPS | G0 | CONFIRMED（边界） | 用户确认 2026-08-28 |
+| DEC-009 | 钻石 reserve/consume/release/reverse 及失败处理 | 首版不产生真实扣费；账本流程先做 sandbox，细则 TBD | M/Q | USER + OPS | G0 | CONFIRMED（边界） | 用户确认 2026-08-28 |
+| DEC-010 | 客服渠道、入口、附件限制、留存和 SLA | TBD | M/Q | USER + OPS | G0 | TODO | — |
+| DEC-011 | HarmonyOS 目标边界（NEXT/兼容层）、API 和设备清单 | 暂缓，本迭代仅验收 Android+iOS | M/Q | USER + CL | 后续版本 | DEFERRED | 用户确认 2026-09-04 |
+
+## 4. 宿松规则决策登记
+
+截图中的文字和数值先登记为候选，不直接写入裁判代码。确认后应同步生成规则版本、配置 schema、计分表和 golden cases。
+
+| ID | 必须确定的内容 | 当前答案 | 来源 | DRI | 截止 | 状态 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DEC-RULE-001 | 人数/座位、牌组、风箭花牌数量、总牌数、初始手牌 | TBD | S/Q | USER + RULE | GR | TODO | — |
+| DEC-RULE-002 | 吃/碰/杠/补花/抢杠/胡/过及多家胡优先级 | TBD | S/Q | USER + RULE | GR | TODO | — |
+| DEC-RULE-003 | 首局庄、庄轮转、多家胡、流局、剩余牌墙和杠后牌 | TBD | S/Q | USER + RULE | GR | TODO | — |
+| DEC-RULE-004 | 底分 1～9 的选择方式及第二档映射 | TBD | S/Q | USER + RULE | GR | TODO | — |
+| DEC-RULE-005 | 花奖、杠花、出增、强飘、三西/三道的叠加公式 | TBD | S/Q | USER + RULE | GR | TODO | — |
+| DEC-RULE-006 | 无花果、“一察/一素”等术语、数值和触发 | TBD | S/Q | USER + RULE | GR | TODO | — |
+| DEC-RULE-007 | 必胡/不必胡、“过圈”和超时默认动作 | TBD | S/Q | USER + RULE | GR | TODO | — |
+| DEC-RULE-008 | 小胡/大胡、特殊胡型、≥9、封顶、舍入、零和 | TBD | S/Q | USER + RULE | GR | TODO | — |
+| DEC-RULE-009 | 4/8/16 局、出增中途调整和房周期边界 | TBD | S/Q | USER + RULE | GR | TODO | — |
+
+## 5. 阻塞登记
+
+所有阻塞必须可执行地写明解除条件。未决期间只能按“临时降级”运行。
+
+| BLOCKER-ID | 影响 REQ/RULE/任务 | 缺失决策或证据 | Owner | 截止 | 临时降级 | 解除证据 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| BLOCKER-G0-001 | BE-103 生产接入、CL-102～103、发布合规 | DEC-002 登录和年龄/地区/实名边界 | USER + LEGAL | G0 | fake auth；禁止生产房间 | 已确认 Auth 策略和验收样例 | OPEN |
+| BLOCKER-G0-002 | R-*、BE-301～306 | DEC-RULE-001～009 规则签字 | USER + RULE | GR | fake/draft rule；禁止生产结算 | ruleVersion、计分表、≥20 golden cases | OPEN |
+| BLOCKER-G0-003 | BE-401～405、Club/Floor | DEC-003～006 俱乐部/楼层/访问权限 | USER/PM | G0 | 只读 mock 数据 | RBAC 与 ruleSnapshot schema 已确认 | OPEN |
+| BLOCKER-G0-004 | BE-501～504 | DEC-008～009 钻石归属和扣费策略 | USER + OPS | G0 | ledger sandbox；不扣真实钻石 | reserve/consume/release/reverse 流程签字 | OPEN |
+| BLOCKER-G0-005 | CL-102～103、OPS-301～304、G1 | Android/iOS 设备、SDK/API/签名清单（鸿蒙已暂缓） | USER + CL | G0/G1 | Dart 原生 transport 与 Flutter/FakeTransport POC 可本机验证；不生成可安装包 | Android+iOS 真机矩阵和签名条件 | OPEN |
+
+## 6. G0 基线证据
+
+| 项目 | 结果 | 日期 | 证据/备注 |
+| --- | --- | --- | --- |
+| 实际工作目录 | `宿松app.migrated-backup`；当前分支 `codex/be-101-protocol`，尚无提交 | 2026-08-28 | 当前工作区检查；DEC-001 已确认目录，分支/提交策略仍需补充 |
+| `npm test` | 108 个 Node 测试通过 | 2026-09-04 | `npm run check` 通过；包含 BE-201～207、客服鉴权/隔离/幂等/审计、BE-204 deadline claim/lease/NOT_DUE、双 actor crash-gap/最终收敛、PostgreSQL/Redis adapter、OpenAPI/AsyncAPI、QA-201 和 BE-206；`npm run verify:real` 与 `npm run verify:multi-instance` 已覆盖真实本地 PG/Redis，生产滚动重启/故障演练仍待 |
+| 服务端启动 | `src/server.js` 可启动 WebSocket 8787（内存骨架） | 2026-08-28 | 仅开发/演示环境 |
+| 数据和认证 | PostgreSQL migrations、Redis Compose/health、repository contract/MemoryRepository、开发期 session/Auth 和审计接口已建立；正式 PG/Redis/外部 Auth 未接入 | 2026-08-28 | 单进程/内存实现；不得开放真实牌局/真实扣费 |
+| 客户端 | `clients/dart_protocol` 协议/连接核心、扩展命令同步、原生 `dart:io` `IoWebSocketTransport`、四客户端 fake 夹具和 `SupportApi`，以及 `clients/flutter_app` Flutter mock 壳通过本机验证 | 2026-09-04 | `dart analyze`、协议/IO/multi-client/support 脚本、`flutter test`（15/15）、`dart analyze`；房间桌面、命令 outbox、维护/版本冲突/前台恢复 UI、客服 REST 注入已接入；尚无三端真机安装包 |
+| 房间/BE-201～205、BE-206/QA-201 | 通用 Room aggregate、内存 event store/RoomActor/fencing/snapshot/outbox、WSS gateway、重连与显式 deadline 基础、PostgreSQL/Redis adapter 契约与异步装配、presence overlay、durable room inventory、持久化 deadline claim/lease、共享 RoomService/REST/BFF 和 fake-rule 故障矩阵已覆盖状态、幂等、重启恢复、失败回滚、ACK/广播、私有事件过滤、连接替换、snapshot hash、弱网收敛和 stale deadline guard；`verify:real` 已覆盖临时数据库真实迁移/事件/快照恢复/deadline lease/Redis fencing，`verify:multi-instance` 已覆盖两个独立 actor/PG pool/Redis client 的并发写与最终 hash 收敛；业务仍为内存/fake-staging 纵切，生产滚动重启/故障演练未完成 | 2026-09-02 | `test/be-204-multi-instance.test.js`、`scripts/verify-multi-instance.mjs`、`npm run verify:real`；不代表生产房间服务或三端真机安装 |
+| 质量/安全 | lint、typecheck、协议/迁移校验、secret scan、依赖高危审计、Docker Compose 配置校验通过 | 2026-08-28 | ADR-003；控制端点和日志脱敏为开发基线 |
+| Git | 尚无提交；现有文件均需保留 | 2026-08-28 | 当前分支 `codex/be-101-protocol`；后续补充分支/提交策略 |
+
+## 7. 会议/确认记录
+
+| 日期 | 参与者 | 结论 | 影响任务 | 证据 |
+| --- | --- | --- | --- | --- |
+| 2026-08-28 | USER/AI | 建立本索引；G0/W0 为第一执行阶段 | G0、I1 | 本文件 |
+| 2026-08-28 | USER/AI | 接受推荐基线：目录、开发期 fake auth、俱乐部审批、楼层快照、成员房号、积分隔离和钻石 sandbox | BE-101、BE-102、BE-103、Club/Floor、Diamond | 本次用户确认 |
+| 2026-08-28 | AI/DEV | BE-103 开发期 session/WS 鉴权完成；生产仍 fail-closed | BE-103、G2 | ADR-002、18 个测试 |
+| 2026-08-28 | AI/DEV | BE-101～BE-106 开发基线完成；协议、认证、迁移/Redis 检查、安全观测、CI 和 33 个 Node 测试可复现 | BE-101～BE-106、G2 | `npm run check`、`npm run scan:secrets`、`npm audit --omit=dev --audit-level=high`、ADR-003 |
+| 2026-08-28 | AI/DEV | CL-101 协议消费层 POC 完成：Dart envelope/version 校验、roomVersion 缺口同步检测、连接状态和退避 reducer | CL-101、G1 前置 | `clients/dart_protocol/tool/test.dart`；不代表最终三端框架或安装包 |
+| 2026-08-28 | AI/DEV | 修复 MemoryRepository 必填 `expiresAt` 的确定性校验，并补充非法日期/时钟异常回归 | BE-104 | `test/be-104-data.test.js` 定向 7/7；生产 PG/Redis 仍待 |
+| 2026-08-28 | AI/DEV | 建立 Flutter POC 壳、FakeTransport、会话控制器和断线后房间同步回归 | CL-102/103、G1 前置 | `flutter test` 5/5、`flutter build web --release`；Android/iOS/HarmonyOS 真机仍阻塞 |
+| 2026-08-28 | AI/DEV | 增加四客户端实时广播、重连同步及 reducer 重复/缺口 fixture | QA-101、I2 前置 | `test/qa-101-realtime.test.js`；基础矩阵通过，延迟/丢包注入仍待 |
+| 2026-08-28 | AI/DEV | BE-201 内存 Room aggregate/WSS 房间命令纵切完成；BE-202 内存 event store/RoomActor 契约随后完成；BE-203～BE-206 保持 TODO | BE-201～202、I2 | `test/be-201-room.test.js`、`test/be-202-event-store.test.js`；WSS actor、真实 PG/Redis、REST 和完整故障测试仍待 |
+| 2026-08-28 | AI/DEV | CL-103 增加原生 `dart:io` `IoWebSocketTransport` 集成，扩展 leave/ready/begin_playing/settle/next/disband 命令和 room sync 消费 | CL-103、I2 前置 | `dart analyze`、`dart run tool/test.dart`、`dart run tool/io_transport_test.dart`；平台生命周期、三端真机和 WSS 证书仍阻塞 |
+| 2026-08-28 | AI/DEV | BE-202 内存 event store、RoomActor、fencing、snapshot、command result、outbox 和 PostgreSQL migration 契约完成；WSS 和真实 PG/Redis 接入留给后续任务 | BE-202、I2 | `npm run check`；Node 48/48；不代表生产多实例能力 |
+| 2026-08-29 | AI/DEV | BE-203 WSS gateway/RoomActor/reconnect 内存纵切完成：ACK/广播、订阅、私有事件过滤、背压、重连宽限、durable recovery 和连续版本队列 | BE-203、I2 | `npm run check`；Node 58/58；真实 PG/Redis、多实例和深度弱网验证仍待 |
+| 2026-08-29 | AI/DEV | BE-204 内存重连基础、显式 deadline scheduler/Room 快照恢复/超时广播、PostgreSQL/Redis adapter 契约、presence overlay/房间枚举/异步启动装配、QA-201 延迟/丢包/乱序/重复故障矩阵和 BE-206 重启恢复 fixture 通过 | BE-204、BE-206、QA-201、I2 | `npm run check`；Node 95/95；服务端 deadline claim、多实例和三端真机仍待 |
+| 2026-08-29 | AI/DEV | BE-205 共享 RoomService 与内存/fake-staging REST/BFF 通过：REST/WSS 共用 actor 状态，ETag/If-Match、Idempotency-Key、统一错误 envelope、鉴权和成员边界已覆盖 | BE-205、I2 | `test/be-205-room-http.test.js`、`npm run check`；生产 adapter、presence overlay、多实例和三端真机仍待 |
+| 2026-08-29 | AI/DEV | 补齐服务关闭态/主动连接清理并完成 CL-201 Flutter 房间桌面、CL-202 命令 outbox：座位、准备状态、公共状态、私牌占位、同步入口、ACK/超时重试和断线复用 commandId | CL-201/202、I2 | `dart analyze`、`flutter test` 10/10；三端真机、生产 WSS 和多实例验收仍待 |
+| 2026-08-29 | AI/DEV | BE-204 增加 PostgreSQL `listRooms`/重启 deadline 恢复测试，升级 event-store contract 版本；OpenAPI/AsyncAPI YAML、$ref、REST 状态码和 wrapper 契约纳入质量门 | BE-204、BE-205、I2 | `npm run check`；Node 95/95；真实 PG/Redis、多实例和三端真机仍待 |
+| 2026-08-29 | AI/DEV | BE-204 增加 `game_deadlines` 持久化 lease 表、Memory/PostgreSQL deadline store、claim/complete/fail/cancel 端口和双 scheduler winner-only 回归；自动生成的 deadline commandId 改为稳定 UUID，server 显式装配 deadline store | BE-204、I2 | `test/be-204-deadline-store.test.js`、`npm run check`；Node 99/99；真实 PG/Redis 容器、多实例最终一致性和三端真机仍待 |
+| 2026-09-02 | AI/DEV | BE-204 真实 PG/Redis adapter 与双实例 smoke 通过；双 actor 重复/并发命令、连续事件/outbox、最终 snapshotHash 和 crash-gap replay 纳入回归；CL-203 维护/版本冲突/前台恢复 UI 与 OPS-101 本地环境手册完成 | BE-204、CL-203、OPS-101、I2 | `npm run check`（Node 106/106）、`npm run verify:real`、`npm run verify:multi-instance`、Flutter 13/13、Dart protocol/IO tests；生产滚动重启、三端真机、规则和账本仍待 |
+| 2026-09-04 | AI/DEV | BE-207 纯文本客服 REST 完成（用户隔离、幂等、审计、房间关联；附件/外部渠道关闭）；CL-201 四客户端 framework-neutral fake 夹具验证事件顺序、snapshotHash 与重连收敛 | BE-207、CL-201、I2 | `npm run check`（Node 108/108）、`dart run tool/multi_client_acceptance.dart`；真实 WSS/三端真机、客服持久化仓储仍待 |
+
+## 8. 变更记录
+
+| 版本 | 日期 | 变更 | 操作人 |
+| --- | --- | --- | --- |
+| 0.1.0 | 2026-08-28 | 创建 G0 决策、阻塞和基线证据模板 | AI/DEV |
+| 0.1.1 | 2026-08-28 | 登记用户接受的推荐基线；保留未决细节为 TBD | AI/DEV + USER |
+| 0.1.2 | 2026-08-28 | 登记 BE-103 session 和 WebSocket 鉴权证据 | AI/DEV |
+| 0.1.3 | 2026-08-28 | 登记 BE-104 数据、BE-105 安全观测和 BE-106 CI 质量门证据 | AI/DEV |
+| 0.1.4 | 2026-08-28 | 登记 33 个 Node 测试、CL-101 Dart 协议消费 POC、MemoryRepository 时间字段修复及 G1 工具链限制 | AI/DEV |
+| 0.1.5 | 2026-08-28 | 登记 Flutter POC 壳、FakeTransport 和 CL-103 framework-neutral 重连核心；保留三端真机阻塞 | AI/DEV |
+| 0.1.6 | 2026-08-28 | 登记 QA-101 四客户端 realtime/reconnect 与 reducer 缺口/重复 fixture；保留完整弱网矩阵阻塞 | AI/DEV |
+| 0.1.7 | 2026-08-28 | 登记 BE-201 房间聚合完成、当前 `npm test` 40/40、CL-103 原生 `dart:io` transport 与扩展命令同步证据；保留 BE-202+、三端真机、规则和生产限制 | AI/DEV |
+| 0.1.8 | 2026-08-29 | 登记 BE-202 内存 event store/RoomActor 契约和 Node 48/48；保留 WSS、真实 PG/Redis、多实例和三端真机限制 | AI/DEV |
+| 0.1.9 | 2026-08-29 | 登记 BE-203 WSS gateway/RoomActor/reconnect 内存纵切和 Node 58/58；保留真实 PG/Redis、多实例、深度弱网和三端真机限制 | AI/DEV |
+| 0.1.10 | 2026-08-29 | 登记 BE-204 重连基础、QA-201/BE-206 故障与重启 fixture 和 Node 68/68；保留生产 PG/Redis、多实例、服务端 deadline 和三端真机限制 | AI/DEV |
+| 0.1.11 | 2026-08-29 | 登记服务关闭态/主动连接清理、CL-201 Flutter 房间桌面首版和 Flutter 6/6 widget 验收；保留生产 adapter、服务端 deadline、多实例和三端真机限制 | AI/DEV |
+| 0.1.12 | 2026-08-29 | 登记 BE-204 显式 deadline 的内存/fake-staging scheduler、Room 回合 deadline 快照/恢复、超时事件广播和 Node 81/81；保留生产 PG/Redis deadline、多实例和三端真机限制 | AI/DEV |
+| 0.1.13 | 2026-08-29 | 登记 BE-205 共享 RoomService 与内存/fake-staging HTTP API（ETag/If-Match/Idempotency-Key、鉴权和成员边界）；登记 BE-204 PostgreSQLGameEventStore/PostgresOutbox、RedisFencingLock adapter 基础和 Node 89/89；保留默认路径、presence overlay、持久化 deadline、多实例和三端真机限制 | AI/DEV |
+| 0.1.14 | 2026-08-29 | 登记 BE-204 独立 `game_presence` overlay、RoomActor 恢复/快照 hash 合并、PostgreSQL/内存读写和 `createRealtimeServerAsync` 配置装配；登记 CL-202 ACK/超时/断线命令 outbox 与 Flutter 9/9；保留持久化 deadline、多实例和三端真机限制 | AI/DEV |
+| 0.1.15 | 2026-08-29 | 登记 PostgreSQL `listRooms`/重启 deadline 恢复测试、升级 event-store contract 版本、OpenAPI/AsyncAPI YAML/ref/REST 契约门和 Node 95/95；保留生产 deadline claim、多实例、真实 PG/Redis 与三端真机限制 | AI/DEV |
+| 0.1.16 | 2026-08-29 | 登记 `game_deadlines` migration、Memory/PostgreSQL deadline claim/lease store、双 scheduler winner-only/NOT_DUE 重试测试、稳定 UUID commandId 和 Node 99/99；保留真实 PG/Redis 多实例和三端真机限制 | AI/DEV |
+| 0.1.17 | 2026-08-29 | 增加 `pg`/`redis` 运行依赖、`npm run verify:real` 临时数据库 smoke、deadline 边界/装配测试；质量门更新为 Node 104/104；真实 adapter 已验证，生产多实例和三端真机仍待 | AI/DEV |
+| 0.1.18 | 2026-09-02 | 登记真实双实例收敛/crash-gap、CL-203 重连 UI、OPS-101 手册和 Node 106/106、Flutter 13/13；保留生产故障演练、G1、规则/俱乐部/钻石门禁 | AI/DEV |
+| 0.1.20 | 2026-09-04 | 登记 BE-207 客服纯文本 REST、CL-201 四客户端 fake 夹具和共享 Dart `SupportApi`；保留真实 REST/设备联调、客服持久化、G1、规则/俱乐部/钻石门禁 | AI/DEV |
+
+## 9. 用户回复模板（可只回复已确定项）
+
+```text
+DEC-001 项目目录：继续使用 / 迁移到 ______
+DEC-002 登录：______；实名/地区/年龄：______
+DEC-003 俱乐部申请：创建 / 加入 / 两者；审批者：______
+DEC-004 角色权限：______
+DEC-005 楼层形态与 ruleSnapshot 冻结时点：______
+DEC-006 房间访问：成员 / 邀请 / 房号 / 组合：______
+DEC-007 积分生命周期：______
+DEC-008～009 钻石：______（未定可写 sandbox）
+DEC-010 客服渠道与 SLA：______
+DEC-011 三端目标设备/API：______
+规则负责人：______；规则确认截止：______
+```

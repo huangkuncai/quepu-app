@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/ready-room-payload.schema.json",
+  "title": "Ready room payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "ready": { "type": "boolean" }
+  }
+}

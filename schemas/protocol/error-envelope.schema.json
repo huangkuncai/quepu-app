@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/error-envelope.schema.json",
+  "title": "Susong protocol error envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "type", "requestId", "error"],
+  "properties": {
+    "protocolVersion": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "type": { "const": "error" },
+    "requestId": { "type": "string", "format": "uuid" },
+    "commandId": { "type": "string", "format": "uuid" },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,63}$" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "retryable": { "type": "boolean" },
+        "details": {}
+      }
+    }
+  }
+}

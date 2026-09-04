@@ -1,0 +1,1517 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { AppError } from '../shared/errors.js';
+
+/**
+ * Room is the framework-neutral aggregate used by the development server and
+ * by the future persistent room actor. It owns lifecycle and ordering only.
+ * A rule adapter may validate actions or produce a settlement payload, but
+ * this aggregate never guesses a game's scoring rules.
+ */
+
+export const ROOM_STATUS = Object.freeze({
+  WAITING: 'waiting',
+  READY: 'ready',
+  DEALING: 'dealing',
+  PLAYING: 'playing',
+  SETTLING: 'settling',
+  NEXT_ROUND: 'next_round',
+  FINISHED: 'finished',
+  CANCELLED: 'cancelled'
+});
+
+// Upper-case labels are useful at adapter boundaries where the protocol uses
+// enum-like values. The aggregate's wire-compatible status remains lower-case.
+export const ROOM_PHASE = Object.freeze({
+  WAITING: ROOM_STATUS.WAITING,
+  READY: ROOM_STATUS.READY,
+  DEALING: ROOM_STATUS.DEALING,
+  PLAYING: ROOM_STATUS.PLAYING,
+  SETTLING: ROOM_STATUS.SETTLING,
+  NEXT_ROUND: ROOM_STATUS.NEXT_ROUND,
+  FINISHED: ROOM_STATUS.FINISHED,
+  CANCELLED: ROOM_STATUS.CANCELLED
+});
+
+export const ROOM_ACCESS_POLICY = Object.freeze({
+  MEMBERS_ONLY: 'MEMBERS_ONLY',
+  INVITE_ONLY: 'INVITE_ONLY',
+  PUBLIC_CODE: 'PUBLIC_CODE'
+});
+
+const JOINABLE_STATES = new Set([ROOM_STATUS.WAITING]);
+const READY_STATES = new Set([ROOM_STATUS.WAITING, ROOM_STATUS.READY]);
+const STARTABLE_STATES = new Set([ROOM_STATUS.WAITING, ROOM_STATUS.READY]);
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function clone(value) {
+  if (value === undefined || value === null) return value;
+  return structuredClone(value);
+}
+
+function deepFreeze(value, seen = new WeakSet()) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  if (seen.has(value)) return value;
+  seen.add(value);
+  for (const child of Object.values(value)) deepFreeze(child, seen);
+  return Object.freeze(value);
+}
+
+function publicClone(value) {
+  return clone(value);
+}
+
+function normalizeId(value, field = 'id', { required = true, max = 128 } = {}) {
+  if (value === undefined || value === null) {
+    if (!required) return null;
+    throw new AppError('INVALID_ACTION', { details: [{ path: field, message: 'is required' }] });
+  }
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new AppError('INVALID_ACTION', { details: [{ path: field, message: 'must be a string' }] });
+  }
+  const normalized = String(value).trim();
+  if (!normalized && required) {
+    throw new AppError('INVALID_ACTION', { details: [{ path: field, message: 'must not be blank' }] });
+  }
+  if (!normalized && !required) return null;
+  if (normalized.length > max) {
+    throw new AppError('INVALID_ACTION', { details: [{ path: field, message: `must be <= ${max} characters` }] });
+  }
+  return normalized;
+}
+
+function normalizeName(value, fallback) {
+  const name = value === undefined || value === null ? fallback : String(value).trim();
+  if (!name) return fallback;
+  return name.slice(0, 64);
+}
+
+function normalizeOptions(options) {
+  if (typeof options === 'string') return { commandId: options };
+  return isRecord(options) ? options : {};
+}
+
+function normalizeDeadlinePolicy(policy) {
+  if (policy === undefined || policy === null) {
+    return deepFreeze({
+      enabled: false,
+      actionDeadlineMs: null,
+      timeoutAction: null
+    });
+  }
+  if (!isRecord(policy)) throw new AppError('INVALID_ACTION', {
+    details: [{ path: 'deadlinePolicy', message: 'must be an object' }]
+  });
+  const rawMs = policy.actionDeadlineMs ?? policy.turnDeadlineMs ?? policy.turnTimeoutMs;
+  const actionDeadlineMs = rawMs === undefined || rawMs === null || rawMs === ''
+    ? null : Number(rawMs);
+  if (actionDeadlineMs !== null
+    && (!Number.isSafeInteger(actionDeadlineMs) || actionDeadlineMs < 1 || actionDeadlineMs > 86_400_000)) {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'deadlinePolicy.actionDeadlineMs', message: 'must be an integer between 1 and 86400000' }]
+    });
+  }
+  const rawTimeoutAction = policy.timeoutAction ?? policy.defaultAction ?? null;
+  let timeoutAction = rawTimeoutAction;
+  if (isRecord(rawTimeoutAction)) {
+    const actionName = rawTimeoutAction.action ?? rawTimeoutAction.name;
+    timeoutAction = {
+      action: actionName,
+      ...(rawTimeoutAction.args === undefined ? {} : { args: clone(rawTimeoutAction.args) })
+    };
+  }
+  const actionName = typeof timeoutAction === 'string' ? timeoutAction : timeoutAction?.action;
+  if (timeoutAction !== null && (typeof actionName !== 'string'
+    || actionName.trim().length < 1 || actionName.trim().length > 64)) {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'deadlinePolicy.timeoutAction', message: 'must be a non-empty string of at most 64 characters' }]
+    });
+  }
+  const normalized = {
+    enabled: policy.enabled === true && actionDeadlineMs !== null && timeoutAction !== null,
+    actionDeadlineMs,
+    timeoutAction: timeoutAction === null
+      ? null
+      : (typeof timeoutAction === 'string'
+        ? timeoutAction.trim()
+        : { ...timeoutAction, action: timeoutAction.action.trim() })
+  };
+  return deepFreeze(normalized);
+}
+
+function canonical(value, seen = new WeakSet()) {
+  if (value === null || typeof value !== 'object') {
+    if (typeof value === 'number' && !Number.isFinite(value)) return JSON.stringify(String(value));
+    return JSON.stringify(value);
+  }
+  if (seen.has(value)) throw new TypeError('cyclic command input');
+  seen.add(value);
+  let result;
+  if (Array.isArray(value)) {
+    result = `[${value.map(item => canonical(item, seen)).join(',')}]`;
+  } else {
+    result = `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key], seen)}`).join(',')}}`;
+  }
+  seen.delete(value);
+  return result;
+}
+
+function hash(value) {
+  return createHash('sha256').update(canonical(value)).digest('hex');
+}
+
+function iso(clock) {
+  const value = new Date(clock());
+  if (Number.isNaN(value.getTime())) throw new AppError('INTERNAL_ERROR', { message: 'Room clock returned an invalid time' });
+  return value.toISOString();
+}
+
+function normalizeAccessPolicy(policy, clubId) {
+  if (policy === undefined || policy === null || policy === '') {
+    return clubId ? ROOM_ACCESS_POLICY.MEMBERS_ONLY : ROOM_ACCESS_POLICY.PUBLIC_CODE;
+  }
+  const normalized = String(policy).toUpperCase();
+  if (!Object.values(ROOM_ACCESS_POLICY).includes(normalized)) {
+    throw new AppError('INVALID_ACTION', { details: [{ path: 'accessPolicy', message: 'is invalid' }] });
+  }
+  return normalized;
+}
+
+function statusError(status, fallback = 'ROOM_NOT_JOINABLE') {
+  if (status === ROOM_STATUS.FINISHED) return new AppError('ROUND_FINISHED');
+  if (status === ROOM_STATUS.CANCELLED) return new AppError('ROOM_NOT_JOINABLE');
+  return new AppError(fallback);
+}
+
+function actionInput(action) {
+  if (typeof action === 'string') return { name: action, args: undefined };
+  if (!isRecord(action)) throw new AppError('INVALID_ACTION');
+  const name = action.action || action.type || action.name;
+  if (typeof name !== 'string') throw new AppError('INVALID_ACTION');
+  return { name, args: action.args === undefined ? undefined : clone(action.args) };
+}
+
+export class Room {
+  constructor({
+    id,
+    roomId,
+    clubId = null,
+    floorId = null,
+    rule = 'susong_v1',
+    ruleId,
+    ruleVersion,
+    gameType = 'mahjong',
+    ruleConfig,
+    ruleSnapshot,
+    maxPlayers = 4,
+    ownerId = null,
+    accessPolicy,
+    roomAccessPolicy,
+    matchId,
+    totalRounds,
+    roundCount,
+    deadlinePolicy,
+    historyLimit = 2048,
+    clock = () => Date.now(),
+    idFactory = randomUUID,
+    validateAction
+  } = {}) {
+    this.id = normalizeId(roomId || id, 'id', { max: 64 });
+    this.roomId = this.id;
+    this.clubId = clubId === null || clubId === undefined ? null : normalizeId(clubId, 'clubId', { required: false, max: 64 });
+    this.floorId = floorId === null || floorId === undefined ? null : normalizeId(floorId, 'floorId', { required: false, max: 64 });
+    this.maxPlayers = Number(maxPlayers);
+    if (!Number.isInteger(this.maxPlayers) || this.maxPlayers < 2 || this.maxPlayers > 16) {
+      throw new AppError('INVALID_ACTION', { details: [{ path: 'maxPlayers', message: 'must be an integer between 2 and 16' }] });
+    }
+    if (typeof clock !== 'function' || typeof idFactory !== 'function') {
+      throw new TypeError('Room clock and idFactory must be functions');
+    }
+    if (!Number.isFinite(historyLimit) || historyLimit < 1) {
+      throw new AppError('INVALID_ACTION', { details: [{ path: 'historyLimit', message: 'must be positive' }] });
+    }
+
+    this.clock = clock;
+    this.idFactory = idFactory;
+    this.historyLimit = Math.floor(historyLimit);
+    this.validateAction = typeof validateAction === 'function' ? validateAction : null;
+    this.ownerId = ownerId === null || ownerId === undefined ? null : normalizeId(ownerId, 'ownerId');
+    this.accessPolicy = normalizeAccessPolicy(roomAccessPolicy || accessPolicy, this.clubId);
+
+    const fallbackRuleVersion = ruleVersion || rule || 'unknown';
+    const snapshot = ruleSnapshot === undefined ? {
+      gameType,
+      ruleId: ruleId || fallbackRuleVersion,
+      ruleVersion: fallbackRuleVersion,
+      config: ruleConfig === undefined ? {} : clone(ruleConfig)
+    } : clone(ruleSnapshot);
+    if (!isRecord(snapshot)) {
+      throw new AppError('INVALID_ACTION', { details: [{ path: 'ruleSnapshot', message: 'must be an object' }] });
+    }
+    if (snapshot.gameType === undefined) snapshot.gameType = gameType;
+    if (snapshot.ruleId === undefined) snapshot.ruleId = ruleId || fallbackRuleVersion;
+    if (snapshot.ruleVersion === undefined) snapshot.ruleVersion = fallbackRuleVersion;
+    const configuredDeadlinePolicy = deadlinePolicy
+      ?? snapshot.deadlinePolicy
+      ?? snapshot.config?.deadlinePolicy;
+    this.deadlinePolicy = normalizeDeadlinePolicy(configuredDeadlinePolicy);
+    if (snapshot.deadlinePolicy === undefined && configuredDeadlinePolicy !== undefined) {
+      snapshot.deadlinePolicy = clone(this.deadlinePolicy);
+    }
+    this.ruleSnapshot = deepFreeze(snapshot);
+    this.ruleSnapshotHash = hash(snapshot);
+    // Kept as aliases for the first skeleton and for simple adapters.
+    this.rule = String(this.ruleSnapshot.ruleVersion || fallbackRuleVersion);
+    this.ruleId = String(this.ruleSnapshot.ruleId || this.rule);
+    this.ruleVersion = String(this.ruleSnapshot.ruleVersion || this.rule);
+    this.gameType = String(this.ruleSnapshot.gameType || gameType);
+
+    this.matchId = normalizeId(matchId || this.idFactory(), 'matchId', { max: 128 });
+    this.totalRounds = totalRounds ?? roundCount ?? null;
+    if (this.totalRounds !== null && (!Number.isInteger(this.totalRounds) || this.totalRounds < 1)) {
+      throw new AppError('INVALID_ACTION', { details: [{ path: 'totalRounds', message: 'must be a positive integer or null' }] });
+    }
+
+    this.status = ROOM_STATUS.WAITING;
+    this.state = this.status;
+    this.version = 0;
+    this.roomVersion = 0;
+    this.players = new Map();
+    this.seats = Array.from({ length: this.maxPlayers }, () => null);
+    this.scores = new Map();
+    this.turn = null;
+    this.turnPlayerId = null;
+    this.currentRound = null;
+    this.round = null;
+    this.roundNumber = 0;
+    this.roundId = null;
+    this.match = {
+      id: this.matchId,
+      matchId: this.matchId,
+      status: this.status,
+      roundNumber: 0,
+      totalRounds: this.totalRounds
+    };
+    this._events = [];
+    this._commands = new Map();
+  }
+
+  get events() {
+    return Object.freeze(this._events.slice());
+  }
+
+  get eventHistory() {
+    return this.events;
+  }
+
+  get owner() {
+    return this.ownerId;
+  }
+
+  get readyCount() {
+    return [...this.players.values()].filter(player => player.ready).length;
+  }
+
+  get connectedCount() {
+    return [...this.players.values()].filter(player => player.connected).length;
+  }
+
+  _assertExpectedVersion(expectedRoomVersion) {
+    if (expectedRoomVersion === undefined || expectedRoomVersion === null) return;
+    if (!Number.isInteger(expectedRoomVersion) || expectedRoomVersion < 0 || expectedRoomVersion !== this.version) {
+      throw new AppError('VERSION_CONFLICT', {
+        details: [{ expectedRoomVersion, actualRoomVersion: this.version }]
+      });
+    }
+  }
+
+  _withCommand(options, fingerprint, operation) {
+    const opts = normalizeOptions(options);
+    const commandId = opts.commandId === undefined || opts.commandId === null
+      ? null
+      : normalizeId(opts.commandId, 'commandId', { max: 256 });
+    const commandFingerprint = canonical(fingerprint);
+    if (commandId) {
+      const previous = this._commands.get(commandId);
+      if (previous) {
+        if (previous.fingerprint !== commandFingerprint) {
+          throw new AppError('DUPLICATE_REQUEST', {
+            details: [{ commandId, reason: 'commandId was already used with another request' }]
+          });
+        }
+        return publicClone(previous.result);
+      }
+    }
+    this._assertExpectedVersion(opts.expectedRoomVersion ?? opts.roomVersion);
+    const result = operation(opts);
+    if (commandId) this._commands.set(commandId, {
+      fingerprint: commandFingerprint,
+      result: publicClone(result),
+      roomVersion: this.version
+    });
+    return publicClone(result);
+  }
+
+  _assertState(states, fallback = 'ROOM_NOT_JOINABLE') {
+    if (!states.has(this.status)) throw statusError(this.status, fallback);
+  }
+
+  _assertOwner(actorId, options = {}) {
+    if (options.isAdmin || options.admin || options.role === 'admin' || options.role === 'ADMIN'
+      || options.actorRole === 'ADMIN' || options.actorRole === 'admin'
+      || options.actorRole === 'CLUB_ADMIN' || options.actorRole === 'club_admin') return;
+    const actor = normalizeId(actorId, 'actorId', { required: false });
+    if (!actor || !this.ownerId || actor !== this.ownerId) throw new AppError('NOT_ROOM_OWNER');
+  }
+
+  _assertAccess(playerId, options = {}) {
+    const actor = normalizeId(playerId, 'playerId');
+    // A room created without a preassigned owner must allow its first player
+    // to claim the owner seat even when the room's eventual access policy is
+    // MEMBERS_ONLY/INVITE_ONLY. Subsequent joins still require evidence.
+    if ((this.ownerId === null && this.players.size === 0)
+      || actor === this.ownerId || options.bypassAccess || options.isAdmin || options.admin) return;
+    if (this.accessPolicy === ROOM_ACCESS_POLICY.MEMBERS_ONLY) {
+      const resolvedMembership = typeof options.membershipResolver === 'function'
+        ? options.membershipResolver(actor, this.clubId)
+        : options.isMember;
+      const approved = options.membershipApproved === true
+        || options.isMember === true
+        || resolvedMembership === true
+        || options.member === true
+        || options.clubMember === true;
+      if (!approved) throw new AppError('CLUB_MEMBERSHIP_REQUIRED');
+    }
+    if (this.accessPolicy === ROOM_ACCESS_POLICY.INVITE_ONLY) {
+      if (!(options.invited === true || options.invitation === true || options.inviteToken)) {
+        throw new AppError('FORBIDDEN');
+      }
+    }
+  }
+
+  _findSeat(seat) {
+    if (seat === undefined || seat === null) return this.seats.findIndex(value => value === null);
+    if (!Number.isInteger(seat) || seat < 0 || seat >= this.maxPlayers) throw new AppError('SEAT_OCCUPIED');
+    return this.seats[seat] === null ? seat : -1;
+  }
+
+  _orderedPlayers() {
+    return [...this.players.values()].sort((left, right) => left.seat - right.seat);
+  }
+
+  _allReady() {
+    return this.players.size === this.maxPlayers && this.readyCount === this.maxPlayers;
+  }
+
+  _setStatus(status) {
+    this.status = status;
+    this.state = status;
+    this.match.status = status;
+  }
+
+  _append(type, payload = {}, options = {}) {
+    const occurredAt = iso(this.clock);
+    const version = this.version + 1;
+    const event = {
+      eventId: this.idFactory(),
+      roomId: this.id,
+      ...(payload?.matchId ? { matchId: payload.matchId } : {}),
+      ...(payload?.roundId ? { roundId: payload.roundId } : {}),
+      type,
+      version,
+      roomVersion: version,
+      ...(options.requestId ? { requestId: String(options.requestId) } : {}),
+      ...(options.commandId ? { commandId: String(options.commandId) } : {}),
+      payload: clone(payload),
+      occurredAt,
+      // `at` is retained for the original development fixture.
+      at: occurredAt
+    };
+    this.version = version;
+    this.roomVersion = version;
+    this._events.push(deepFreeze(event));
+    while (this._events.length > this.historyLimit) this._events.shift();
+    return this._events.at(-1);
+  }
+
+  /** Append a domain event. BE-202 will route this through a durable store. */
+  append(type, payload = {}, metadata = {}) {
+    if (typeof type !== 'string' || !type.trim()) throw new AppError('INVALID_ACTION');
+    return this._append(type.trim(), payload, metadata);
+  }
+
+  _result(event, extra = {}) {
+    return {
+      accepted: true,
+      event: event ? publicClone(event) : null,
+      ...(event?.requestId ? { requestId: event.requestId } : {}),
+      ...(event?.commandId ? { commandId: event.commandId } : {}),
+      roomVersion: this.version,
+      version: this.version,
+      snapshot: this.snapshot(),
+      ...extra
+    };
+  }
+
+  join(player = {}, options = {}) {
+    if (typeof player === 'string' || typeof player === 'number') player = { id: player };
+    if (!isRecord(player)) throw new AppError('INVALID_ACTION');
+    const opts = normalizeOptions(options);
+    const playerId = normalizeId(player.id ?? player.userId ?? player.playerId, 'playerId');
+    const name = normalizeName(player.name ?? player.displayName, `玩家${playerId.slice(0, 6)}`);
+    const requestedSeat = player.seat ?? opts.seat;
+    const fingerprint = { op: 'join', playerId, name, seat: requestedSeat ?? null };
+    return this._withCommand(opts, fingerprint, command => {
+      this._assertState(JOINABLE_STATES, 'ROOM_NOT_JOINABLE');
+      this._assertAccess(playerId, command);
+      if (this.players.has(playerId)) throw new AppError('DUPLICATE_REQUEST', {
+        details: [{ playerId, reason: 'player is already seated' }]
+      });
+      if (this.players.size >= this.maxPlayers) throw new AppError('ROOM_FULL');
+      const seat = this._findSeat(requestedSeat);
+      if (seat < 0) throw new AppError('SEAT_OCCUPIED');
+      if (this.ownerId === null) this.ownerId = playerId;
+      const joinedAt = iso(this.clock);
+      const record = {
+        id: playerId,
+        playerId,
+        name,
+        displayName: name,
+        seat,
+        ready: false,
+        connected: true,
+        joinedAt,
+        disconnectedAt: null
+      };
+      this.players.set(playerId, record);
+      this.seats[seat] = playerId;
+      this.scores.set(playerId, 0);
+      const event = this._append('PLAYER_JOINED', {
+        player: this._publicPlayer(record),
+        ownerId: this.ownerId,
+        seat
+      }, command);
+      return this._result(event, { player: this._publicPlayer(record) });
+    });
+  }
+
+  _publicPlayer(player) {
+    return {
+      id: player.id,
+      playerId: player.playerId,
+      name: player.name,
+      displayName: player.displayName,
+      seat: player.seat,
+      ready: Boolean(player.ready),
+      connected: Boolean(player.connected),
+      ...(player.joinedAt ? { joinedAt: player.joinedAt } : {}),
+      ...(player.disconnectedAt ? { disconnectedAt: player.disconnectedAt } : {})
+    };
+  }
+
+  leave(playerId, options = {}) {
+    const opts = normalizeOptions(options);
+    const id = normalizeId(playerId, 'playerId');
+    const requestedTransfer = opts.transferOwnerTo ?? null;
+    return this._withCommand(opts, {
+      op: 'leave',
+      playerId: id,
+      transferOwnerTo: requestedTransfer
+    }, command => {
+      this._assertState(READY_STATES, 'ROOM_NOT_JOINABLE');
+      const player = this.players.get(id);
+      if (!player) throw new AppError('PLAYER_NOT_FOUND');
+      if (id === this.ownerId && this.players.size > 1 && !command.transferOwnerTo) {
+        throw new AppError('FORBIDDEN', { details: [{ reason: 'owner must transfer ownership or disband' }] });
+      }
+      // Validate the successor before mutating any aggregate collection. A
+      // failed ownership transfer must leave the room exactly as it was.
+      let successor = null;
+      if (id === this.ownerId) {
+        successor = command.transferOwnerTo
+          ? normalizeId(command.transferOwnerTo, 'transferOwnerTo')
+          : this._orderedPlayers().find(candidate => candidate.id !== id)?.id || null;
+        if (successor && !this.players.has(successor)) throw new AppError('PLAYER_NOT_FOUND');
+        if (successor === id) throw new AppError('INVALID_ACTION');
+      }
+      this.players.delete(id);
+      this.seats[player.seat] = null;
+      this.scores.delete(id);
+      if (id === this.ownerId) {
+        this.ownerId = successor;
+      }
+      if (this.status === ROOM_STATUS.READY) this._setStatus(ROOM_STATUS.WAITING);
+      const event = this._append('PLAYER_LEFT', { playerId: id, ownerId: this.ownerId }, command);
+      return this._result(event, { playerId: id });
+    });
+  }
+
+  setReady(playerId, ready = true, options = {}) {
+    if (isRecord(ready)) {
+      const command = ready;
+      playerId = command.playerId ?? command.userId ?? command.actorId ?? playerId;
+      options = { ...command, ...normalizeOptions(options) };
+      ready = command.ready ?? true;
+    }
+    const opts = normalizeOptions(options);
+    const id = normalizeId(playerId, 'playerId');
+    if (typeof ready !== 'boolean') throw new AppError('INVALID_ACTION');
+    return this._withCommand(opts, { op: 'ready', playerId: id, ready }, command => {
+      this._assertState(READY_STATES, 'ROOM_NOT_JOINABLE');
+      const player = this.players.get(id);
+      if (!player) throw new AppError('PLAYER_NOT_FOUND');
+      player.ready = ready;
+      if (this._allReady()) this._setStatus(ROOM_STATUS.READY);
+      else if (this.status === ROOM_STATUS.READY) this._setStatus(ROOM_STATUS.WAITING);
+      const event = this._append('PLAYER_READY', {
+        playerId: id,
+        ready,
+        readyCount: this.readyCount,
+        requiredReady: this.maxPlayers,
+        status: this.status
+      }, command);
+      return this._result(event, { playerId: id, ready });
+    });
+  }
+
+  ready(playerId, ready = true, options = {}) {
+    return this.setReady(playerId, ready, options);
+  }
+
+  markReady(playerId, ready = true, options = {}) {
+    return this.setReady(playerId, ready, options);
+  }
+
+  _newRound(number, status, options = {}) {
+    const roundId = normalizeId(options.roundId || this.idFactory(), 'roundId', { max: 128 });
+    const round = {
+      id: roundId,
+      roundId,
+      number,
+      roundNumber: number,
+      status,
+      dealerSeat: options.dealerSeat === undefined ? null : options.dealerSeat,
+      ruleSnapshotHash: this.ruleSnapshotHash,
+      settlement: null,
+      startedAt: null,
+      endedAt: null,
+      turnStartedAt: null,
+      turnDeadlineAt: null
+    };
+    this.currentRound = round;
+    this.round = round;
+    this.roundNumber = number;
+    this.roundId = roundId;
+    this.match.roundNumber = number;
+    return round;
+  }
+
+  _firstTurn() {
+    return this._orderedPlayers()[0]?.id || null;
+  }
+
+  _setTurnDeadline() {
+    if (!this.currentRound || this.status !== ROOM_STATUS.PLAYING || !this.turn
+      || !this.deadlinePolicy.enabled) {
+      if (this.currentRound) {
+        this.currentRound.turnStartedAt = null;
+        this.currentRound.turnDeadlineAt = null;
+      }
+      return null;
+    }
+    const now = this.clock();
+    const nowMs = now instanceof Date
+      ? now.getTime()
+      : (typeof now === 'string' ? Date.parse(now) : Number(now));
+    if (!Number.isFinite(nowMs)) throw new AppError('INTERNAL_ERROR', { message: 'Room clock returned an invalid time' });
+    const startedAt = new Date(nowMs).toISOString();
+    const deadlineAt = new Date(nowMs + this.deadlinePolicy.actionDeadlineMs).toISOString();
+    this.currentRound.turnStartedAt = startedAt;
+    this.currentRound.turnDeadlineAt = deadlineAt;
+    return deadlineAt;
+  }
+
+  start(options = {}) {
+    const legacyCall = arguments.length === 0;
+    const opts = normalizeOptions(options);
+    const actorId = opts.actorId ?? opts.playerId ?? opts.ownerId ?? this.ownerId;
+    const autoAdvance = legacyCall || opts.autoAdvance === true || opts.immediate === true || opts.autoPlay === true;
+    return this._withCommand(opts, { op: 'start', actorId: actorId || null, autoAdvance }, command => {
+      this._assertState(STARTABLE_STATES, 'ROOM_NOT_JOINABLE');
+      this._assertOwner(actorId, command);
+      if (this.players.size !== this.maxPlayers) throw new AppError('PLAYERS_NOT_READY');
+      if (!this._allReady() && !legacyCall && !command.bypassReady && !command.allowUnready) throw new AppError('PLAYERS_NOT_READY');
+      if (legacyCall || command.bypassReady || command.allowUnready) {
+        for (const player of this.players.values()) player.ready = true;
+      }
+      const round = this._newRound(1, ROOM_STATUS.DEALING, command);
+      let phasePath = [ROOM_STATUS.DEALING];
+      if (autoAdvance) {
+        this._setStatus(ROOM_STATUS.PLAYING);
+        round.status = ROOM_STATUS.PLAYING;
+        round.startedAt = iso(this.clock);
+        this.turn = this._firstTurn();
+        this.turnPlayerId = this.turn;
+        this._setTurnDeadline();
+        phasePath = [ROOM_STATUS.DEALING, ROOM_STATUS.PLAYING];
+      } else {
+        this._setStatus(ROOM_STATUS.DEALING);
+        this.turn = null;
+        this.turnPlayerId = null;
+      }
+      const event = this._append('ROUND_STARTED', {
+        matchId: this.matchId,
+        roundId: round.roundId,
+        roundNumber: round.roundNumber,
+        status: this.status,
+        phasePath,
+        turn: this.turn,
+        turnStartedAt: round.turnStartedAt,
+        turnDeadlineAt: round.turnDeadlineAt,
+        ruleId: this.ruleId,
+        ruleVersion: this.ruleVersion,
+        ruleSnapshotHash: this.ruleSnapshotHash
+      }, command);
+      return this._result(event, { matchId: this.matchId, roundId: round.roundId });
+    });
+  }
+
+  startRound(options = {}) {
+    return this.start(options);
+  }
+
+  beginDealing(options = {}) {
+    const opts = normalizeOptions(options);
+    if (this.status === ROOM_STATUS.READY) return this.start({ ...opts, autoAdvance: false });
+    if (this.status === ROOM_STATUS.NEXT_ROUND) return this.beginNextRound(opts);
+    if (this.status === ROOM_STATUS.DEALING) return this._result(this._events.at(-1), { matchId: this.matchId, roundId: this.roundId });
+    throw statusError(this.status, 'PLAYERS_NOT_READY');
+  }
+
+  beginPlaying(options = {}) {
+    const opts = normalizeOptions(options);
+    const actorId = opts.actorId ?? opts.playerId ?? this.ownerId;
+    return this._withCommand(opts, { op: 'begin_playing', actorId: actorId || null }, command => {
+      if (this.status !== ROOM_STATUS.DEALING) throw statusError(this.status, 'ROUND_NOT_PLAYING');
+      if (!this.currentRound) throw new AppError('ROUND_NOT_PLAYING');
+      if (actorId && actorId !== this.ownerId && !command.isAdmin && !command.admin && command.actorRole !== 'SYSTEM') {
+        throw new AppError('NOT_ROOM_OWNER');
+      }
+      this._setStatus(ROOM_STATUS.PLAYING);
+      this.currentRound.status = ROOM_STATUS.PLAYING;
+      this.currentRound.startedAt = iso(this.clock);
+      this.turn = this._firstTurn();
+      this.turnPlayerId = this.turn;
+      this._setTurnDeadline();
+      const event = this._append('ROUND_PLAYING', {
+        matchId: this.matchId,
+        roundId: this.roundId,
+        roundNumber: this.roundNumber,
+        status: this.status,
+        turn: this.turn,
+        turnStartedAt: this.currentRound.turnStartedAt,
+        turnDeadlineAt: this.currentRound.turnDeadlineAt
+      }, command);
+      return this._result(event, { matchId: this.matchId, roundId: this.roundId });
+    });
+  }
+
+  applyAction(playerId, action, options = {}) {
+    if (isRecord(playerId)) {
+      const command = playerId;
+      playerId = command.playerId ?? command.userId ?? command.actorId;
+      action = command.action ?? command.payload ?? action;
+      options = { ...command, ...normalizeOptions(options) };
+    }
+    const opts = normalizeOptions(options);
+    const id = normalizeId(playerId, 'playerId');
+    const parsed = actionInput(action);
+    const name = parsed.name.trim();
+    if (!name || name.length > 64) throw new AppError('INVALID_ACTION');
+    const fingerprint = { op: 'action', playerId: id, action: name, args: parsed.args ?? null };
+    return this._withCommand(opts, fingerprint, command => {
+      if (this.status !== ROOM_STATUS.PLAYING) {
+        if (this.status === ROOM_STATUS.FINISHED) throw new AppError('ROUND_FINISHED');
+        throw new AppError('ROUND_NOT_PLAYING');
+      }
+      const player = this.players.get(id);
+      if (!player) throw new AppError('PLAYER_NOT_FOUND');
+      if (this.turn !== id) throw new AppError('NOT_YOUR_TURN');
+      if (this.validateAction) {
+        let valid = false;
+        try {
+          valid = this.validateAction({ action: name, args: parsed.args }, this.snapshot({ viewerId: id }));
+        } catch (cause) {
+          throw new AppError('INVALID_ACTION', { cause });
+        }
+        if (valid === false) throw new AppError('INVALID_ACTION');
+      }
+      const ordered = this._orderedPlayers();
+      const index = ordered.findIndex(candidate => candidate.id === id);
+      this.turn = ordered[(index + 1) % ordered.length]?.id || null;
+      this.turnPlayerId = this.turn;
+      const timedOut = command.timeout === true || command.timedOut === true;
+      this._setTurnDeadline();
+      const event = this._append('ACTION_APPLIED', {
+        matchId: this.matchId,
+        roundId: this.roundId,
+        playerId: id,
+        action: name,
+        ...(parsed.args === undefined ? {} : { args: parsed.args }),
+        nextTurn: this.turn,
+        ...(timedOut ? {
+          timedOut: true,
+          timeoutAction: name,
+          deadlineAt: command.deadlineAt || null
+        } : {}),
+        turnStartedAt: this.currentRound?.turnStartedAt || null,
+        turnDeadlineAt: this.currentRound?.turnDeadlineAt || null
+      }, command);
+      return this._result(event, { playerId: id, action: name, nextTurn: this.turn });
+    });
+  }
+
+  settleRound(settlement = null, options = {}) {
+    let result = settlement;
+    let opts = normalizeOptions(options);
+    // Also accept a single command-shaped object for adapters that call
+    // `settleRound({ result, commandId, actorId })`.
+    if (isRecord(settlement) && Object.keys(options || {}).length === 0
+      && (settlement.commandId || settlement.actorId || settlement.result !== undefined)) {
+      opts = { ...settlement };
+      result = settlement.result === undefined ? null : settlement.result;
+      delete opts.result;
+    }
+    const actorId = opts.actorId ?? opts.playerId ?? this.ownerId;
+    return this._withCommand(opts, { op: 'settle', actorId: actorId || null, settlement: result }, command => {
+      if (this.status !== ROOM_STATUS.PLAYING) {
+        if (this.status === ROOM_STATUS.FINISHED) throw new AppError('ROUND_FINISHED');
+        throw new AppError('ROUND_NOT_PLAYING');
+      }
+      if (actorId && actorId !== this.ownerId && !command.isAdmin && !command.admin && command.actorRole !== 'SYSTEM') {
+        throw new AppError('NOT_ROOM_OWNER');
+      }
+      this._setStatus(ROOM_STATUS.SETTLING);
+      this.currentRound.status = ROOM_STATUS.SETTLING;
+      this.currentRound.settlement = clone(result);
+      this.currentRound.endedAt = iso(this.clock);
+      this.currentRound.turnStartedAt = null;
+      this.currentRound.turnDeadlineAt = null;
+      const event = this._append('ROUND_SETTLING', {
+        matchId: this.matchId,
+        roundId: this.roundId,
+        roundNumber: this.roundNumber,
+        status: this.status,
+        settlement: clone(result),
+        // Scoring belongs to the rule engine; no client-provided score is
+        // applied to `scores` here.
+        scoreAuthority: 'rule-engine-pending'
+      }, command);
+      return this._result(event, { matchId: this.matchId, roundId: this.roundId, settlement: clone(result) });
+    });
+  }
+
+  settle(settlement = null, options = {}) {
+    return this.settleRound(settlement, options);
+  }
+
+  nextRound(options = {}) {
+    const opts = normalizeOptions(options);
+    const actorId = opts.actorId ?? opts.playerId ?? this.ownerId;
+    return this._withCommand(opts, { op: 'next_round', actorId: actorId || null, autoDeal: opts.autoDeal === true }, command => {
+      if (this.status !== ROOM_STATUS.SETTLING) {
+        if (this.status === ROOM_STATUS.FINISHED) throw new AppError('ROUND_FINISHED');
+        throw new AppError('ROUND_NOT_PLAYING');
+      }
+      if (actorId && actorId !== this.ownerId && !command.isAdmin && !command.admin && command.actorRole !== 'SYSTEM') {
+        throw new AppError('NOT_ROOM_OWNER');
+      }
+      const isLast = this.totalRounds !== null && this.roundNumber >= this.totalRounds;
+      if (isLast) {
+        this._setStatus(ROOM_STATUS.FINISHED);
+        if (this.currentRound) {
+          this.currentRound.turnStartedAt = null;
+          this.currentRound.turnDeadlineAt = null;
+        }
+        const event = this._append('MATCH_FINISHED', {
+          matchId: this.matchId,
+          roundId: this.roundId,
+          roundNumber: this.roundNumber,
+          status: this.status
+        }, command);
+        return this._result(event, { matchId: this.matchId, finished: true });
+      }
+      this._setStatus(ROOM_STATUS.NEXT_ROUND);
+      if (this.currentRound) {
+        this.currentRound.turnStartedAt = null;
+        this.currentRound.turnDeadlineAt = null;
+      }
+      const event = this._append('NEXT_ROUND', {
+        matchId: this.matchId,
+        previousRoundId: this.roundId,
+        nextRoundNumber: this.roundNumber + 1,
+        status: this.status
+      }, command);
+      const result = this._result(event, { matchId: this.matchId, finished: false });
+      if (command.autoDeal) {
+        const dealing = this._beginNextRound(command);
+        result.event = publicClone(dealing.event);
+        result.roomVersion = this.version;
+        result.version = this.version;
+        result.snapshot = this.snapshot();
+        result.roundId = this.roundId;
+      }
+      return result;
+    });
+  }
+
+  beginNextRound(options = {}) {
+    const opts = normalizeOptions(options);
+    return this._withCommand(opts, { op: 'begin_next_round', actorId: opts.actorId ?? this.ownerId }, command => {
+      if (this.status !== ROOM_STATUS.NEXT_ROUND) throw statusError(this.status, 'ROUND_NOT_PLAYING');
+      return this._beginNextRound(command);
+    });
+  }
+
+  _beginNextRound(options = {}) {
+    const round = this._newRound(this.roundNumber + 1, ROOM_STATUS.DEALING, options);
+    this._setStatus(ROOM_STATUS.DEALING);
+    this.turn = null;
+    this.turnPlayerId = null;
+    const event = this._append('ROUND_DEALING', {
+      matchId: this.matchId,
+      roundId: round.roundId,
+      roundNumber: round.roundNumber,
+      status: this.status,
+      ruleSnapshotHash: this.ruleSnapshotHash
+    }, options);
+    return this._result(event, { matchId: this.matchId, roundId: round.roundId });
+  }
+
+  finish(options = {}) {
+    const opts = normalizeOptions(options);
+    const actorId = opts.actorId ?? opts.playerId ?? this.ownerId;
+    return this._withCommand(opts, { op: 'finish', actorId: actorId || null }, command => {
+      if (this.status === ROOM_STATUS.FINISHED) return this._result(this._events.at(-1), { matchId: this.matchId, finished: true });
+      if (this.status === ROOM_STATUS.CANCELLED) throw new AppError('ROOM_NOT_JOINABLE');
+      if (![ROOM_STATUS.SETTLING, ROOM_STATUS.NEXT_ROUND, ROOM_STATUS.PLAYING].includes(this.status)) {
+        throw statusError(this.status, 'ROUND_NOT_PLAYING');
+      }
+      if (actorId && actorId !== this.ownerId && !command.isAdmin && !command.admin && command.actorRole !== 'SYSTEM') {
+        throw new AppError('NOT_ROOM_OWNER');
+      }
+      this._setStatus(ROOM_STATUS.FINISHED);
+      if (this.currentRound) {
+        this.currentRound.turnStartedAt = null;
+        this.currentRound.turnDeadlineAt = null;
+      }
+      if (this.currentRound && this.currentRound.status !== ROOM_STATUS.SETTLING) this.currentRound.status = ROOM_STATUS.FINISHED;
+      const event = this._append('MATCH_FINISHED', {
+        matchId: this.matchId,
+        roundId: this.roundId,
+        roundNumber: this.roundNumber,
+        status: this.status
+      }, command);
+      return this._result(event, { matchId: this.matchId, finished: true });
+    });
+  }
+
+  finishMatch(options = {}) {
+    return this.finish(options);
+  }
+
+  cancel(actorOrOptions = {}, maybeOptions = {}) {
+    const opts = typeof actorOrOptions === 'string'
+      ? { ...normalizeOptions(maybeOptions), actorId: actorOrOptions }
+      : normalizeOptions(actorOrOptions);
+    const actorId = opts.actorId ?? opts.playerId ?? this.ownerId;
+    return this._withCommand(opts, { op: 'cancel', actorId: actorId || null, reason: opts.reason || null }, command => {
+      if (this.status === ROOM_STATUS.CANCELLED) throw new AppError('ROOM_NOT_JOINABLE');
+      if (this.status === ROOM_STATUS.FINISHED) throw new AppError('ROUND_FINISHED');
+      this._assertOwner(actorId, command);
+      this._setStatus(ROOM_STATUS.CANCELLED);
+      if (this.currentRound) {
+        this.currentRound.turnStartedAt = null;
+        this.currentRound.turnDeadlineAt = null;
+      }
+      const event = this._append('ROOM_CANCELLED', {
+        matchId: this.matchId,
+        roundId: this.roundId,
+        status: this.status,
+        reason: command.reason || null
+      }, command);
+      return this._result(event, { cancelled: true });
+    });
+  }
+
+  disband(actorOrOptions = {}, maybeOptions = {}) {
+    return this.cancel(actorOrOptions, maybeOptions);
+  }
+
+  disconnect(playerId, options = {}) {
+    if (playerId === undefined || playerId === null) return null;
+    if (isRecord(playerId)) {
+      options = { ...playerId, ...normalizeOptions(options) };
+      playerId = options.playerId ?? options.userId ?? options.actorId;
+    }
+    return this.setConnected(playerId, false, options);
+  }
+
+  /**
+   * Update transport presence without advancing the room event cursor by
+   * default. Presence is ephemeral connection state; callers that need an
+   * auditable domain event can opt in with `emitEvent`.
+   */
+  setConnected(playerId, connected = true, options = {}) {
+    if (playerId === undefined || playerId === null) return null;
+    if (isRecord(playerId)) {
+      options = { ...playerId, ...normalizeOptions(options) };
+      connected = options.connected ?? connected;
+      playerId = options.playerId ?? options.userId ?? options.actorId;
+    }
+    const id = normalizeId(playerId, 'playerId');
+    const player = this.players.get(id);
+    if (!player) return null;
+    const nextConnected = connected === true;
+    player.connected = nextConnected;
+    player.disconnectedAt = nextConnected
+      ? null
+      : (options.at ? new Date(options.at).toISOString() : iso(this.clock));
+    if (options.emitEvent === true) {
+      return this._append(nextConnected ? 'PLAYER_CONNECTED' : 'PLAYER_DISCONNECTED', {
+        playerId: id,
+        ...(player.disconnectedAt ? { disconnectedAt: player.disconnectedAt } : {})
+      }, options);
+    }
+    return this._publicPlayer(player);
+  }
+
+  eventsSince(lastVersion = 0) {
+    if (!Number.isInteger(lastVersion) || lastVersion < 0 || lastVersion > this.version) {
+      throw new AppError('VERSION_CONFLICT', {
+        details: [{ lastRoomVersion: lastVersion, actualRoomVersion: this.version }]
+      });
+    }
+    const firstVersion = this._events[0]?.version ?? this.version + 1;
+    if (lastVersion < firstVersion - 1) {
+      throw new AppError('VERSION_CONFLICT', {
+        details: [{ lastRoomVersion: lastVersion, earliestRoomVersion: firstVersion, syncRequired: true }]
+      });
+    }
+    return this._events.filter(event => event.version > lastVersion).map(publicClone);
+  }
+
+  reconnectSync(playerId, lastVersion = 0, options = {}) {
+    let version = lastVersion;
+    let opts = normalizeOptions(options);
+    if (isRecord(lastVersion)) {
+      opts = { ...lastVersion, ...opts };
+      version = opts.lastRoomVersion ?? opts.lastVersion ?? 0;
+    }
+    if (isRecord(playerId)) {
+      opts = { ...playerId, ...opts };
+      playerId = opts.playerId ?? opts.userId ?? opts.actorId;
+    }
+    const id = normalizeId(playerId, 'playerId');
+    const player = this.players.get(id);
+    if (!player) throw new AppError('PLAYER_NOT_FOUND');
+    // Membership/visibility is checked by the gateway; an already seated
+    // player remains entitled to their room snapshot after a socket loss.
+    this.setConnected(id, true, options);
+    const events = this.eventsSince(version);
+    return {
+      snapshot: this.snapshot({ viewerId: id }),
+      events,
+      fromRoomVersion: version,
+      toRoomVersion: this.version,
+      roomVersion: this.version,
+      syncRequired: false
+    };
+  }
+
+  reconnect(playerId, lastVersion = 0, options = {}) {
+    if (isRecord(playerId)) {
+      const command = playerId;
+      return this.reconnectSync(command.playerId ?? command.userId ?? command.actorId, command.lastRoomVersion ?? command.lastVersion ?? 0, { ...command, ...normalizeOptions(options) }).events;
+    }
+    return this.reconnectSync(playerId, lastVersion, options).events;
+  }
+
+  snapshot({ viewerId } = {}) {
+    const players = this._orderedPlayers().map(player => this._publicPlayer(player));
+    const round = this.currentRound ? {
+      ...this.currentRound,
+      ruleSnapshot: publicClone(this.ruleSnapshot),
+      ...(viewerId ? {} : {})
+    } : null;
+    const base = {
+      id: this.id,
+      roomId: this.roomId,
+      clubId: this.clubId,
+      floorId: this.floorId,
+      ownerId: this.ownerId,
+      accessPolicy: this.accessPolicy,
+      rule: this.rule,
+      ruleId: this.ruleId,
+      ruleVersion: this.ruleVersion,
+      gameType: this.gameType,
+      deadlinePolicy: publicClone(this.deadlinePolicy),
+      ruleSnapshot: publicClone(this.ruleSnapshot),
+      ruleSnapshotHash: this.ruleSnapshotHash,
+      status: this.status,
+      state: this.status,
+      version: this.version,
+      roomVersion: this.version,
+      matchId: this.matchId,
+      roundId: this.roundId,
+      roundNumber: this.roundNumber,
+      totalRounds: this.totalRounds,
+      match: clone(this.match),
+      round: round ? clone(round) : null,
+      turn: this.turn,
+      turnPlayerId: this.turnPlayerId,
+      readyCount: this.readyCount,
+      requiredReady: this.maxPlayers,
+      connectedCount: this.connectedCount,
+      maxPlayers: this.maxPlayers,
+      seats: this.seats.map((playerId, seat) => playerId === null
+        ? { seat, player: null }
+        : { seat, player: players.find(player => player.id === playerId) || null }),
+      players,
+      scores: Object.fromEntries(this.scores)
+    };
+    return {
+      ...base,
+      snapshotHash: hash(base)
+    };
+  }
+
+  /**
+   * Rebuild an aggregate from a persisted public snapshot.  Persistence
+   * adapters must treat snapshots as untrusted data: this method validates the
+   * shape and copies every mutable collection before exposing the Room.
+   * `events` may contain the retained history window for reconnects; the
+   * aggregate version itself always comes from the snapshot.
+   */
+  static fromSnapshot(snapshot, options = {}) {
+    if (!isRecord(snapshot)) throw new AppError('INVALID_ACTION');
+    const room = new Room({
+      id: snapshot.roomId || snapshot.id,
+      clubId: snapshot.clubId ?? null,
+      floorId: snapshot.floorId ?? null,
+      rule: snapshot.ruleVersion || snapshot.rule || 'unknown',
+      ruleId: snapshot.ruleId,
+      ruleVersion: snapshot.ruleVersion,
+      gameType: snapshot.gameType,
+      ruleSnapshot: snapshot.ruleSnapshot,
+      maxPlayers: snapshot.maxPlayers,
+      ownerId: snapshot.ownerId ?? null,
+      accessPolicy: snapshot.accessPolicy,
+      matchId: snapshot.matchId,
+      totalRounds: snapshot.totalRounds,
+      deadlinePolicy: snapshot.deadlinePolicy,
+      historyLimit: options.historyLimit ?? 2048,
+      clock: options.clock,
+      idFactory: options.idFactory,
+      validateAction: options.validateAction
+    });
+    room.restoreSnapshot(snapshot, options);
+    return room;
+  }
+
+  /** Compatibility alias for adapters that use `restore` as the factory. */
+  static restore(snapshot, options = {}) {
+    return Room.fromSnapshot(snapshot, options);
+  }
+
+  /**
+   * Restore this instance in place. This is intentionally separate from event
+   * replay: callers can load a checkpoint and then apply the append-only tail
+   * with `applyPersistedEvent`.
+   */
+  restoreSnapshot(snapshot, options = {}) {
+    if (!isRecord(snapshot)) throw new AppError('INVALID_ACTION');
+    const version = snapshot.roomVersion ?? snapshot.version ?? 0;
+    if (!Number.isInteger(version) || version < 0) {
+      throw new AppError('INVALID_ACTION', { details: [{ path: 'roomVersion', message: 'must be a non-negative integer' }] });
+    }
+    if (snapshot.snapshotHash) {
+      const candidate = clone(snapshot);
+      delete candidate.snapshotHash;
+      if (hash(candidate) !== snapshot.snapshotHash) {
+        throw new AppError('VERSION_CONFLICT', { details: [{ snapshotHash: 'mismatch' }] });
+      }
+    }
+
+    // Keep constructor-established immutable rule metadata, but permit a
+    // persisted snapshot to restore the exact immutable configuration.
+    if (snapshot.ruleSnapshot !== undefined) {
+      if (!isRecord(snapshot.ruleSnapshot)) throw new AppError('INVALID_ACTION');
+      this.ruleSnapshot = deepFreeze(clone(snapshot.ruleSnapshot));
+      this.ruleSnapshotHash = snapshot.ruleSnapshotHash || hash(this.ruleSnapshot);
+      this.rule = String(snapshot.rule || this.ruleSnapshot.ruleVersion || this.rule);
+      this.ruleId = String(snapshot.ruleId || this.ruleSnapshot.ruleId || this.ruleId);
+      this.ruleVersion = String(snapshot.ruleVersion || this.ruleSnapshot.ruleVersion || this.ruleVersion);
+      this.gameType = String(snapshot.gameType || this.ruleSnapshot.gameType || this.gameType);
+    }
+    if (snapshot.deadlinePolicy !== undefined) {
+      this.deadlinePolicy = normalizeDeadlinePolicy(snapshot.deadlinePolicy);
+    }
+    if (snapshot.ownerId !== undefined) this.ownerId = snapshot.ownerId === null ? null : normalizeId(snapshot.ownerId, 'ownerId');
+    if (snapshot.accessPolicy !== undefined) this.accessPolicy = normalizeAccessPolicy(snapshot.accessPolicy, this.clubId);
+    if (snapshot.matchId !== undefined) this.matchId = normalizeId(snapshot.matchId, 'matchId', { max: 128 });
+    this.roomId = this.id;
+    this.status = snapshot.status || snapshot.state || ROOM_STATUS.WAITING;
+    if (!Object.values(ROOM_STATUS).includes(this.status)) throw new AppError('INVALID_ACTION');
+    this.state = this.status;
+    this.version = version;
+    this.roomVersion = version;
+    this.roundNumber = Number(snapshot.roundNumber || snapshot.round?.roundNumber || 0);
+    if (!Number.isInteger(this.roundNumber) || this.roundNumber < 0) throw new AppError('INVALID_ACTION');
+    this.roundId = snapshot.roundId ?? snapshot.round?.roundId ?? null;
+    this.totalRounds = snapshot.totalRounds ?? this.totalRounds ?? null;
+    this.turn = snapshot.turn ?? snapshot.turnPlayerId ?? null;
+    this.turnPlayerId = snapshot.turnPlayerId ?? this.turn;
+
+    const players = Array.isArray(snapshot.players) ? snapshot.players : [];
+    this.players = new Map();
+    for (const input of players) {
+      if (!isRecord(input)) throw new AppError('INVALID_ACTION');
+      const id = normalizeId(input.id ?? input.playerId, 'playerId');
+      const seat = input.seat;
+      if (!Number.isInteger(seat) || seat < 0 || seat >= this.maxPlayers) throw new AppError('INVALID_ACTION');
+      this.players.set(id, {
+        id,
+        playerId: id,
+        name: normalizeName(input.name ?? input.displayName, `玩家${id.slice(0, 6)}`),
+        displayName: normalizeName(input.displayName ?? input.name, `玩家${id.slice(0, 6)}`),
+        seat,
+        ready: Boolean(input.ready),
+        connected: input.connected !== false,
+        joinedAt: input.joinedAt || null,
+        disconnectedAt: input.disconnectedAt || null
+      });
+    }
+    this.seats = Array.from({ length: this.maxPlayers }, () => null);
+    if (Array.isArray(snapshot.seats)) {
+      for (let index = 0; index < Math.min(snapshot.seats.length, this.maxPlayers); index += 1) {
+        const entry = snapshot.seats[index];
+        const playerId = isRecord(entry) ? (entry.playerId ?? entry.player?.id) : entry;
+        if (playerId !== null && playerId !== undefined) this.seats[index] = normalizeId(playerId, 'playerId');
+      }
+    }
+    // Older snapshots only carried players; derive missing seat entries while
+    // preserving explicit nulls from a newer snapshot.
+    for (const player of this.players.values()) {
+      if (this.seats[player.seat] === null) this.seats[player.seat] = player.id;
+    }
+    this.scores = new Map(Object.entries(isRecord(snapshot.scores) ? snapshot.scores : {}));
+    for (const player of this.players.values()) if (!this.scores.has(player.id)) this.scores.set(player.id, 0);
+
+    this.currentRound = snapshot.round ? clone(snapshot.round) : null;
+    this.round = this.currentRound;
+    this.match = isRecord(snapshot.match) ? clone(snapshot.match) : {
+      id: this.matchId,
+      matchId: this.matchId,
+      status: this.status,
+      roundNumber: this.roundNumber,
+      totalRounds: this.totalRounds
+    };
+    this.match.id = this.match.id || this.matchId;
+    this.match.matchId = this.match.matchId || this.matchId;
+    this.match.status = this.status;
+    this.match.roundNumber = this.roundNumber;
+    this.match.totalRounds = this.totalRounds;
+
+    const history = Array.isArray(options.events) ? options.events : [];
+    this._events = history.map(event => deepFreeze(clone(event))).slice(-this.historyLimit);
+    this._commands = new Map();
+    return this;
+  }
+
+  /**
+   * Apply one event read from the append-only store. The event must be the
+   * immediate next room version; accepting gaps would make a recovered actor
+   * appear healthy while silently missing game facts.
+   */
+  applyPersistedEvent(input) {
+    if (!isRecord(input)) throw new AppError('INVALID_ACTION');
+    const event = clone(input);
+    const eventVersion = event.roomVersion ?? event.version;
+    if (!Number.isInteger(eventVersion) || eventVersion !== this.version + 1) {
+      throw new AppError('VERSION_CONFLICT', {
+        details: [{ expectedRoomVersion: this.version + 1, actualRoomVersion: eventVersion }]
+      });
+    }
+    if (event.roomId && String(event.roomId) !== this.id) throw new AppError('INVALID_ACTION');
+    const payload = isRecord(event.payload) ? event.payload : {};
+    const playerId = value => value === undefined || value === null ? null : normalizeId(value, 'playerId');
+    switch (event.type) {
+      case 'PLAYER_JOINED': {
+        const source = isRecord(payload.player) ? payload.player : payload;
+        const id = playerId(source.id ?? source.playerId);
+        if (!id) break;
+        const seat = Number(source.seat ?? payload.seat);
+        if (!Number.isInteger(seat) || seat < 0 || seat >= this.maxPlayers) throw new AppError('INVALID_ACTION');
+        const name = normalizeName(source.name ?? source.displayName, `玩家${id.slice(0, 6)}`);
+        this.players.set(id, {
+          id,
+          playerId: id,
+          name,
+          displayName: normalizeName(source.displayName ?? source.name, name),
+          seat,
+          ready: Boolean(source.ready),
+          connected: source.connected !== false,
+          joinedAt: source.joinedAt || event.occurredAt || event.at || null,
+          disconnectedAt: source.disconnectedAt || null
+        });
+        this.seats[seat] = id;
+        if (!this.scores.has(id)) this.scores.set(id, 0);
+        if (payload.ownerId !== undefined) this.ownerId = payload.ownerId === null ? null : playerId(payload.ownerId);
+        break;
+      }
+      case 'PLAYER_LEFT': {
+        const id = playerId(payload.playerId);
+        const player = id ? this.players.get(id) : null;
+        if (player) {
+          this.players.delete(id);
+          this.seats[player.seat] = null;
+          this.scores.delete(id);
+        }
+        if (payload.ownerId !== undefined) this.ownerId = payload.ownerId === null ? null : playerId(payload.ownerId);
+        if (this.status === ROOM_STATUS.READY) this._setStatus(ROOM_STATUS.WAITING);
+        break;
+      }
+      case 'PLAYER_READY': {
+        const id = playerId(payload.playerId);
+        const player = id ? this.players.get(id) : null;
+        if (player) player.ready = Boolean(payload.ready);
+        if (payload.status && Object.values(ROOM_STATUS).includes(payload.status)) this._setStatus(payload.status);
+        else if (this._allReady()) this._setStatus(ROOM_STATUS.READY);
+        else if (this.status === ROOM_STATUS.READY) this._setStatus(ROOM_STATUS.WAITING);
+        break;
+      }
+      case 'ROUND_STARTED': {
+        const roundId = payload.roundId || this.roundId;
+        this.roundId = roundId;
+        this.roundNumber = Number(payload.roundNumber || this.roundNumber || 1);
+        this.currentRound = {
+          id: roundId,
+          roundId,
+          number: this.roundNumber,
+          roundNumber: this.roundNumber,
+          status: payload.status || ROOM_STATUS.DEALING,
+          dealerSeat: null,
+          ruleSnapshotHash: payload.ruleSnapshotHash || this.ruleSnapshotHash,
+          settlement: null,
+          startedAt: payload.status === ROOM_STATUS.PLAYING ? (event.occurredAt || event.at || null) : null,
+          endedAt: null,
+          turnStartedAt: payload.turnStartedAt || null,
+          turnDeadlineAt: payload.turnDeadlineAt || null
+        };
+        this.round = this.currentRound;
+        this.turn = payload.turn ?? null;
+        this.turnPlayerId = this.turn;
+        this._setStatus(payload.status || ROOM_STATUS.DEALING);
+        break;
+      }
+      case 'ROUND_PLAYING':
+        this._setStatus(ROOM_STATUS.PLAYING);
+        if (this.currentRound) {
+          this.currentRound.status = ROOM_STATUS.PLAYING;
+          this.currentRound.startedAt = this.currentRound.startedAt || event.occurredAt || event.at || null;
+          this.currentRound.turnStartedAt = payload.turnStartedAt || this.currentRound.turnStartedAt || null;
+          this.currentRound.turnDeadlineAt = payload.turnDeadlineAt || this.currentRound.turnDeadlineAt || null;
+        }
+        this.turn = payload.turn ?? this.turn;
+        this.turnPlayerId = this.turn;
+        break;
+      case 'ACTION_APPLIED':
+        this._setStatus(ROOM_STATUS.PLAYING);
+        this.turn = payload.nextTurn ?? null;
+        this.turnPlayerId = this.turn;
+        if (this.currentRound) {
+          this.currentRound.turnStartedAt = payload.turnStartedAt || null;
+          this.currentRound.turnDeadlineAt = payload.turnDeadlineAt || null;
+        }
+        break;
+      case 'ROUND_SETTLING':
+        this._setStatus(ROOM_STATUS.SETTLING);
+        if (this.currentRound) {
+          this.currentRound.status = ROOM_STATUS.SETTLING;
+          this.currentRound.settlement = clone(payload.settlement ?? null);
+          this.currentRound.endedAt = this.currentRound.endedAt || event.occurredAt || event.at || null;
+          this.currentRound.turnStartedAt = null;
+          this.currentRound.turnDeadlineAt = null;
+        }
+        break;
+      case 'NEXT_ROUND':
+        this._setStatus(ROOM_STATUS.NEXT_ROUND);
+        if (this.currentRound) {
+          this.currentRound.turnStartedAt = null;
+          this.currentRound.turnDeadlineAt = null;
+        }
+        break;
+      case 'ROUND_DEALING':
+        this.roundId = payload.roundId || this.roundId;
+        this.roundNumber = Number(payload.roundNumber || this.roundNumber + 1);
+        this.currentRound = {
+          id: this.roundId,
+          roundId: this.roundId,
+          number: this.roundNumber,
+          roundNumber: this.roundNumber,
+          status: ROOM_STATUS.DEALING,
+          dealerSeat: null,
+          ruleSnapshotHash: payload.ruleSnapshotHash || this.ruleSnapshotHash,
+          settlement: null,
+          startedAt: null,
+          endedAt: null,
+          turnStartedAt: null,
+          turnDeadlineAt: null
+        };
+        this.round = this.currentRound;
+        this.turn = null;
+        this.turnPlayerId = null;
+        this._setStatus(ROOM_STATUS.DEALING);
+        break;
+      case 'MATCH_FINISHED':
+        this._setStatus(ROOM_STATUS.FINISHED);
+        if (this.currentRound) {
+          if (this.currentRound.status !== ROOM_STATUS.SETTLING) this.currentRound.status = ROOM_STATUS.FINISHED;
+          this.currentRound.turnStartedAt = null;
+          this.currentRound.turnDeadlineAt = null;
+        }
+        break;
+      case 'ROOM_CANCELLED':
+        this._setStatus(ROOM_STATUS.CANCELLED);
+        if (this.currentRound) {
+          this.currentRound.turnStartedAt = null;
+          this.currentRound.turnDeadlineAt = null;
+        }
+        break;
+      case 'PLAYER_DISCONNECTED': {
+        const id = playerId(payload.playerId);
+        const player = id ? this.players.get(id) : null;
+        if (player) {
+          player.connected = false;
+          player.disconnectedAt = payload.disconnectedAt || event.occurredAt || event.at || null;
+        }
+        break;
+      }
+      case 'PLAYER_CONNECTED': {
+        const id = playerId(payload.playerId);
+        const player = id ? this.players.get(id) : null;
+        if (player) {
+          player.connected = true;
+          player.disconnectedAt = null;
+        }
+        break;
+      }
+      default:
+        // Unknown event types remain part of history. A newer rule/plugin can
+        // enrich state on a later deployment without making old actors fail to
+        // recover their version cursor.
+        break;
+    }
+    this.version = eventVersion;
+    this.roomVersion = eventVersion;
+    this.match.status = this.status;
+    this.match.roundNumber = this.roundNumber;
+    this._events.push(deepFreeze(event));
+    while (this._events.length > this.historyLimit) this._events.shift();
+    return publicClone(event);
+  }
+
+  applyEvent(event) {
+    return this.applyPersistedEvent(event);
+  }
+
+  publicSnapshot(options = {}) {
+    return this.snapshot(options);
+  }
+
+  toJSON() {
+    return this.snapshot();
+  }
+
+  /**
+   * Execute a protocol/domain command using the same idempotency boundary as
+   * direct aggregate methods. The WSS and future REST adapters can share it.
+   */
+  execute(command = {}, context = {}) {
+    if (!isRecord(command)) throw new AppError('INVALID_MESSAGE');
+    const payload = isRecord(command.payload) ? command.payload : command;
+    const type = String(command.type || payload.type || '').toLowerCase();
+    const options = {
+      ...context,
+      commandId: command.commandId ?? context.commandId,
+      requestId: command.requestId ?? context.requestId,
+      expectedRoomVersion: command.expectedRoomVersion
+        ?? command.roomVersion
+        ?? context.expectedRoomVersion,
+      actorId: context.actorId ?? command.actorId ?? payload.actorId
+    };
+    switch (type) {
+      case 'join':
+      case 'join_room':
+      case 'room.join':
+        return this.join({
+          id: payload.playerId ?? payload.userId ?? context.actorId,
+          name: payload.name ?? payload.displayName,
+          seat: payload.seat
+        }, { ...payload, ...options });
+      case 'leave':
+      case 'leave_room':
+      case 'room.leave':
+        return this.leave(payload.playerId ?? context.actorId, { ...payload, ...options });
+      case 'ready':
+      case 'ready_room':
+      case 'room.ready':
+        return this.setReady(payload.playerId ?? context.actorId, payload.ready ?? true, { ...payload, ...options });
+      case 'start':
+      case 'start_round':
+      case 'room.start':
+        return this.start({ ...payload, ...options });
+      case 'begin_dealing':
+      case 'round.deal':
+        return this.beginDealing({ ...payload, ...options });
+      case 'begin_playing':
+      case 'round.play':
+        return this.beginPlaying({ ...payload, ...options });
+      case 'action':
+      case 'game.action':
+        return this.applyAction(payload.playerId ?? context.actorId, payload.action ?? payload, {
+          ...payload,
+          ...options
+        });
+      case 'settle':
+      case 'settle_round':
+      case 'round.settle':
+        return this.settleRound(payload.result ?? payload.settlement ?? null, { ...payload, ...options });
+      case 'next_round':
+      case 'round.next':
+        return this.nextRound({ ...payload, ...options });
+      case 'finish':
+      case 'finish_match':
+      case 'match.finish':
+        return this.finish({ ...payload, ...options });
+      case 'cancel':
+      case 'disband':
+      case 'disband_room':
+      case 'room.disband':
+        return this.cancel({ ...payload, ...options });
+      case 'reconnect':
+      case 'room.reconnect':
+        return this.reconnectSync(payload.playerId ?? context.actorId, payload.lastRoomVersion ?? payload.lastVersion ?? options.expectedRoomVersion ?? 0, options);
+      case 'disconnect':
+      case 'room.disconnect':
+        return this.disconnect(payload.playerId ?? context.actorId, { ...payload, ...options });
+      default:
+        throw new AppError('INVALID_MESSAGE');
+    }
+  }
+}
+
+export { canonical as stableCommandString };

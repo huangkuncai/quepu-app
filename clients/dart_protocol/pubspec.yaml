@@ -1,0 +1,7 @@
+name: susong_protocol_client
+description: Framework-neutral Susong protocol and reconnect reducer (POC).
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+

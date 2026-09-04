@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/refresh-payload.schema.json",
+  "title": "Refresh session payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["refreshToken"],
+  "properties": {
+    "refreshToken": { "type": "string", "minLength": 1, "maxLength": 4096 }
+  }
+}

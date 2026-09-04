@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/settle-room-payload.schema.json",
+  "title": "Settle room payload",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "result": { "type": "object", "additionalProperties": true },
+    "settlement": { "type": "object", "additionalProperties": true }
+  }
+}
