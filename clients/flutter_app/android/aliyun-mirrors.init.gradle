@@ -2,6 +2,7 @@
 // Keep the official repositories as fallbacks; this script only puts mirrors first.
 
 def addMirrors = { repositories ->
+    repositories.maven { url = uri('https://storage.flutter-io.cn/download.flutter.io') }
     repositories.maven { url = uri('https://maven.aliyun.com/repository/google') }
     repositories.maven { url = uri('https://maven.aliyun.com/repository/public') }
     repositories.maven { url = uri('https://maven.aliyun.com/repository/gradle-plugin') }
