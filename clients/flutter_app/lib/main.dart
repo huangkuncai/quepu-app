@@ -1,13 +1,21 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:susong_protocol_client/client.dart';
 import 'package:susong_protocol_client/protocol.dart';
 import 'package:susong_protocol_client/support.dart';
 
 import 'src/fake_transport.dart';
 
-void main() => runApp(const SusongApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations(const [
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+  runApp(const SusongApp());
+}
 
 class SusongApp extends StatefulWidget {
   const SusongApp({super.key, this.transport, this.supportApi});
