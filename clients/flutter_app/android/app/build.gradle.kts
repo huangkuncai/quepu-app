@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "com.example.susong_app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
+    ndkVersion = "30.0.16138531"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
