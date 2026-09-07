@@ -90,7 +90,11 @@ test('four authenticated clients receive an ordered public room snapshot and rec
   });
   try {
     const sessions = await Promise.all(clients.map((ws, index) => login(ws, `player-${index + 1}`, `device-${index + 1}`)));
-    const create = createCommand('create_room', { maxPlayers: 4 });
+    const create = createCommand('create_room', {
+      maxPlayers: 4,
+      ruleId: 'fake-1',
+      ruleVersion: 'fake-1'
+    });
     const created = await sendAndWait(clients[0], create, 'room_created');
     const roomId = created.roomId;
     assert.ok(roomId);

@@ -14,6 +14,8 @@ test('structured logger redacts tokens, credentials and private tile fields', ()
     accessToken: 'secret-token',
     verificationCode: '000000',
     privateTiles: ['wan-1'],
+    privateRoundState: { remainingWall: ['characters-1-1'] },
+    handsByPlayer: { p1: ['characters-1-2'] },
     errorCode: 'AUTH_REQUIRED'
   });
   const record = JSON.parse(lines[0]);
@@ -21,6 +23,8 @@ test('structured logger redacts tokens, credentials and private tile fields', ()
   assert.equal(record.accessToken, '[REDACTED]');
   assert.equal(record.verificationCode, '[REDACTED]');
   assert.equal(record.privateTiles, '[REDACTED]');
+  assert.equal(record.privateRoundState, '[REDACTED]');
+  assert.equal(record.handsByPlayer, '[REDACTED]');
   assert.equal(record.errorCode, 'AUTH_REQUIRED');
 });
 
@@ -64,4 +68,3 @@ test('origin policy permits native handshakes and exact configured browser origi
   assert.equal(isAllowedOrigin('https://evil.example', allowed), false);
   assert.equal(isAllowedOrigin(undefined, allowed, { allowMissing: false }), false);
 });
-

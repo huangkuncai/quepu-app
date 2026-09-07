@@ -51,6 +51,13 @@ export function buildSusongTileSet() {
   return Object.freeze(tiles);
 }
 
+export function isSusongReplacementFlower(tileId) {
+  const id = String(tileId ?? '');
+  return DRAGONS.some(dragon => id.startsWith(`${dragon}-`))
+    || id.startsWith('red_flower-')
+    || id.startsWith('black_flower-');
+}
+
 /**
  * Shuffle a fresh wall. The seed is private round state; only its commitment
  * may be sent to clients until the round is finished.

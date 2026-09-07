@@ -1,5 +1,5 @@
 const LEVELS = Object.freeze({ silent: 0, fatal: 10, error: 20, warn: 30, info: 40, debug: 50, trace: 60 });
-const SENSITIVE_KEY = /(pass|secret|token|authorization|cookie|credential|otp|verificationcode|private(?:tiles|hand)|handtiles|tilewall)/i;
+const SENSITIVE_KEY = /(pass|secret|token|authorization|cookie|credential|otp|verificationcode|private(?:tiles|hand|roundstate|seed)|handsbyplayer|handtiles|remainingwall|tilewall)/i;
 
 function redact(value, key, seen) {
   if (key && SENSITIVE_KEY.test(key)) return '[REDACTED]';

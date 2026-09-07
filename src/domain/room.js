@@ -1,10 +1,18 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomInt, randomUUID } from 'node:crypto';
 import { AppError } from '../shared/errors.js';
 import {
   createSusongFlowerState,
   recordSusongFlowerDraw,
   resolveSusongFlowers
 } from './rules/susong.js';
+import {
+  buildSusongTileSet,
+  createSusongShuffledWall,
+  dealSusongOpeningHands,
+  isSusongReplacementFlower,
+  publicSusongWallState,
+  verifySusongSeedCommitment
+} from './rules/susong-wall.js';
 
 /**
  * Room is the framework-neutral aggregate used by the development server and
@@ -353,6 +361,7 @@ export class Room {
     this.turnPlayerId = null;
     this.currentRound = null;
     this.round = null;
+    this._privateRoundState = null;
     this.roundNumber = 0;
     this.roundId = null;
     this.match = {
@@ -694,6 +703,7 @@ export class Room {
       status,
       dealerSeat: options.dealerSeat === undefined ? null : options.dealerSeat,
       ruleSnapshotHash: this.ruleSnapshotHash,
+      wall: null,
       flowerStates: null,
       settlement: null,
       startedAt: null,
@@ -703,6 +713,7 @@ export class Room {
     };
     this.currentRound = round;
     this.round = round;
+    this._privateRoundState = null;
     this.roundNumber = number;
     this.roundId = roundId;
     this.match.roundNumber = number;
@@ -710,7 +721,92 @@ export class Room {
   }
 
   _firstTurn() {
+    if (Number.isInteger(this.currentRound?.dealerSeat)) {
+      const dealer = this._orderedPlayers().find(player => player.seat === this.currentRound.dealerSeat);
+      if (dealer) return dealer.id;
+    }
     return this._orderedPlayers()[0]?.id || null;
+  }
+
+  dealSusongOpeningRound(input = {}, options = {}) {
+    if (!isRecord(input)) throw new AppError('INVALID_ACTION');
+    const opts = normalizeOptions(options);
+    const requestedDealerSeat = input.dealerSeat ?? null;
+    const requestedSeed = input.seed ?? null;
+    return this._withCommand(opts, {
+      op: 'deal_susong_round',
+      dealerSeat: requestedDealerSeat,
+      seed: requestedSeed
+    }, command => {
+      if (command.actorRole !== 'SYSTEM') throw new AppError('FORBIDDEN');
+      if (this.ruleId !== 'susong_v1' || this.status !== ROOM_STATUS.DEALING || !this.currentRound) {
+        throw new AppError('INVALID_ACTION');
+      }
+      if (this._privateRoundState || this.currentRound.wall) throw new AppError('DUPLICATE_REQUEST');
+      const players = this._orderedPlayers();
+      if (players.length !== 4) throw new AppError('PLAYERS_NOT_READY');
+      const dealerSeat = requestedDealerSeat === null ? randomInt(this.maxPlayers) : requestedDealerSeat;
+      if (!Number.isInteger(dealerSeat) || dealerSeat < 0 || dealerSeat >= this.maxPlayers) {
+        throw new AppError('INVALID_ACTION', {
+          details: [{ path: 'dealerSeat', message: 'must identify one of the four seats' }]
+        });
+      }
+      const dealer = players.find(player => player.seat === dealerSeat);
+      if (!dealer) throw new AppError('INVALID_ACTION');
+      let wall;
+      let dealt;
+      try {
+        wall = createSusongShuffledWall(requestedSeed === null ? {} : { seed: requestedSeed });
+        dealt = dealSusongOpeningHands({
+          wall,
+          playerIds: players.map(player => player.id),
+          dealerId: dealer.id
+        });
+      } catch (cause) {
+        throw new AppError('INVALID_ACTION', { cause });
+      }
+      const openingFlowerCountByPlayer = Object.fromEntries(players.map(player => [
+        player.id,
+        dealt.handsByPlayer[player.id].filter(isSusongReplacementFlower).length
+      ]));
+      const flowerStates = Object.fromEntries(players.map(player => [
+        player.id,
+        createSusongFlowerState({
+          piaoMode: this.ruleSnapshot.config?.piao,
+          initialFlowerCount: openingFlowerCountByPlayer[player.id]
+        })
+      ]));
+      const publicWall = publicSusongWallState(dealt);
+      this.currentRound.dealerSeat = dealerSeat;
+      this.currentRound.wall = clone(publicWall);
+      this.currentRound.flowerStates = clone(flowerStates);
+      this._privateRoundState = clone({
+        roundId: this.roundId,
+        privateSeedHex: wall.privateSeedHex,
+        wallVersion: dealt.wallVersion,
+        shuffleAlgorithm: dealt.shuffleAlgorithm,
+        dealAlgorithm: dealt.dealAlgorithm,
+        replacementDrawPolicy: dealt.replacementDrawPolicy,
+        seedCommitment: dealt.seedCommitment,
+        handsByPlayer: dealt.handsByPlayer,
+        remainingWall: dealt.remainingWall
+      });
+      const event = this._append('SUSONG_ROUND_DEALT', {
+        matchId: this.matchId,
+        roundId: this.roundId,
+        roundNumber: this.roundNumber,
+        dealerId: dealer.id,
+        dealerSeat,
+        wall: clone(publicWall),
+        flowerStates: clone(flowerStates)
+      }, command);
+      return this._result(event, {
+        dealerId: dealer.id,
+        dealerSeat,
+        wall: clone(publicWall),
+        flowerStates: clone(flowerStates)
+      });
+    });
   }
 
   initializeSusongFlowers(openingFlowerCountByPlayer, options = {}) {
@@ -1278,8 +1374,7 @@ export class Room {
     const players = this._orderedPlayers().map(player => this._publicPlayer(player));
     const round = this.currentRound ? {
       ...this.currentRound,
-      ruleSnapshot: publicClone(this.ruleSnapshot),
-      ...(viewerId ? {} : {})
+      ruleSnapshot: publicClone(this.ruleSnapshot)
     } : null;
     const base = {
       id: this.id,
@@ -1318,6 +1413,26 @@ export class Room {
       scores: Object.fromEntries(this.scores),
       zengByPlayer: Object.fromEntries(this.zengByPlayer)
     };
+    const result = {
+      ...base,
+      snapshotHash: hash(base)
+    };
+    const id = viewerId === undefined || viewerId === null ? null : String(viewerId);
+    const privateHand = id && this.players.has(id)
+      && this._privateRoundState?.roundId === this.roundId
+      && Array.isArray(this._privateRoundState.handsByPlayer?.[id])
+      ? clone(this._privateRoundState.handsByPlayer[id])
+      : null;
+    if (privateHand) result.round.privateHand = privateHand;
+    return result;
+  }
+
+  /** Full checkpoint for trusted persistence only. Never return this to a client. */
+  persistenceSnapshot() {
+    const current = this.snapshot();
+    const base = clone(current);
+    delete base.snapshotHash;
+    if (this._privateRoundState) base.privateRoundState = clone(this._privateRoundState);
     return {
       ...base,
       snapshotHash: hash(base)
@@ -1376,6 +1491,12 @@ export class Room {
     if (snapshot.snapshotHash) {
       const candidate = clone(snapshot);
       delete candidate.snapshotHash;
+      // A viewer snapshot uses the public room hash. Its private hand is a
+      // per-player projection and is never accepted as an authoritative
+      // persistence checkpoint.
+      if (!candidate.privateRoundState && candidate.round) {
+        delete candidate.round.privateHand;
+      }
       if (hash(candidate) !== snapshot.snapshotHash) {
         throw new AppError('VERSION_CONFLICT', { details: [{ snapshotHash: 'mismatch' }] });
       }
@@ -1453,7 +1574,15 @@ export class Room {
     }
 
     this.currentRound = snapshot.round ? clone(snapshot.round) : null;
+    if (this.currentRound) {
+      for (const field of ['privateHand', 'handsByPlayer', 'remainingWall', 'privateSeedHex', 'tileIds']) {
+        delete this.currentRound[field];
+      }
+    }
     this.round = this.currentRound;
+    this._privateRoundState = snapshot.privateRoundState
+      ? normalizePrivateRoundState(snapshot.privateRoundState, this.players, this.currentRound)
+      : null;
     this.match = isRecord(snapshot.match) ? clone(snapshot.match) : {
       id: this.matchId,
       matchId: this.matchId,
@@ -1559,6 +1688,7 @@ export class Room {
           status: payload.status || ROOM_STATUS.DEALING,
           dealerSeat: null,
           ruleSnapshotHash: payload.ruleSnapshotHash || this.ruleSnapshotHash,
+          wall: null,
           flowerStates: null,
           settlement: null,
           startedAt: payload.status === ROOM_STATUS.PLAYING ? (event.occurredAt || event.at || null) : null,
@@ -1570,6 +1700,19 @@ export class Room {
         this.turn = payload.turn ?? null;
         this.turnPlayerId = this.turn;
         this._setStatus(payload.status || ROOM_STATUS.DEALING);
+        this._privateRoundState = null;
+        break;
+      }
+      case 'SUSONG_ROUND_DEALT': {
+        if (!this.currentRound || !isRecord(payload.wall) || !isRecord(payload.flowerStates)) {
+          throw new AppError('INVALID_ACTION');
+        }
+        if (!Number.isInteger(payload.dealerSeat) || payload.dealerSeat < 0 || payload.dealerSeat >= this.maxPlayers) {
+          throw new AppError('INVALID_ACTION');
+        }
+        this.currentRound.dealerSeat = payload.dealerSeat;
+        this.currentRound.wall = clone(payload.wall);
+        this.currentRound.flowerStates = clone(payload.flowerStates);
         break;
       }
       case 'ROUND_PLAYING':
@@ -1685,6 +1828,7 @@ export class Room {
           status: ROOM_STATUS.DEALING,
           dealerSeat: null,
           ruleSnapshotHash: payload.ruleSnapshotHash || this.ruleSnapshotHash,
+          wall: null,
           flowerStates: null,
           settlement: null,
           startedAt: null,
@@ -1695,6 +1839,7 @@ export class Room {
         this.round = this.currentRound;
         this.turn = null;
         this.turnPlayerId = null;
+        this._privateRoundState = null;
         this._setStatus(ROOM_STATUS.DEALING);
         break;
       case 'MATCH_FINISHED':
@@ -1796,6 +1941,8 @@ export class Room {
         return this.increaseZeng(payload.playerId ?? context.actorId, { ...payload, ...options });
       case 'initialize_susong_flowers':
         return this.initializeSusongFlowers(payload.openingFlowerCountByPlayer, { ...payload, ...options });
+      case 'deal_susong_round':
+        return this.dealSusongOpeningRound(payload, { ...payload, ...options });
       case 'choose_piao':
         return this.chooseSusongPiao(
           payload.playerId ?? context.actorId,
@@ -1852,6 +1999,85 @@ export class Room {
         throw new AppError('INVALID_MESSAGE');
     }
   }
+}
+
+function normalizePrivateRoundState(input, players, round) {
+  if (!isRecord(input) || !round || input.roundId !== round.roundId) {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'privateRoundState', message: 'must match the current round' }]
+    });
+  }
+  const playerIds = [...players.keys()];
+  if (!isRecord(input.handsByPlayer)
+    || Object.keys(input.handsByPlayer).length !== playerIds.length
+    || !Array.isArray(input.remainingWall)) {
+    throw new AppError('INVALID_ACTION');
+  }
+  const handsByPlayer = {};
+  for (const playerId of playerIds) {
+    if (!Array.isArray(input.handsByPlayer[playerId])) throw new AppError('INVALID_ACTION');
+    handsByPlayer[playerId] = input.handsByPlayer[playerId].map(value => String(value));
+  }
+  const remainingWall = input.remainingWall.map(value => String(value));
+  const allTileIds = [...Object.values(handsByPlayer).flat(), ...remainingWall];
+  const allowedTileIds = new Set(buildSusongTileSet().map(tile => tile.id));
+  if (allTileIds.length !== 144
+    || new Set(allTileIds).size !== 144
+    || allTileIds.some(tileId => !allowedTileIds.has(tileId))) {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'privateRoundState', message: 'must conserve the 144-tile wall' }]
+    });
+  }
+  const publicWall = round.wall;
+  if (!isRecord(publicWall)
+    || publicWall.seedCommitment !== input.seedCommitment
+    || publicWall.wallRemaining !== remainingWall.length
+    || !verifySusongSeedCommitment(input.privateSeedHex, input.seedCommitment)) {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'privateRoundState', message: 'does not match the public wall commitment' }]
+    });
+  }
+  for (const playerId of playerIds) {
+    if (publicWall.handCountsByPlayer?.[playerId] !== handsByPlayer[playerId].length) {
+      throw new AppError('INVALID_ACTION', {
+        details: [{ path: `privateRoundState.handsByPlayer.${playerId}`, message: 'does not match the public count' }]
+      });
+    }
+  }
+  const orderedPlayers = [...players.values()].sort((left, right) => left.seat - right.seat);
+  const dealer = orderedPlayers.find(player => player.seat === round.dealerSeat);
+  try {
+    const expectedWall = createSusongShuffledWall({ seed: input.privateSeedHex });
+    const expectedDeal = dealSusongOpeningHands({
+      wall: expectedWall,
+      playerIds: orderedPlayers.map(player => player.id),
+      dealerId: dealer?.id
+    });
+    if (canonical(expectedDeal.handsByPlayer) !== canonical(handsByPlayer)
+      || canonical(expectedDeal.remainingWall) !== canonical(remainingWall)
+      || expectedDeal.wallVersion !== input.wallVersion
+      || expectedDeal.shuffleAlgorithm !== input.shuffleAlgorithm
+      || expectedDeal.dealAlgorithm !== input.dealAlgorithm
+      || expectedDeal.replacementDrawPolicy !== input.replacementDrawPolicy) {
+      throw new TypeError('deal replay mismatch');
+    }
+  } catch (cause) {
+    throw new AppError('INVALID_ACTION', {
+      cause,
+      details: [{ path: 'privateRoundState', message: 'does not replay from its committed seed' }]
+    });
+  }
+  return clone({
+    roundId: input.roundId,
+    privateSeedHex: input.privateSeedHex,
+    wallVersion: input.wallVersion,
+    shuffleAlgorithm: input.shuffleAlgorithm,
+    dealAlgorithm: input.dealAlgorithm,
+    replacementDrawPolicy: input.replacementDrawPolicy,
+    seedCommitment: input.seedCommitment,
+    handsByPlayer,
+    remainingWall
+  });
 }
 
 export { canonical as stableCommandString };

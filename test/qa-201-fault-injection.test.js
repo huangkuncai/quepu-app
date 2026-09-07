@@ -219,7 +219,11 @@ async function setupFourClients({ app, url, inboxes }) {
     ws.on('message', raw => inboxes[index].push(JSON.parse(raw.toString())));
   });
   await Promise.all(clients.map((ws, index) => login(ws, `qa-player-${index + 1}`, `qa-device-${index + 1}`)));
-  const created = await sendAndWait(clients[0], createCommand('create_room', { maxPlayers: 4 }), 'room_created');
+  const created = await sendAndWait(clients[0], createCommand('create_room', {
+    maxPlayers: 4,
+    ruleId: 'fake-1',
+    ruleVersion: 'fake-1'
+  }), 'room_created');
   const roomId = created.roomId;
   for (let index = 0; index < clients.length; index += 1) {
     const join = createCommand('join_room', { name: `QA玩家${index + 1}` }, { roomId });

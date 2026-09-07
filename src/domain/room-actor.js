@@ -452,7 +452,7 @@ export class RoomActor {
     if (!events.length || events[0].roomVersion > 1) {
       throw new AppError('VERSION_CONFLICT', { details: [{ reason: 'initial aggregate history is incomplete' }] });
     }
-    const snapshot = this._room.snapshot();
+    const snapshot = this._room.persistenceSnapshot();
     await this._appendEvents(events, snapshot, { commandId: null, requestId: null }, token);
     this._persistedVersion = this._room.version;
   }
@@ -531,7 +531,7 @@ export class RoomActor {
       }
 
       const beforeVersion = this._room.version;
-      const beforeSnapshot = this._room.snapshot();
+      const beforeSnapshot = this._room.persistenceSnapshot();
       let afterVersion = beforeVersion;
       try {
         const result = await this._room.execute(command, {
@@ -548,15 +548,17 @@ export class RoomActor {
         if (events.length !== afterVersion - (this._persistedVersion ?? beforeVersion)) {
           throw new AppError('VERSION_CONFLICT', { details: [{ reason: 'aggregate event history is incomplete' }] });
         }
-        const afterSnapshot = this._room.snapshot();
+        const afterSnapshot = this._room.persistenceSnapshot();
         // Presence commands intentionally do not advance roomVersion, but
         // their connected/disconnected flags still need to survive actor
         // recovery. Persist a same-version checkpoint when the aggregate
         // state changed without producing an event.
         const stateChangedWithoutEvent = events.length === 0
           && stableCommandString(beforeSnapshot) !== stableCommandString(afterSnapshot);
+        const containsPrivateStateChange = events.some(event => event.type === 'SUSONG_ROUND_DEALT');
         const shouldSnapshot = (events.length > 0 && (
-          this.snapshotEvery === 1
+          containsPrivateStateChange
+          || this.snapshotEvery === 1
           || afterVersion % this.snapshotEvery === 0
           || !await this.eventStore.getSnapshot(this.roomId)
         )) || stateChangedWithoutEvent;

@@ -71,6 +71,14 @@ function requestIdOf(value) {
   return text(value || randomUUID(), 'requestId', { max: 256 });
 }
 
+function stableSystemCommandId(namespace, sourceId) {
+  const bytes = createHash('sha256').update(`${namespace}:${sourceId}`).digest();
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function roomSnapshot(room, viewerId) {
   return clone(room.snapshot({ viewerId }));
 }
@@ -269,9 +277,13 @@ export class RoomService {
     };
     const beforeVersion = actor.version;
     if (normalizedType === 'start_round') {
-      command.payload = { ...command.payload, autoAdvance: true, bypassReady: true };
+      command.payload = {
+        ...command.payload,
+        autoAdvance: actor.room.ruleId !== susongRule.id,
+        bypassReady: true
+      };
     }
-    const result = await this.registry.dispatch(actor.room.id, command, {
+    let result = await this.registry.dispatch(actor.room.id, command, {
       actorId: principal.userId,
       commandId: command.commandId,
       requestId: command.requestId,
@@ -280,6 +292,16 @@ export class RoomService {
       invited: payload.invited,
       isAdmin: isAdmin(principal)
     });
+    if (normalizedType === 'start_round' && actor.room.ruleId === susongRule.id) {
+      result = await this._dispatchSusongSystem({
+        roomId: actor.room.id,
+        type: 'deal_susong_round',
+        payload: {},
+        commandId: stableSystemCommandId('susong:deal', command.commandId),
+        requestId: command.requestId,
+        roomVersion: result.roomVersion ?? actor.version
+      });
+    }
     const currentRoom = actor.room;
     this.deadlines?.refresh?.(currentRoom);
     const afterVersion = result.roomVersion ?? actor.version;
@@ -366,6 +388,20 @@ export class RoomService {
       roomId,
       type: 'initialize_susong_flowers',
       payload: { openingFlowerCountByPlayer: clone(openingFlowerCountByPlayer) },
+      commandId,
+      requestId,
+      roomVersion
+    });
+  }
+
+  async dealSusongRound({ roomId, seed, dealerSeat, commandId, requestId, roomVersion } = {}) {
+    return this._dispatchSusongSystem({
+      roomId,
+      type: 'deal_susong_round',
+      payload: {
+        ...(seed === undefined ? {} : { seed }),
+        ...(dealerSeat === undefined ? {} : { dealerSeat })
+      },
       commandId,
       requestId,
       roomVersion
