@@ -5,6 +5,7 @@ import {
   buildSusongTileSet,
   createSusongShuffledWall,
   dealSusongOpeningHands,
+  drawSusongReplacementTile,
   publicSusongWallState,
   verifySusongSeedCommitment
 } from '../src/domain/rules/susong-wall.js';
@@ -75,7 +76,18 @@ test('wall and player validation rejects malformed authority input', () => {
   );
 });
 
-function susongRoom(id = 'wall-room') {
+test('candidate replacement draw consumes the tail and respects the 14-tile reserve', () => {
+  const draw = drawSusongReplacementTile(['first', 'second', 'tail'], { reserveTiles: 1 });
+  assert.equal(draw.tileId, 'tail');
+  assert.deepEqual(draw.remainingWall, ['first', 'second']);
+  assert.equal(draw.wallRemaining, 2);
+  assert.throws(
+    () => drawSusongReplacementTile(Array.from({ length: 14 }, (_, index) => String(index))),
+    /reserved wall boundary/
+  );
+});
+
+function susongRoom(id = 'wall-room', piao = 'optional') {
   const room = new Room({
     id,
     ownerId: 'A',
@@ -87,7 +99,7 @@ function susongRoom(id = 'wall-room') {
         rounds: 4,
         scoreTiers: [1, 2, 3, 4],
         zeng: 1,
-        piao: 'optional',
+        piao,
         forcedHu: false
       }
     }
@@ -121,7 +133,7 @@ test('Room exposes only the viewer hand while persistence retains all private st
   assert.equal(aSnapshot.snapshotHash, publicSnapshot.snapshotHash);
   assert.equal('handsByPlayer' in aSnapshot.round, false);
   assert.equal(persisted.privateRoundState.handsByPlayer.C.length, 14);
-  assert.equal(persisted.privateRoundState.remainingWall.length, 91);
+  assert.ok(persisted.privateRoundState.remainingWall.length < 91);
 
   const recovered = Room.fromSnapshot(persisted);
   assert.deepEqual(recovered.snapshot({ viewerId: 'A' }).round.privateHand, aSnapshot.round.privateHand);
@@ -139,21 +151,25 @@ test('Room exposes only the viewer hand while persistence retains all private st
     error => error.code === 'INVALID_ACTION' && /committed seed/.test(error.details?.[0]?.message)
   );
 
-  for (const [playerId, state] of Object.entries(room.currentRound.flowerStates)) {
-    for (let count = 0; count < state.pendingFlowerReplacements; count += 1) {
-      room.resolveSusongFlower(playerId, 'replace', {
-        actorId: playerId,
-        commandId: `${playerId}-opening-replacement-${count}`
-      });
-    }
-  }
+  const replacementDraws = 91 - room.currentRound.wall.wallRemaining;
+  assert.ok(replacementDraws > 0);
+  assert.ok(Object.values(room.currentRound.flowerStates).every(state => state.pendingFlowerReplacements === 0));
+  assert.deepEqual(room.currentRound.wall.handCountsByPlayer, { A: 13, B: 13, C: 14, D: 13 });
+  const postReplacement = room.persistenceSnapshot();
+  const conservedTiles = Object.values(postReplacement.privateRoundState.handsByPlayer).flat().length
+    + Object.values(postReplacement.privateRoundState.resolvedFlowerTilesByPlayer).flat().length
+    + postReplacement.privateRoundState.remainingWall.length;
+  assert.equal(conservedTiles, 144);
+  const recoveredAfterReplacement = Room.fromSnapshot(postReplacement);
+  assert.deepEqual(recoveredAfterReplacement.persistenceSnapshot(), postReplacement);
+  assert.equal(JSON.stringify(room.snapshot()).includes('resolvedFlowerTilesByPlayer'), false);
   room.beginPlaying({ actorId: 'A' });
   assert.equal(room.turn, 'C');
 });
 
 test('RoomActor forces an atomic private checkpoint even with sparse snapshots', async () => {
   const store = createMemoryGameStore();
-  const room = susongRoom('actor-wall-room');
+  const room = susongRoom('actor-wall-room', 'strong');
   const actor = new RoomActor({
     room,
     eventStore: store.eventStore,
@@ -171,8 +187,20 @@ test('RoomActor forces an atomic private checkpoint even with sparse snapshots',
   });
   assert.equal(result.snapshot.round.wall.wallRemaining, 91);
   assert.equal('privateHand' in result.snapshot.round, false);
-  const durable = store.eventStore.getSnapshot(room.id);
+  let durable = store.eventStore.getSnapshot(room.id);
   assert.equal(durable.privateRoundState.remainingWall.length, 91);
+  const replacement = await actor.dispatch({
+    type: 'choose_piao',
+    commandId: 'actor-no-piao-command',
+    payload: { playerId: 'A', choosesPiao: false }
+  }, { actorId: 'A' });
+  assert.ok(replacement.event.payload.resolvedCount >= 1);
+  durable = store.eventStore.getSnapshot(room.id);
+  assert.equal(durable.roomVersion, replacement.roomVersion);
+  assert.equal(
+    durable.privateRoundState.remainingWall.length,
+    91 - replacement.event.payload.resolvedCount
+  );
 
   const restarted = new RoomActor({
     roomId: room.id,
@@ -187,6 +215,30 @@ test('RoomActor forces an atomic private checkpoint even with sparse snapshots',
     actor.snapshot({ viewerId: 'A' }).round.privateHand
   );
   assert.equal('privateRoundState' in restarted.snapshot(), false);
+});
+
+test('strong-piao flower discard leaves the wall untouched and reduces only that private hand', () => {
+  const room = susongRoom('strong-piao-wall-room', 'strong');
+  room.dealSusongOpeningRound({ seed, dealerSeat: 2 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM',
+    commandId: 'strong-piao-deal'
+  });
+  assert.equal(room.currentRound.flowerStates.A.status, 'awaiting_piao_choice');
+  room.chooseSusongPiao('A', true, { actorId: 'A', commandId: 'A-choose-piao' });
+  const wallBefore = room.currentRound.wall.wallRemaining;
+  const handBefore = room.snapshot({ viewerId: 'A' }).round.privateHand.length;
+  const discarded = room.resolveSusongFlower('A', 'discard', {
+    actorId: 'A',
+    commandId: 'A-discard-opening-flower'
+  });
+  assert.equal(discarded.resolvedCount, 1);
+  assert.equal(discarded.wallRemaining, wallBefore);
+  assert.equal(room.snapshot({ viewerId: 'A' }).round.privateHand.length, handBefore - 1);
+  assert.equal(JSON.stringify(discarded.event).includes('black_flower-1'), false);
+  const persisted = room.persistenceSnapshot();
+  assert.equal(persisted.privateRoundState.resolvedFlowerTilesByPlayer.A.length, 1);
+  assert.deepEqual(Room.fromSnapshot(persisted).persistenceSnapshot(), persisted);
 });
 
 test('RoomService start immediately invokes authoritative Susong dealing', async () => {
@@ -224,7 +276,7 @@ test('RoomService start immediately invokes authoritative Susong dealing', async
     roomVersion: restored.version
   });
   assert.equal(result.room.status, 'dealing');
-  assert.equal(result.room.round.wall.wallRemaining, 91);
+  assert.ok(result.room.round.wall.wallRemaining < 91);
   assert.ok([13, 14].includes(result.room.round.privateHand.length));
   assert.equal('privateRoundState' in result.room, false);
 });

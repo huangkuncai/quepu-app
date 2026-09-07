@@ -81,7 +81,7 @@
 | 项目 | 结果 | 日期 | 证据/备注 |
 | --- | --- | --- | --- |
 | 实际工作目录 | `宿松app.migrated-backup`；当前分支 `codex/be-101-protocol`，尚无提交 | 2026-08-28 | 当前工作区检查；DEC-001 已确认目录，分支/提交策略仍需补充 |
-| `npm test` | 139 个 Node 测试通过 | 2026-09-07 | `npm run check` 通过；包含 BE-201～207、BE-301～303 牌墙/私密持久化/玩家脱敏、客服、deadline、多实例收敛、真实 adapter 契约、协议和故障矩阵；`verify:real` 与 `verify:multi-instance` 已覆盖真实本地 PG/Redis，生产滚动重启/故障演练仍待 |
+| `npm test` | 141 个 Node 测试通过 | 2026-09-07 | `npm run check` 通过；包含 BE-201～207、BE-301～303 牌墙/连续补花/牌守恒/私密持久化/玩家脱敏、客服、deadline、多实例收敛、真实 adapter 契约、协议和故障矩阵；`verify:real` 与 `verify:multi-instance` 已覆盖真实本地 PG/Redis，生产滚动重启/故障演练仍待 |
 | 服务端启动 | `src/server.js` 可启动 WebSocket 8787（内存骨架） | 2026-08-28 | 仅开发/演示环境 |
 | 数据和认证 | PostgreSQL migrations、Redis Compose/health、repository contract/MemoryRepository、开发期 session/Auth 和审计接口已建立；正式 PG/Redis/外部 Auth 未接入 | 2026-08-28 | 单进程/内存实现；不得开放真实牌局/真实扣费 |
 | 客户端 | `clients/dart_protocol` 协议/连接核心、扩展命令同步、原生 `dart:io` `IoWebSocketTransport`、四客户端 fake 夹具和 `SupportApi`，以及 `clients/flutter_app` Flutter mock 壳通过本机验证 | 2026-09-04 | `dart analyze`、协议/IO/multi-client/support 脚本、`flutter test`（15/15）、`dart analyze`；房间桌面、命令 outbox、维护/版本冲突/前台恢复 UI、客服 REST 注入已接入；尚无三端真机安装包 |
@@ -115,6 +115,7 @@
 | 2026-09-07 | USER/AI | 用户确认宿松麻将采用参考 APK 的 8931 规则；客户端内置规则文本、创建配置、协议和回放操作码作为证据，旧服务端独有公式继续以 golden case 解除 | DEC-RULE-001～009、BE-301～306 | `SUSONG_8931_RULE_BASELINE.md`、`be-301-susong-rule.test.js` |
 | 2026-09-07 | AI/DEV | BE-301/303 新增版本化 144 张候选牌墙、稳定实体 ID、可审计洗牌、seed commitment、庄 14/闲 13 开局发牌和公共状态脱敏 | BE-301、BE-303、DEC-RULE-001/003 | `be-303-susong-wall.test.js`、`npm run check`（Node 136/136）；牌墙构成/补花方向仍待签字 |
 | 2026-09-07 | AI/DEV | 候选牌墙接入 Room/RoomActor/RoomService，发牌后强制原子私密 checkpoint；玩家重连仅恢复本人手牌，公共 hash 跨玩家一致，日志屏蔽全量手牌/牌墙/seed | BE-303、BE-307、CL-301 | `be-303-susong-wall.test.js`、`be-105-observability.test.js`、`npm run check`（Node 139/139） |
+| 2026-09-07 | AI/DEV | 候选补花尾部取牌、连续补花、不强飘起手自动补、强飘选择不飘自动补、飘花打花及 144 张守恒/seed 历史重放完成 | BE-303、BE-305、BE-307 | `be-303-susong-wall.test.js`、`npm run check`（Node 141/141）；方向仍为 provisional |
 
 ## 8. 变更记录
 
@@ -142,6 +143,7 @@
 | 0.1.20 | 2026-09-04 | 登记 BE-207 客服纯文本 REST、CL-201 四客户端 fake 夹具和共享 Dart `SupportApi`；保留真实 REST/设备联调、客服持久化、G1、规则/俱乐部/钻石门禁 | AI/DEV |
 | 0.1.21 | 2026-09-07 | 登记 BE-301/303 版本化候选牌墙、可审计洗牌、开局发牌和脱敏边界；保留精确牌墙与补花方向规则门禁 | AI/DEV |
 | 0.1.22 | 2026-09-07 | 登记 Room 私密牌墙 checkpoint、按玩家手牌投影、公共 snapshotHash 和重启恢复校验 | AI/DEV |
+| 0.1.23 | 2026-09-07 | 登记服务端连续补花、起手自动补花、飘花打花、牌守恒及补花历史确定性恢复 | AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 

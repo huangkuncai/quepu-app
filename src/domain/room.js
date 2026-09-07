@@ -9,6 +9,7 @@ import {
   buildSusongTileSet,
   createSusongShuffledWall,
   dealSusongOpeningHands,
+  drawSusongReplacementTile,
   isSusongReplacementFlower,
   publicSusongWallState,
   verifySusongSeedCommitment
@@ -776,11 +777,8 @@ export class Room {
           initialFlowerCount: openingFlowerCountByPlayer[player.id]
         })
       ]));
-      const publicWall = publicSusongWallState(dealt);
-      this.currentRound.dealerSeat = dealerSeat;
-      this.currentRound.wall = clone(publicWall);
-      this.currentRound.flowerStates = clone(flowerStates);
-      this._privateRoundState = clone({
+      const publicWall = clone(publicSusongWallState(dealt));
+      let privateRoundState = clone({
         roundId: this.roundId,
         privateSeedHex: wall.privateSeedHex,
         wallVersion: dealt.wallVersion,
@@ -789,8 +787,29 @@ export class Room {
         replacementDrawPolicy: dealt.replacementDrawPolicy,
         seedCommitment: dealt.seedCommitment,
         handsByPlayer: dealt.handsByPlayer,
-        remainingWall: dealt.remainingWall
+        remainingWall: dealt.remainingWall,
+        resolvedFlowerTilesByPlayer: Object.fromEntries(players.map(player => [player.id, []])),
+        replacementHistory: []
       });
+      const openingReplacementCountByPlayer = Object.fromEntries(players.map(player => [player.id, 0]));
+      for (const player of players) {
+        if (flowerStates[player.id].status !== 'not_piao'
+          || flowerStates[player.id].pendingFlowerReplacements === 0) continue;
+        const replacement = resolvePrivateSusongFlowers({
+          privateState: privateRoundState,
+          playerId: player.id,
+          action: 'replace',
+          flowerState: flowerStates[player.id]
+        });
+        privateRoundState = replacement.privateState;
+        flowerStates[player.id] = replacement.flowerState;
+        openingReplacementCountByPlayer[player.id] = replacement.resolvedCount;
+        publicWall.wallRemaining = replacement.wallRemaining;
+      }
+      this.currentRound.dealerSeat = dealerSeat;
+      this.currentRound.wall = clone(publicWall);
+      this.currentRound.flowerStates = clone(flowerStates);
+      this._privateRoundState = privateRoundState;
       const event = this._append('SUSONG_ROUND_DEALT', {
         matchId: this.matchId,
         roundId: this.roundId,
@@ -798,12 +817,14 @@ export class Room {
         dealerId: dealer.id,
         dealerSeat,
         wall: clone(publicWall),
+        openingReplacementCountByPlayer,
         flowerStates: clone(flowerStates)
       }, command);
       return this._result(event, {
         dealerId: dealer.id,
         dealerSeat,
         wall: clone(publicWall),
+        openingReplacementCountByPlayer,
         flowerStates: clone(flowerStates)
       });
     });
@@ -855,23 +876,54 @@ export class Room {
       const current = this.currentRound?.flowerStates?.[id];
       if (!current || current.status !== 'awaiting_piao_choice') throw new AppError('INVALID_ACTION');
       let next;
+      let privateResolution = null;
       try {
         next = createSusongFlowerState({
           piaoMode: current.mode,
           initialFlowerCount: current.openingFlowers,
           choosesPiao
         });
+        if (!choosesPiao && next.pendingFlowerReplacements > 0
+          && this._privateRoundState?.roundId === this.roundId) {
+          privateResolution = resolvePrivateSusongFlowers({
+            privateState: this._privateRoundState,
+            playerId: id,
+            action: 'replace',
+            flowerState: next
+          });
+          next = privateResolution.flowerState;
+        }
       } catch (cause) {
         throw new AppError('INVALID_ACTION', { cause });
+      }
+      if (privateResolution) {
+        this._privateRoundState = privateResolution.privateState;
+        this.currentRound.wall.wallRemaining = privateResolution.wallRemaining;
+        this.currentRound.wall.handCountsByPlayer[id] = privateResolution.handCount;
       }
       this.currentRound.flowerStates[id] = clone(next);
       const event = this._append('SUSONG_PIAO_CHOSEN', {
         roundId: this.roundId,
         playerId: id,
         choosesPiao,
+        ...(privateResolution ? {
+          resolvedCount: privateResolution.resolvedCount,
+          additionalFlowerCount: privateResolution.additionalFlowerCount,
+          handCount: privateResolution.handCount,
+          wallRemaining: privateResolution.wallRemaining
+        } : {}),
         flowerState: clone(next)
       }, command);
-      return this._result(event, { playerId: id, flowerState: clone(next) });
+      return this._result(event, {
+        playerId: id,
+        flowerState: clone(next),
+        ...(privateResolution ? {
+          resolvedCount: privateResolution.resolvedCount,
+          additionalFlowerCount: privateResolution.additionalFlowerCount,
+          handCount: privateResolution.handCount,
+          wallRemaining: privateResolution.wallRemaining
+        } : {})
+      });
     });
   }
 
@@ -910,22 +962,53 @@ export class Room {
       const current = this.currentRound?.flowerStates?.[id];
       if (!current) throw new AppError('INVALID_ACTION');
       let next;
+      let privateResolution = null;
       try {
-        next = resolveSusongFlowers(current, {
-          discard: action === 'discard' ? 1 : 0,
-          replace: action === 'replace' ? 1 : 0
-        });
+        if (this._privateRoundState?.roundId === this.roundId) {
+          privateResolution = resolvePrivateSusongFlowers({
+            privateState: this._privateRoundState,
+            playerId: id,
+            action,
+            flowerState: current
+          });
+          next = privateResolution.flowerState;
+        } else {
+          next = resolveSusongFlowers(current, {
+            discard: action === 'discard' ? 1 : 0,
+            replace: action === 'replace' ? 1 : 0
+          });
+        }
       } catch (cause) {
         throw new AppError('INVALID_ACTION', { cause });
+      }
+      if (privateResolution) {
+        this._privateRoundState = privateResolution.privateState;
+        this.currentRound.wall.wallRemaining = privateResolution.wallRemaining;
+        this.currentRound.wall.handCountsByPlayer[id] = privateResolution.handCount;
       }
       this.currentRound.flowerStates[id] = clone(next);
       const event = this._append('SUSONG_FLOWER_RESOLVED', {
         roundId: this.roundId,
         playerId: id,
         action,
+        ...(privateResolution ? {
+          resolvedCount: privateResolution.resolvedCount,
+          additionalFlowerCount: privateResolution.additionalFlowerCount,
+          handCount: privateResolution.handCount,
+          wallRemaining: privateResolution.wallRemaining
+        } : {}),
         flowerState: clone(next)
       }, command);
-      return this._result(event, { playerId: id, flowerState: clone(next) });
+      return this._result(event, {
+        playerId: id,
+        flowerState: clone(next),
+        ...(privateResolution ? {
+          resolvedCount: privateResolution.resolvedCount,
+          additionalFlowerCount: privateResolution.additionalFlowerCount,
+          handCount: privateResolution.handCount,
+          wallRemaining: privateResolution.wallRemaining
+        } : {})
+      });
     });
   }
 
@@ -1746,14 +1829,21 @@ export class Room {
       case 'SUSONG_PIAO_CHOSEN': {
         const id = playerId(payload.playerId);
         const current = id ? this.currentRound?.flowerStates?.[id] : null;
-        if (!current || current.status !== 'awaiting_piao_choice' || typeof payload.choosesPiao !== 'boolean') {
+        if (!current || current.status !== 'awaiting_piao_choice'
+          || typeof payload.choosesPiao !== 'boolean' || !isRecord(payload.flowerState)) {
           throw new AppError('INVALID_ACTION');
         }
-        this.currentRound.flowerStates[id] = clone(createSusongFlowerState({
-          piaoMode: current.mode,
-          initialFlowerCount: current.openingFlowers,
-          choosesPiao: payload.choosesPiao
-        }));
+        try {
+          this.currentRound.flowerStates[id] = clone(recordSusongFlowerDraw(payload.flowerState, 0));
+        } catch (cause) {
+          throw new AppError('INVALID_ACTION', { cause });
+        }
+        if (this.currentRound.wall && Number.isInteger(payload.wallRemaining)) {
+          this.currentRound.wall.wallRemaining = payload.wallRemaining;
+        }
+        if (this.currentRound.wall?.handCountsByPlayer && Number.isInteger(payload.handCount)) {
+          this.currentRound.wall.handCountsByPlayer[id] = payload.handCount;
+        }
         break;
       }
       case 'SUSONG_FLOWER_DRAWN': {
@@ -1770,14 +1860,19 @@ export class Room {
       case 'SUSONG_FLOWER_RESOLVED': {
         const id = playerId(payload.playerId);
         const current = id ? this.currentRound?.flowerStates?.[id] : null;
-        if (!current || !['discard', 'replace'].includes(payload.action)) throw new AppError('INVALID_ACTION');
+        if (!current || !['discard', 'replace'].includes(payload.action) || !isRecord(payload.flowerState)) {
+          throw new AppError('INVALID_ACTION');
+        }
         try {
-          this.currentRound.flowerStates[id] = clone(resolveSusongFlowers(current, {
-            discard: payload.action === 'discard' ? 1 : 0,
-            replace: payload.action === 'replace' ? 1 : 0
-          }));
+          this.currentRound.flowerStates[id] = clone(recordSusongFlowerDraw(payload.flowerState, 0));
         } catch (cause) {
           throw new AppError('INVALID_ACTION', { cause });
+        }
+        if (this.currentRound.wall && Number.isInteger(payload.wallRemaining)) {
+          this.currentRound.wall.wallRemaining = payload.wallRemaining;
+        }
+        if (this.currentRound.wall?.handCountsByPlayer && Number.isInteger(payload.handCount)) {
+          this.currentRound.wall.handCountsByPlayer[id] = payload.handCount;
         }
         break;
       }
@@ -2001,6 +2096,58 @@ export class Room {
   }
 }
 
+function resolvePrivateSusongFlowers({ privateState, playerId, action, flowerState }) {
+  const nextPrivate = clone(privateState);
+  const hand = nextPrivate.handsByPlayer?.[playerId];
+  const resolved = nextPrivate.resolvedFlowerTilesByPlayer?.[playerId];
+  if (!Array.isArray(hand) || !Array.isArray(resolved) || !Array.isArray(nextPrivate.remainingWall)) {
+    throw new TypeError('private flower state is incomplete');
+  }
+  let nextFlowerState = clone(flowerState);
+  const removedTileIds = [];
+  const drawnTileIds = [];
+
+  if (action === 'discard') {
+    const index = hand.findIndex(isSusongReplacementFlower);
+    if (index < 0) throw new TypeError('pending flower is missing from the private hand');
+    const [removed] = hand.splice(index, 1);
+    resolved.push(removed);
+    removedTileIds.push(removed);
+    nextFlowerState = resolveSusongFlowers(nextFlowerState, { discard: 1 });
+  } else {
+    while (nextFlowerState.pendingFlowerReplacements > 0) {
+      const index = hand.findIndex(isSusongReplacementFlower);
+      if (index < 0) throw new TypeError('pending flower is missing from the private hand');
+      const draw = drawSusongReplacementTile(nextPrivate.remainingWall);
+      const [removed] = hand.splice(index, 1);
+      resolved.push(removed);
+      removedTileIds.push(removed);
+      nextPrivate.remainingWall = [...draw.remainingWall];
+      hand.push(draw.tileId);
+      drawnTileIds.push(draw.tileId);
+      nextFlowerState = resolveSusongFlowers(nextFlowerState, { replace: 1 });
+      if (isSusongReplacementFlower(draw.tileId)) {
+        nextFlowerState = recordSusongFlowerDraw(nextFlowerState, 1);
+      }
+    }
+  }
+
+  nextPrivate.replacementHistory.push({
+    action,
+    playerId,
+    removedTileIds,
+    drawnTileIds
+  });
+  return {
+    privateState: nextPrivate,
+    flowerState: nextFlowerState,
+    resolvedCount: removedTileIds.length,
+    additionalFlowerCount: drawnTileIds.filter(isSusongReplacementFlower).length,
+    handCount: hand.length,
+    wallRemaining: nextPrivate.remainingWall.length
+  };
+}
+
 function normalizePrivateRoundState(input, players, round) {
   if (!isRecord(input) || !round || input.roundId !== round.roundId) {
     throw new AppError('INVALID_ACTION', {
@@ -2014,12 +2161,22 @@ function normalizePrivateRoundState(input, players, round) {
     throw new AppError('INVALID_ACTION');
   }
   const handsByPlayer = {};
+  const resolvedFlowerTilesByPlayer = {};
   for (const playerId of playerIds) {
     if (!Array.isArray(input.handsByPlayer[playerId])) throw new AppError('INVALID_ACTION');
     handsByPlayer[playerId] = input.handsByPlayer[playerId].map(value => String(value));
+    const resolved = input.resolvedFlowerTilesByPlayer?.[playerId] ?? [];
+    if (!Array.isArray(resolved)) throw new AppError('INVALID_ACTION');
+    resolvedFlowerTilesByPlayer[playerId] = resolved.map(value => String(value));
   }
   const remainingWall = input.remainingWall.map(value => String(value));
-  const allTileIds = [...Object.values(handsByPlayer).flat(), ...remainingWall];
+  const replacementHistory = input.replacementHistory ?? [];
+  if (!Array.isArray(replacementHistory)) throw new AppError('INVALID_ACTION');
+  const allTileIds = [
+    ...Object.values(handsByPlayer).flat(),
+    ...Object.values(resolvedFlowerTilesByPlayer).flat(),
+    ...remainingWall
+  ];
   const allowedTileIds = new Set(buildSusongTileSet().map(tile => tile.id));
   if (allTileIds.length !== 144
     || new Set(allTileIds).size !== 144
@@ -2053,8 +2210,44 @@ function normalizePrivateRoundState(input, players, round) {
       playerIds: orderedPlayers.map(player => player.id),
       dealerId: dealer?.id
     });
-    if (canonical(expectedDeal.handsByPlayer) !== canonical(handsByPlayer)
-      || canonical(expectedDeal.remainingWall) !== canonical(remainingWall)
+    const replayHands = clone(expectedDeal.handsByPlayer);
+    let replayWall = [...expectedDeal.remainingWall];
+    const replayResolved = Object.fromEntries(playerIds.map(playerId => [playerId, []]));
+    for (const operation of replacementHistory) {
+      if (!isRecord(operation) || !playerIds.includes(operation.playerId)
+        || !['discard', 'replace'].includes(operation.action)
+        || !Array.isArray(operation.removedTileIds)
+        || !Array.isArray(operation.drawnTileIds)) {
+        throw new TypeError('invalid private flower history');
+      }
+      if (operation.action === 'discard' && operation.drawnTileIds.length !== 0) {
+        throw new TypeError('discard history cannot draw a replacement');
+      }
+      if (operation.action === 'replace'
+        && operation.removedTileIds.length !== operation.drawnTileIds.length) {
+        throw new TypeError('replacement history must pair every removed and drawn tile');
+      }
+      for (let index = 0; index < operation.removedTileIds.length; index += 1) {
+        const removed = String(operation.removedTileIds[index]);
+        const handIndex = replayHands[operation.playerId].indexOf(removed);
+        if (handIndex < 0 || !isSusongReplacementFlower(removed)) {
+          throw new TypeError('flower history removes an unavailable tile');
+        }
+        replayHands[operation.playerId].splice(handIndex, 1);
+        replayResolved[operation.playerId].push(removed);
+        if (operation.action === 'replace') {
+          const drawn = String(operation.drawnTileIds[index]);
+          if (replayWall.at(-1) !== drawn || replayWall.length <= 14) {
+            throw new TypeError('flower history draws outside the candidate tail');
+          }
+          replayWall.pop();
+          replayHands[operation.playerId].push(drawn);
+        }
+      }
+    }
+    if (canonical(replayHands) !== canonical(handsByPlayer)
+      || canonical(replayWall) !== canonical(remainingWall)
+      || canonical(replayResolved) !== canonical(resolvedFlowerTilesByPlayer)
       || expectedDeal.wallVersion !== input.wallVersion
       || expectedDeal.shuffleAlgorithm !== input.shuffleAlgorithm
       || expectedDeal.dealAlgorithm !== input.dealAlgorithm
@@ -2076,7 +2269,9 @@ function normalizePrivateRoundState(input, players, round) {
     replacementDrawPolicy: input.replacementDrawPolicy,
     seedCommitment: input.seedCommitment,
     handsByPlayer,
-    remainingWall
+    remainingWall,
+    resolvedFlowerTilesByPlayer,
+    replacementHistory: clone(replacementHistory)
   });
 }
 

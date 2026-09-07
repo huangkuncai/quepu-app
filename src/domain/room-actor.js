@@ -555,7 +555,11 @@ export class RoomActor {
         // state changed without producing an event.
         const stateChangedWithoutEvent = events.length === 0
           && stableCommandString(beforeSnapshot) !== stableCommandString(afterSnapshot);
-        const containsPrivateStateChange = events.some(event => event.type === 'SUSONG_ROUND_DEALT');
+        const containsPrivateStateChange = events.some(event => [
+          'SUSONG_ROUND_DEALT',
+          'SUSONG_PIAO_CHOSEN',
+          'SUSONG_FLOWER_RESOLVED'
+        ].includes(event.type));
         const shouldSnapshot = (events.length > 0 && (
           containsPrivateStateChange
           || this.snapshotEvery === 1

@@ -134,6 +134,25 @@ export function publicSusongWallState(dealt) {
   });
 }
 
+/** Draw one replacement tile from the versioned candidate tail. */
+export function drawSusongReplacementTile(remainingWall, { reserveTiles = 14 } = {}) {
+  if (!Array.isArray(remainingWall)) throw new TypeError('remainingWall must be an array');
+  if (!Number.isInteger(reserveTiles) || reserveTiles < 0) {
+    throw new TypeError('reserveTiles must be a non-negative integer');
+  }
+  if (remainingWall.length <= reserveTiles) {
+    throw new RangeError('replacement draw reached the reserved wall boundary');
+  }
+  const next = [...remainingWall];
+  const tileId = next.pop();
+  return deepFreeze({
+    tileId,
+    remainingWall: next,
+    wallRemaining: next.length,
+    replacementDrawPolicy: SUSONG_REPLACEMENT_DRAW_POLICY
+  });
+}
+
 /** Verify a post-round seed reveal against the commitment published at deal. */
 export function verifySusongSeedCommitment(seed, commitment) {
   if (typeof commitment !== 'string' || !/^[0-9a-f]{64}$/i.test(commitment)) return false;
