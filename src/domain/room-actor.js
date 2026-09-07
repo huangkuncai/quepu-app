@@ -562,7 +562,8 @@ export class RoomActor {
           'SUSONG_TILE_DRAWN',
           'SUSONG_TILE_DISCARDED',
           'SUSONG_REACTION_PASSED',
-          'SUSONG_REACTION_CLAIMED'
+          'SUSONG_REACTION_CLAIMED',
+          'SUSONG_KONG_RESOLVED'
         ].includes(event.type));
         const shouldSnapshot = (events.length > 0 && (
           containsPrivateStateChange

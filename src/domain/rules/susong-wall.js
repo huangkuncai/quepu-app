@@ -102,6 +102,32 @@ export function getSusongDiscardReactionCandidates({ hand, tileId, isNextPlayer 
   return deepFreeze(candidates);
 }
 
+/** Return self-kong choices from the private hand and already-public melds. */
+export function getSusongTurnKongCandidates({ hand, melds = [] } = {}) {
+  if (!Array.isArray(hand)) throw new TypeError('hand must be an array');
+  if (!Array.isArray(melds)) throw new TypeError('melds must be an array');
+  const byFace = new Map();
+  for (const tileId of hand) {
+    if (isSusongReplacementFlower(tileId)) continue;
+    const face = susongTileFace(tileId);
+    if (!byFace.has(face)) byFace.set(face, []);
+    byFace.get(face).push(tileId);
+  }
+  const candidates = [];
+  for (const [face, tileIds] of byFace) {
+    if (tileIds.length === 4) {
+      candidates.push({ action: 'concealed_kong', face, consumeTileIds: [...tileIds] });
+    }
+  }
+  melds.forEach((meld, meldIndex) => {
+    if (meld?.action !== 'peng' || !Array.isArray(meld.tileIds) || meld.tileIds.length !== 3) return;
+    const face = susongTileFace(meld.tileIds[0]);
+    const tileId = byFace.get(face)?.[0];
+    if (tileId) candidates.push({ action: 'added_kong', face, meldIndex, consumeTileIds: [tileId] });
+  });
+  return deepFreeze(candidates);
+}
+
 /**
  * Recognize a server-owned concealed hand. This slice deliberately supports
  * the ordinary four-groups-and-a-pair shape plus seven pairs; other named

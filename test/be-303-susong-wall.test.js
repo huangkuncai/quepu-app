@@ -8,6 +8,7 @@ import {
   drawSusongLiveTile,
   drawSusongReplacementTile,
   getSusongDiscardReactionCandidates,
+  getSusongTurnKongCandidates,
   getSusongWinningHand,
   isSusongReplacementFlower,
   publicSusongWallState,
@@ -125,6 +126,28 @@ test('server-owned hands generate peng, exposed-kong and next-seat chi candidate
     ['exposed_kong', 'peng']
   );
   assert.deepEqual(getSusongDiscardReactionCandidates({ hand, tileId: 'red_dragon-1' }), []);
+});
+
+test('server-owned turn state generates concealed and added kong candidates', () => {
+  const candidates = getSusongTurnKongCandidates({
+    hand: [
+      'characters-5-1', 'characters-5-2', 'characters-5-3', 'characters-5-4',
+      'east-4', 'dots-1-1'
+    ],
+    melds: [{
+      action: 'peng',
+      tileIds: ['east-1', 'east-2', 'east-3']
+    }]
+  });
+  assert.deepEqual(candidates.map(candidate => ({
+    action: candidate.action,
+    face: candidate.face,
+    consumeCount: candidate.consumeTileIds.length,
+    meldIndex: candidate.meldIndex ?? null
+  })), [
+    { action: 'concealed_kong', face: 'characters-5', consumeCount: 4, meldIndex: null },
+    { action: 'added_kong', face: 'east', consumeCount: 1, meldIndex: 0 }
+  ]);
 });
 
 test('server recognizes standard, discard-completed and seven-pairs winning hands', () => {
@@ -352,7 +375,7 @@ test('an unambiguous peng is private-player projected and resolved by the server
   assert.ok(room.snapshot({ viewerId: 'A' }).round.privateHand.includes(discardedTileId));
   room.applyAction('A', { action: 'discard', args: { tileId: discardedTileId } });
 
-  assert.deepEqual(room.snapshot({ viewerId: 'B' }).round.availableReactions, ['pass']);
+  assert.deepEqual(room.snapshot({ viewerId: 'B' }).round.availableReactions, ['pass', 'chi']);
   assert.throws(
     () => room.applyAction('B', 'peng'),
     error => error.code === 'INVALID_ACTION'
@@ -386,6 +409,41 @@ test('an unambiguous peng is private-player projected and resolved by the server
     () => Room.fromSnapshot(tampered),
     error => error.code === 'INVALID_ACTION'
   );
+});
+
+test('only the next player receives server-indexed chi choices and can resolve one', () => {
+  const room = susongRoom('chi-room');
+  room.dealSusongOpeningRound({ seed: '0'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  room.applyAction('A', { action: 'discard', args: { tileId: 'dots-5-3' } });
+  const bView = room.snapshot({ viewerId: 'B' });
+  assert.deepEqual(bView.round.availableReactions, ['pass', 'chi']);
+  assert.deepEqual(bView.round.reactionOptions, {
+    chi: [
+      { candidateIndex: 0, sequence: ['dots-3', 'dots-4', 'dots-5'] },
+      { candidateIndex: 1, sequence: ['dots-4', 'dots-5', 'dots-6'] }
+    ]
+  });
+  assert.equal('reactionOptions' in room.snapshot({ viewerId: 'C' }).round, false);
+  assert.throws(
+    () => room.applyAction('B', { action: 'chi', args: { candidateIndex: 2 } }),
+    error => error.code === 'INVALID_ACTION'
+  );
+  room.applyAction('B', { action: 'chi', args: { candidateIndex: 1 } });
+  room.applyAction('C', 'pass');
+  const resolved = room.applyAction('D', 'pass');
+
+  assert.equal(resolved.resolution.action, 'chi');
+  assert.deepEqual(resolved.resolution.sequence, ['dots-4', 'dots-5', 'dots-6']);
+  assert.equal(room.currentRound.meldsByPlayer.B[0].tileIds.length, 3);
+  assert.equal(room.snapshot({ viewerId: 'B' }).round.privateHand.length, 11);
+  assert.deepEqual(room.currentRound.discardsByPlayer.A, []);
+  assert.equal(room.turn, 'B');
+  assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
 });
 
 test('a wind peng adds one authoritative flower while an ordinary peng adds none', () => {
@@ -478,6 +536,96 @@ test('an exposed kong replacement flower is resolved continuously from the tail'
   assert.equal(room.currentRound.flowerStates.D.countedFlowers, flowerCountBefore + 2);
   assert.equal(room.snapshot({ viewerId: 'D' }).round.privateHand.length, 11);
   assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
+});
+
+test('a concealed kong is selected by server index, counts two flowers and replaces from the tail', () => {
+  const room = susongRoom('concealed-kong-room');
+  room.dealSusongOpeningRound({ seed: '2da'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  const before = room.persistenceSnapshot();
+  const viewer = room.snapshot({ viewerId: 'A' });
+
+  assert.ok(viewer.round.availableActions.includes('concealed_kong'));
+  assert.deepEqual(viewer.round.kongOptions, {
+    concealed_kong: [{ candidateIndex: 0, face: 'bamboo-9' }]
+  });
+  assert.equal(JSON.stringify(viewer.round.kongOptions).includes('bamboo-9-1'), false);
+  assert.throws(
+    () => room.applyAction('A', { action: 'concealed_kong', args: { candidateIndex: 1 } }),
+    error => error.code === 'INVALID_ACTION'
+  );
+  const result = room.applyAction('A', {
+    action: 'concealed_kong',
+    args: { candidateIndex: 0 }
+  });
+
+  assert.equal(result.event.type, 'SUSONG_KONG_RESOLVED');
+  assert.equal(result.resolution.action, 'concealed_kong');
+  assert.equal(result.resolution.meldFlowerUnits, 2);
+  assert.equal(result.resolution.replacementCount, 1);
+  assert.equal(room.currentRound.flowerStates.A.meldFlowers, 2);
+  assert.equal(room.currentRound.wall.wallRemaining, before.round.wall.wallRemaining - 1);
+  assert.equal(room.currentRound.meldsByPlayer.A[0].tileIds.length, 4);
+  assert.equal(room.snapshot({ viewerId: 'A' }).round.privateHand.length, 11);
+  assert.equal(room.turn, 'A');
+  assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.equal(JSON.stringify(result.event).includes('replacementTileId'), false);
+
+  const persisted = room.persistenceSnapshot();
+  assert.deepEqual(Room.fromSnapshot(persisted).persistenceSnapshot(), persisted);
+  const tampered = structuredClone(persisted);
+  delete tampered.snapshotHash;
+  tampered.privateRoundState.turnHistory.at(-1).replacementTileId = 'characters-1-1';
+  assert.throws(
+    () => Room.fromSnapshot(tampered),
+    error => error.code === 'INVALID_ACTION'
+  );
+});
+
+test('RoomActor atomically checkpoints a concealed kong private mutation', async () => {
+  const store = createMemoryGameStore();
+  const room = susongRoom('actor-concealed-kong-room');
+  const actor = new RoomActor({
+    room,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'concealed-kong-actor-1',
+    snapshotEvery: 100
+  });
+  await actor.dispatch({
+    type: 'deal_susong_round',
+    commandId: 'actor-concealed-kong-deal',
+    payload: { seed: '2da'.padStart(64, '0'), dealerSeat: 0 }
+  }, { actorId: 'system:susong-rule-engine', actorRole: 'SYSTEM' });
+  await actor.dispatch({
+    type: 'begin_playing',
+    commandId: 'actor-concealed-kong-begin',
+    payload: {}
+  }, { actorId: 'A' });
+  await actor.dispatch({
+    type: 'action',
+    commandId: 'actor-concealed-kong-action',
+    payload: {
+      playerId: 'A',
+      action: { action: 'concealed_kong', args: { candidateIndex: 0 } }
+    }
+  }, { actorId: 'A' });
+
+  const durable = store.eventStore.getSnapshot(room.id);
+  assert.equal(durable.round.meldsByPlayer.A[0].action, 'concealed_kong');
+  assert.equal(durable.privateRoundState.handsByPlayer.A.length, 11);
+  const restarted = new RoomActor({
+    roomId: room.id,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'concealed-kong-actor-2',
+    snapshotEvery: 100
+  });
+  await restarted.recover();
+  assert.deepEqual(restarted.snapshot({ viewerId: 'A' }), actor.snapshot({ viewerId: 'A' }));
 });
 
 test('a discard win is recognized and settled entirely from authoritative room state', () => {
