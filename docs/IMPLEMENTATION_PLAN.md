@@ -287,7 +287,7 @@ I1 的目标不是“能打麻将”，而是先让所有后续模块使用同�
 
 - `src/domain/room.js` 已提供通用 Room aggregate：固定座位、房主、访问策略、ready、`WAITING → READY → DEALING → PLAYING → SETTLING → NEXT_ROUND/FINISHED/CANCELLED`、幂等 `commandId`、`expectedRoomVersion`、不可变 `ruleSnapshot`/hash、事件窗口和 reconnect sync。
 - `src/modules/room/service.js` 与 `src/modules/room/http.js` 已完成 BE-205 内存/fake-staging REST/BFF：REST 与 WSS 共用 RoomActor/RoomService，支持 create/get/join/leave/ready/start/disband、ETag/If-Match、`Idempotency-Key`、统一错误 envelope 和鉴权/成员边界；生产数据库和多实例仍待。
-- WSS 已接入 `leave_room`、`ready`、`increase_zeng`、`begin_playing`、`settle_round`、`next_round`、`disband_room`；旧开发协议的 `start_round` 仅在 fake 流显式 auto-advance，不代表生产放宽准备校验。
+- WSS 已接入 `leave_room`、`ready`、`increase_zeng`、`choose_piao`、`resolve_flower`、`begin_playing`、`settle_round`、`next_round`、`disband_room`；旧开发协议的 `start_round` 仅在 fake 流显式 auto-advance，不代表生产放宽准备校验。
 - `test/be-201-room.test.js` 覆盖状态、权限、版本、幂等、快照、结算占位和 history window；BE-202 已补可替换内存事件存储、actor/fencing、重启恢复和 PostgreSQL schema，真实 adapter smoke 已纳入 `verify:real`，生产多实例仍留给后续任务。
 - `test/be-202-event-store.test.js` 覆盖 append-only 连续版本、snapshot/hash、持久 command result、outbox、fencing、actor 串行、重启恢复和失败回滚；这些是内存 adapter 契约，不代表生产 PostgreSQL/Redis 已接入。
 - `src/modules/realtime/gateway.js` 和 `src/server.js` 已完成 BE-203 WSS gateway 纵切：按房间复用 RoomActor，持久化成功后发送 `command_ack`，成功事件才广播，支持订阅/取消订阅、viewer-scoped 私有事件过滤、背压关闭、旧连接隔离、重连宽限、durable recovery、连续 `roomVersion` 广播队列和 late subscription live-feed cursor。
@@ -339,7 +339,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.3` 配置、飘花状态机和服务端计分核心已实现） |
 | BE-303 | 发牌、补花、牌墙、庄轮转 | DEC-RULE-002/003 | round state、dealer、wall、deadline | 固定 seed 重现；流局边界正确 |
 | BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝 |
-| BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（飘花规则与胡牌资格纯规则完成；增已接入房间事件、幂等与恢复，并由结算权威读取） |
+| BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（增、起手飘花选择、摸花、打/补花均已接入房间事件和恢复，结算权威读取；待杠与过圈） |
 | BE-306 | 结算和两级积分账本 | DEC-RULE-004/005/008 | `RoundSettlement`、原因明细、累计战绩、零和/系统项策略 | 服务端重算；幂等；流局和多响样例通过；IN_PROGRESS（自摸、点炮、一冲二/三、流局、SYSTEM 写入、累计积分、重放/幂等和零和校验已实现） |
 | BE-307 | 回放/确定性验证器 | BE-301~306 | 规则版本 + seed + event replay、snapshot hash | 历史规则重放不变，divergence 告警 |
 | BE-308 | golden/property/fuzz tests | BE-301~307 | 至少 20 个签字 golden cases、属性测试和模糊测试 | 10,000 次回放 0 divergence（阈值最终确认） |

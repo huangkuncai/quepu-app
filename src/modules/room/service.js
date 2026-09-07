@@ -10,6 +10,8 @@ const ROOM_COMMAND_TYPES = new Set([
   'leave_room',
   'ready',
   'increase_zeng',
+  'choose_piao',
+  'resolve_flower',
   'start_round',
   'begin_playing',
   'action',
@@ -301,8 +303,25 @@ export class RoomService {
     const players = [...actor.room.players.values()]
       .sort((left, right) => left.seat - right.seat)
       .map(player => player.id);
+    const scoringFacts = clone(facts);
+    if ((scoringFacts.outcome ?? scoringFacts.winSource) !== 'draw') {
+      const flowerStates = actor.room.currentRound?.flowerStates;
+      if (!flowerStates) throw new AppError('INVALID_ACTION', {
+        details: [{ path: 'round.flowerStates', message: 'authoritative flower state is not initialized' }]
+      });
+      if (Array.isArray(scoringFacts.winners)) {
+        scoringFacts.winners = scoringFacts.winners.map(winner => {
+          const playerId = winner.winnerId ?? winner.playerId;
+          if (!flowerStates[playerId]) throw new AppError('INVALID_ACTION');
+          return { ...winner, flowerState: clone(flowerStates[playerId]) };
+        });
+      } else {
+        if (!flowerStates[scoringFacts.winnerId]) throw new AppError('INVALID_ACTION');
+        scoringFacts.flowerState = clone(flowerStates[scoringFacts.winnerId]);
+      }
+    }
     const settlement = scoreSusongRound({
-      ...clone(facts),
+      ...scoringFacts,
       config: actor.room.ruleSnapshot.config,
       playerIds: players,
       zengByPlayer: Object.fromEntries(actor.room.zengByPlayer)
@@ -315,6 +334,73 @@ export class RoomService {
       requestId: requestIdOf(requestId),
       ...(roomVersion === undefined || roomVersion === null ? {} : { roomVersion }),
       payload: { result: settlement }
+    };
+    const result = await this.registry.dispatch(actor.room.id, command, {
+      actorId: 'system:susong-rule-engine',
+      actorRole: 'SYSTEM',
+      commandId: command.commandId,
+      requestId: command.requestId,
+      expectedRoomVersion: roomVersion
+    });
+    this.deadlines?.refresh?.(actor.room);
+    return {
+      ...clone(result),
+      room: roomSnapshot(actor.room),
+      snapshot: roomSnapshot(actor.room),
+      roomId: actor.room.id,
+      roomVersion: result.roomVersion ?? actor.version,
+      version: result.roomVersion ?? actor.version,
+      commandId: command.commandId,
+      requestId: command.requestId
+    };
+  }
+
+  async initializeSusongRoundFlowers({
+    roomId,
+    openingFlowerCountByPlayer,
+    commandId,
+    requestId,
+    roomVersion
+  } = {}) {
+    return this._dispatchSusongSystem({
+      roomId,
+      type: 'initialize_susong_flowers',
+      payload: { openingFlowerCountByPlayer: clone(openingFlowerCountByPlayer) },
+      commandId,
+      requestId,
+      roomVersion
+    });
+  }
+
+  async recordSusongRoundFlowerDraw({
+    roomId,
+    playerId,
+    count = 1,
+    commandId,
+    requestId,
+    roomVersion
+  } = {}) {
+    return this._dispatchSusongSystem({
+      roomId,
+      type: 'record_susong_flower_draw',
+      payload: { playerId, count },
+      commandId,
+      requestId,
+      roomVersion
+    });
+  }
+
+  async _dispatchSusongSystem({ roomId, type, payload, commandId, requestId, roomVersion }) {
+    const actor = await this._actor(roomId);
+    if (actor.room.ruleId !== susongRule.id) throw new AppError('INVALID_ACTION');
+    const command = {
+      protocolVersion: '1.0',
+      type,
+      roomId: actor.room.id,
+      commandId: commandIdOf(commandId),
+      requestId: requestIdOf(requestId),
+      ...(roomVersion === undefined || roomVersion === null ? {} : { roomVersion }),
+      payload
     };
     const result = await this.registry.dispatch(actor.room.id, command, {
       actorId: 'system:susong-rule-engine',

@@ -433,6 +433,20 @@ class ClientSessionController {
         roomVersion: _room.roomVersion < 0 ? null : _room.roomVersion,
       );
 
+  Future<String> choosePiao(String roomId, bool choosesPiao) => sendCommand(
+        'choose_piao',
+        {'choosesPiao': choosesPiao},
+        roomId: roomId,
+        roomVersion: _room.roomVersion < 0 ? null : _room.roomVersion,
+      );
+
+  Future<String> resolveFlower(String roomId, String action) => sendCommand(
+        'resolve_flower',
+        {'action': action},
+        roomId: roomId,
+        roomVersion: _room.roomVersion < 0 ? null : _room.roomVersion,
+      );
+
   Future<String> action(String roomId, String action) => sendCommand(
         'action',
         {'action': action},
@@ -725,6 +739,8 @@ class ClientSessionController {
     'leave_room',
     'ready',
     'increase_zeng',
+    'choose_piao',
+    'resolve_flower',
     'start_round',
     'begin_playing',
     'action',

@@ -162,7 +162,6 @@ test('internal RoomService settlement scores and persists through SYSTEM authori
   }
   for (const playerId of players) room.setReady(playerId);
   room.start({ actorId: 'A' });
-  room.beginPlaying({ actorId: 'A' });
   const actor = { room, version: room.version };
   const registry = {
     get: id => id === room.id ? actor : null,
@@ -175,6 +174,16 @@ test('internal RoomService settlement scores and persists through SYSTEM authori
     }
   };
   const service = new RoomService({ registry });
+  await service.initializeSusongRoundFlowers({
+    roomId: room.id,
+    roomVersion: room.version,
+    commandId: 'system-opening-flowers',
+    openingFlowerCountByPlayer: { A: 4, B: 0, C: 0, D: 0 }
+  });
+  for (let index = 0; index < 4; index += 1) {
+    room.resolveSusongFlower('A', 'replace', { actorId: 'A', commandId: `A-replace-${index}` });
+  }
+  room.beginPlaying({ actorId: 'A' });
   const result = await service.settleSusongRound({
     roomId: room.id,
     roomVersion: room.version,
@@ -183,11 +192,62 @@ test('internal RoomService settlement scores and persists through SYSTEM authori
     facts: {
       outcome: 'self_draw',
       winnerId: 'A',
-      flowerState: flowerState(4),
+      // Both client-like scoring claims are ignored in favor of Room state.
+      flowerState: flowerState(10),
       // This forged input is ignored; settlement reads the Room map above.
       zengByPlayer: { A: 999, B: 999, C: 999, D: 999 }
     }
   });
   assert.equal(result.snapshot.round.settlement.scoreAuthority, 'server');
   assert.deepEqual(result.snapshot.scores, { A: 45, B: -15, C: -11, D: -19 });
+});
+
+test('strong-piao round actions persist opening choice, flower discard and draw state', () => {
+  let sequence = 0;
+  const room = new Room({
+    id: 'piao-room',
+    ownerId: 'A',
+    idFactory: () => `piao-generated-${++sequence}`,
+    ruleSnapshot: {
+      gameType: 'mahjong',
+      ruleId: 'susong_v1',
+      ruleVersion: '8931-apk-baseline.3',
+      config: { ...config, piao: 'strong' }
+    }
+  });
+  for (const playerId of players) room.join({ id: playerId });
+  for (const playerId of players) room.setReady(playerId);
+  room.start({ actorId: 'A' });
+  const beforeFlowers = room.snapshot();
+  const initialized = room.initializeSusongFlowers(
+    { A: 0, B: 2, C: 1, D: 0 },
+    { actorId: 'system', actorRole: 'SYSTEM', commandId: 'init-piao' }
+  );
+  assert.equal(initialized.flowerStates.A.status, 'piao');
+  assert.equal(initialized.flowerStates.B.status, 'awaiting_piao_choice');
+
+  room.chooseSusongPiao('B', true, { actorId: 'B', commandId: 'B-piao' });
+  room.resolveSusongFlower('B', 'discard', { actorId: 'B', commandId: 'B-flower-1' });
+  room.resolveSusongFlower('B', 'discard', { actorId: 'B', commandId: 'B-flower-2' });
+  room.chooseSusongPiao('C', false, { actorId: 'C', commandId: 'C-no-piao' });
+  assert.throws(
+    () => room.resolveSusongFlower('C', 'discard', { actorId: 'C' }),
+    error => error.code === 'INVALID_ACTION'
+  );
+  room.resolveSusongFlower('C', 'replace', { actorId: 'C', commandId: 'C-replace' });
+  room.beginPlaying({ actorId: 'A' });
+  room.recordSusongFlowerDraw('A', 1, {
+    actorId: 'system',
+    actorRole: 'SYSTEM',
+    commandId: 'A-draw-flower'
+  });
+  assert.equal(room.snapshot().round.flowerStates.A.pendingFlowerDiscards, 1);
+  room.resolveSusongFlower('A', 'discard', { actorId: 'A', commandId: 'A-discard-flower' });
+  assert.equal(room.snapshot().round.flowerStates.A.countedFlowers, 0);
+
+  const recovered = Room.fromSnapshot(beforeFlowers);
+  for (const event of room.events.filter(event => event.version > beforeFlowers.roomVersion)) {
+    recovered.applyPersistedEvent(event);
+  }
+  assert.deepEqual(recovered.snapshot().round.flowerStates, room.snapshot().round.flowerStates);
 });

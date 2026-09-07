@@ -69,6 +69,8 @@ const commandTypes = <String>{
   'leave_room',
   'ready',
   'increase_zeng',
+  'choose_piao',
+  'resolve_flower',
   'start_round',
   'begin_playing',
   'action',

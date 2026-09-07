@@ -35,6 +35,8 @@ const BUSINESS_COMMANDS = new Set([
   'leave_room',
   'ready',
   'increase_zeng',
+  'choose_piao',
+  'resolve_flower',
   'start_round',
   'begin_playing',
   'action',

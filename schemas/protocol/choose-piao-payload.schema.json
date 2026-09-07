@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://susong.local/schemas/protocol/choose-piao-payload.schema.json",
+  "title": "Choose Susong piao payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["choosesPiao"],
+  "properties": {
+    "choosesPiao": { "type": "boolean" }
+  }
+}

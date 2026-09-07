@@ -1,5 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { AppError } from '../shared/errors.js';
+import {
+  createSusongFlowerState,
+  recordSusongFlowerDraw,
+  resolveSusongFlowers
+} from './rules/susong.js';
 
 /**
  * Room is the framework-neutral aggregate used by the development server and
@@ -689,6 +694,7 @@ export class Room {
       status,
       dealerSeat: options.dealerSeat === undefined ? null : options.dealerSeat,
       ruleSnapshotHash: this.ruleSnapshotHash,
+      flowerStates: null,
       settlement: null,
       startedAt: null,
       endedAt: null,
@@ -705,6 +711,126 @@ export class Room {
 
   _firstTurn() {
     return this._orderedPlayers()[0]?.id || null;
+  }
+
+  initializeSusongFlowers(openingFlowerCountByPlayer, options = {}) {
+    const opts = normalizeOptions(options);
+    return this._withCommand(opts, {
+      op: 'initialize_susong_flowers',
+      openingFlowerCountByPlayer
+    }, command => {
+      if (command.actorRole !== 'SYSTEM') throw new AppError('FORBIDDEN');
+      if (this.ruleId !== 'susong_v1' || this.status !== ROOM_STATUS.DEALING || !this.currentRound) {
+        throw new AppError('INVALID_ACTION');
+      }
+      if (this.currentRound.flowerStates) throw new AppError('DUPLICATE_REQUEST');
+      if (!isRecord(openingFlowerCountByPlayer)
+        || Object.keys(openingFlowerCountByPlayer).length !== this.players.size) {
+        throw new AppError('INVALID_ACTION');
+      }
+      const flowerStates = {};
+      try {
+        for (const playerId of this.players.keys()) {
+          if (!(playerId in openingFlowerCountByPlayer)) throw new TypeError('missing player');
+          flowerStates[playerId] = createSusongFlowerState({
+            piaoMode: this.ruleSnapshot.config?.piao,
+            initialFlowerCount: openingFlowerCountByPlayer[playerId]
+          });
+        }
+      } catch (cause) {
+        throw new AppError('INVALID_ACTION', { cause });
+      }
+      this.currentRound.flowerStates = clone(flowerStates);
+      const event = this._append('SUSONG_FLOWERS_INITIALIZED', {
+        roundId: this.roundId,
+        flowerStates: clone(flowerStates)
+      }, command);
+      return this._result(event, { flowerStates: clone(flowerStates) });
+    });
+  }
+
+  chooseSusongPiao(playerId, choosesPiao, options = {}) {
+    const opts = normalizeOptions(options);
+    const id = normalizeId(playerId, 'playerId');
+    if (typeof choosesPiao !== 'boolean') throw new AppError('INVALID_ACTION');
+    return this._withCommand(opts, { op: 'choose_piao', playerId: id, choosesPiao }, command => {
+      const actorId = command.actorId ?? id;
+      if (actorId !== id && command.actorRole !== 'SYSTEM') throw new AppError('FORBIDDEN');
+      const current = this.currentRound?.flowerStates?.[id];
+      if (!current || current.status !== 'awaiting_piao_choice') throw new AppError('INVALID_ACTION');
+      let next;
+      try {
+        next = createSusongFlowerState({
+          piaoMode: current.mode,
+          initialFlowerCount: current.openingFlowers,
+          choosesPiao
+        });
+      } catch (cause) {
+        throw new AppError('INVALID_ACTION', { cause });
+      }
+      this.currentRound.flowerStates[id] = clone(next);
+      const event = this._append('SUSONG_PIAO_CHOSEN', {
+        roundId: this.roundId,
+        playerId: id,
+        choosesPiao,
+        flowerState: clone(next)
+      }, command);
+      return this._result(event, { playerId: id, flowerState: clone(next) });
+    });
+  }
+
+  recordSusongFlowerDraw(playerId, count = 1, options = {}) {
+    const opts = normalizeOptions(options);
+    const id = normalizeId(playerId, 'playerId');
+    return this._withCommand(opts, { op: 'record_susong_flower_draw', playerId: id, count }, command => {
+      if (command.actorRole !== 'SYSTEM') throw new AppError('FORBIDDEN');
+      if (this.status !== ROOM_STATUS.PLAYING) throw new AppError('ROUND_NOT_PLAYING');
+      const current = this.currentRound?.flowerStates?.[id];
+      if (!current) throw new AppError('INVALID_ACTION');
+      let next;
+      try {
+        next = recordSusongFlowerDraw(current, count);
+      } catch (cause) {
+        throw new AppError('INVALID_ACTION', { cause });
+      }
+      this.currentRound.flowerStates[id] = clone(next);
+      const event = this._append('SUSONG_FLOWER_DRAWN', {
+        roundId: this.roundId,
+        playerId: id,
+        count,
+        flowerState: clone(next)
+      }, command);
+      return this._result(event, { playerId: id, flowerState: clone(next) });
+    });
+  }
+
+  resolveSusongFlower(playerId, action, options = {}) {
+    const opts = normalizeOptions(options);
+    const id = normalizeId(playerId, 'playerId');
+    if (!['discard', 'replace'].includes(action)) throw new AppError('INVALID_ACTION');
+    return this._withCommand(opts, { op: 'resolve_flower', playerId: id, action }, command => {
+      const actorId = command.actorId ?? id;
+      if (actorId !== id && command.actorRole !== 'SYSTEM') throw new AppError('FORBIDDEN');
+      const current = this.currentRound?.flowerStates?.[id];
+      if (!current) throw new AppError('INVALID_ACTION');
+      let next;
+      try {
+        next = resolveSusongFlowers(current, {
+          discard: action === 'discard' ? 1 : 0,
+          replace: action === 'replace' ? 1 : 0
+        });
+      } catch (cause) {
+        throw new AppError('INVALID_ACTION', { cause });
+      }
+      this.currentRound.flowerStates[id] = clone(next);
+      const event = this._append('SUSONG_FLOWER_RESOLVED', {
+        roundId: this.roundId,
+        playerId: id,
+        action,
+        flowerState: clone(next)
+      }, command);
+      return this._result(event, { playerId: id, flowerState: clone(next) });
+    });
   }
 
   _setTurnDeadline() {
@@ -793,6 +919,15 @@ export class Room {
       if (!this.currentRound) throw new AppError('ROUND_NOT_PLAYING');
       if (actorId && actorId !== this.ownerId && !command.isAdmin && !command.admin && command.actorRole !== 'SYSTEM') {
         throw new AppError('NOT_ROOM_OWNER');
+      }
+      if (this.currentRound.flowerStates) {
+        const unresolved = Object.values(this.currentRound.flowerStates).some(state =>
+          state.status === 'awaiting_piao_choice'
+          || state.pendingFlowerDiscards > 0
+          || state.pendingFlowerReplacements > 0);
+        if (unresolved) throw new AppError('INVALID_ACTION', {
+          details: [{ path: 'round.flowerStates', message: 'all opening flowers must be resolved before play' }]
+        });
       }
       this._setStatus(ROOM_STATUS.PLAYING);
       this.currentRound.status = ROOM_STATUS.PLAYING;
@@ -1424,6 +1559,7 @@ export class Room {
           status: payload.status || ROOM_STATUS.DEALING,
           dealerSeat: null,
           ruleSnapshotHash: payload.ruleSnapshotHash || this.ruleSnapshotHash,
+          flowerStates: null,
           settlement: null,
           startedAt: payload.status === ROOM_STATUS.PLAYING ? (event.occurredAt || event.at || null) : null,
           endedAt: null,
@@ -1447,6 +1583,61 @@ export class Room {
         this.turn = payload.turn ?? this.turn;
         this.turnPlayerId = this.turn;
         break;
+      case 'SUSONG_FLOWERS_INITIALIZED': {
+        if (!this.currentRound || !isRecord(payload.flowerStates)
+          || Object.keys(payload.flowerStates).length !== this.players.size) {
+          throw new AppError('INVALID_ACTION');
+        }
+        const flowerStates = {};
+        try {
+          for (const id of this.players.keys()) {
+            if (!(id in payload.flowerStates)) throw new TypeError('missing player');
+            flowerStates[id] = recordSusongFlowerDraw(payload.flowerStates[id], 0);
+          }
+        } catch (cause) {
+          throw new AppError('INVALID_ACTION', { cause });
+        }
+        this.currentRound.flowerStates = clone(flowerStates);
+        break;
+      }
+      case 'SUSONG_PIAO_CHOSEN': {
+        const id = playerId(payload.playerId);
+        const current = id ? this.currentRound?.flowerStates?.[id] : null;
+        if (!current || current.status !== 'awaiting_piao_choice' || typeof payload.choosesPiao !== 'boolean') {
+          throw new AppError('INVALID_ACTION');
+        }
+        this.currentRound.flowerStates[id] = clone(createSusongFlowerState({
+          piaoMode: current.mode,
+          initialFlowerCount: current.openingFlowers,
+          choosesPiao: payload.choosesPiao
+        }));
+        break;
+      }
+      case 'SUSONG_FLOWER_DRAWN': {
+        const id = playerId(payload.playerId);
+        const current = id ? this.currentRound?.flowerStates?.[id] : null;
+        if (!current) throw new AppError('INVALID_ACTION');
+        try {
+          this.currentRound.flowerStates[id] = clone(recordSusongFlowerDraw(current, payload.count));
+        } catch (cause) {
+          throw new AppError('INVALID_ACTION', { cause });
+        }
+        break;
+      }
+      case 'SUSONG_FLOWER_RESOLVED': {
+        const id = playerId(payload.playerId);
+        const current = id ? this.currentRound?.flowerStates?.[id] : null;
+        if (!current || !['discard', 'replace'].includes(payload.action)) throw new AppError('INVALID_ACTION');
+        try {
+          this.currentRound.flowerStates[id] = clone(resolveSusongFlowers(current, {
+            discard: payload.action === 'discard' ? 1 : 0,
+            replace: payload.action === 'replace' ? 1 : 0
+          }));
+        } catch (cause) {
+          throw new AppError('INVALID_ACTION', { cause });
+        }
+        break;
+      }
       case 'ACTION_APPLIED':
         this._setStatus(ROOM_STATUS.PLAYING);
         this.turn = payload.nextTurn ?? null;
@@ -1494,6 +1685,7 @@ export class Room {
           status: ROOM_STATUS.DEALING,
           dealerSeat: null,
           ruleSnapshotHash: payload.ruleSnapshotHash || this.ruleSnapshotHash,
+          flowerStates: null,
           settlement: null,
           startedAt: null,
           endedAt: null,
@@ -1602,6 +1794,22 @@ export class Room {
       case 'increase_zeng':
       case 'room.increase_zeng':
         return this.increaseZeng(payload.playerId ?? context.actorId, { ...payload, ...options });
+      case 'initialize_susong_flowers':
+        return this.initializeSusongFlowers(payload.openingFlowerCountByPlayer, { ...payload, ...options });
+      case 'choose_piao':
+        return this.chooseSusongPiao(
+          payload.playerId ?? context.actorId,
+          payload.choosesPiao,
+          { ...payload, ...options }
+        );
+      case 'record_susong_flower_draw':
+        return this.recordSusongFlowerDraw(payload.playerId, payload.count ?? 1, { ...payload, ...options });
+      case 'resolve_flower':
+        return this.resolveSusongFlower(
+          payload.playerId ?? context.actorId,
+          payload.action,
+          { ...payload, ...options }
+        );
       case 'start':
       case 'start_round':
       case 'room.start':

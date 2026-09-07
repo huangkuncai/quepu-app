@@ -24,6 +24,8 @@ void main() {
     'leave_room',
     'ready',
     'increase_zeng',
+    'choose_piao',
+    'resolve_flower',
     'begin_playing',
     'settle_round',
     'next_round',
