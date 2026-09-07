@@ -8,6 +8,7 @@ import {
   drawSusongLiveTile,
   drawSusongReplacementTile,
   getSusongDiscardReactionCandidates,
+  getSusongWinningHand,
   isSusongReplacementFlower,
   publicSusongWallState,
   verifySusongSeedCommitment
@@ -126,7 +127,63 @@ test('server-owned hands generate peng, exposed-kong and next-seat chi candidate
   assert.deepEqual(getSusongDiscardReactionCandidates({ hand, tileId: 'red_dragon-1' }), []);
 });
 
-function susongRoom(id = 'wall-room', piao = 'optional') {
+test('server recognizes standard, discard-completed and seven-pairs winning hands', () => {
+  const standard = [
+    'characters-1-1', 'characters-2-1', 'characters-3-1',
+    'bamboo-1-1', 'bamboo-2-1', 'bamboo-3-1',
+    'dots-4-1', 'dots-5-1', 'dots-6-1',
+    'east-1', 'east-2', 'east-3',
+    'north-1', 'north-2'
+  ];
+  assert.deepEqual(getSusongWinningHand({ hand: standard }), {
+    winning: true,
+    kind: 'standard',
+    patterns: []
+  });
+  assert.equal(getSusongWinningHand({
+    hand: standard.slice(0, -1),
+    claimedTileId: 'north-2'
+  }).winning, true);
+  assert.equal(getSusongWinningHand({ hand: standard.slice(0, -1) }).winning, false);
+  assert.equal(getSusongWinningHand({ hand: standard.slice(3), meldCount: 1 }).winning, true);
+  const sevenPairs = [
+    'characters-1-1', 'characters-1-2', 'characters-3-1', 'characters-3-2',
+    'bamboo-2-1', 'bamboo-2-2', 'bamboo-7-1', 'bamboo-7-2',
+    'dots-4-1', 'dots-4-2', 'dots-9-1', 'dots-9-2', 'west-1', 'west-2'
+  ];
+  assert.deepEqual(getSusongWinningHand({ hand: sevenPairs }), {
+    winning: true,
+    kind: 'seven_pairs',
+    patterns: ['seven_pairs']
+  });
+});
+
+test('server promotes unambiguous pure, mixed and all-triplets special hands', () => {
+  const pure = [
+    'characters-1-1', 'characters-1-2', 'characters-1-3',
+    'characters-2-1', 'characters-3-1', 'characters-4-1',
+    'characters-3-2', 'characters-4-2', 'characters-5-1',
+    'characters-6-1', 'characters-7-1', 'characters-8-1',
+    'characters-9-1', 'characters-9-2'
+  ];
+  assert.deepEqual(getSusongWinningHand({ hand: pure }).patterns, ['pure_one_suit']);
+  const mixed = [
+    'characters-1-1', 'characters-2-1', 'characters-3-1',
+    'characters-4-1', 'characters-5-1', 'characters-6-1',
+    'characters-7-1', 'characters-8-1', 'characters-9-1',
+    'east-1', 'east-2', 'east-3', 'north-1', 'north-2'
+  ];
+  assert.deepEqual(getSusongWinningHand({ hand: mixed }).patterns, ['mixed_one_suit']);
+  const triplets = [
+    'characters-1-1', 'characters-1-2', 'characters-1-3',
+    'bamboo-2-1', 'bamboo-2-2', 'bamboo-2-3',
+    'dots-3-1', 'dots-3-2', 'dots-3-3',
+    'east-1', 'east-2', 'east-3', 'north-1', 'north-2'
+  ];
+  assert.deepEqual(getSusongWinningHand({ hand: triplets }).patterns, ['all_triplets']);
+});
+
+function susongRoom(id = 'wall-room', piao = 'optional', config = {}) {
   const room = new Room({
     id,
     ownerId: 'A',
@@ -139,7 +196,8 @@ function susongRoom(id = 'wall-room', piao = 'optional') {
         scoreTiers: [1, 2, 3, 4],
         zeng: 1,
         piao,
-        forcedHu: false
+        forcedHu: false,
+        ...config
       }
     }
   });
@@ -419,6 +477,128 @@ test('an exposed kong replacement flower is resolved continuously from the tail'
   assert.equal(room.currentRound.flowerStates.D.drawnFlowers, 1);
   assert.equal(room.currentRound.flowerStates.D.countedFlowers, flowerCountBefore + 2);
   assert.equal(room.snapshot({ viewerId: 'D' }).round.privateHand.length, 11);
+  assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
+});
+
+test('a discard win is recognized and settled entirely from authoritative room state', () => {
+  const room = susongRoom('discard-win-room');
+  room.dealSusongOpeningRound({ seed: 'e68'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  room.applyAction('A', { action: 'discard', args: { tileId: 'dots-6-3' } });
+  room.applyAction('B', 'pass');
+  room.applyAction('C', 'pass');
+  assert.deepEqual(room.snapshot({ viewerId: 'D' }).round.availableReactions, ['pass', 'hu']);
+  assert.throws(
+    () => room.applyAction('D', { action: 'hu', args: { tier: 'one_bamboo', score: 999 } }),
+    error => error.code === 'INVALID_ACTION'
+  );
+  const result = room.applyAction('D', 'hu');
+
+  assert.equal(result.event.type, 'ROUND_SETTLING');
+  assert.equal(room.status, 'settling');
+  assert.deepEqual(result.settlement.winnerIds, ['D']);
+  assert.equal(result.settlement.outcome, 'discard');
+  assert.equal(result.settlement.discarderId, 'A');
+  assert.deepEqual(result.settlement.deltaByPlayer, { A: -1, B: 0, C: 0, D: 1 });
+  assert.deepEqual(room.snapshot().scores, { A: -1, B: 0, C: 0, D: 1 });
+  assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
+});
+
+test('forced-hu rooms settle every eligible discard winner without waiting for client input', () => {
+  const room = susongRoom('forced-discard-win-room', 'optional', { forcedHu: true });
+  room.dealSusongOpeningRound({ seed: 'e68'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  const versionBefore = room.version;
+  const result = room.applyAction('A', { action: 'discard', args: { tileId: 'dots-6-3' } });
+
+  assert.equal(result.event.type, 'ROUND_SETTLING');
+  assert.equal(room.version, versionBefore + 2);
+  assert.deepEqual(room.events.slice(-2).map(event => event.type), [
+    'SUSONG_TILE_DISCARDED', 'ROUND_SETTLING'
+  ]);
+  assert.deepEqual(result.settlement.winnerIds, ['D']);
+  assert.deepEqual(result.settlement.deltaByPlayer, { A: -1, B: 0, C: 0, D: 1 });
+});
+
+test('RoomActor persists an automatic forced-hu discard and settlement atomically', async () => {
+  const store = createMemoryGameStore();
+  const room = susongRoom('actor-forced-win-room', 'optional', { forcedHu: true });
+  const actor = new RoomActor({
+    room,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'forced-win-actor-1',
+    snapshotEvery: 100
+  });
+  await actor.dispatch({
+    type: 'deal_susong_round',
+    commandId: 'actor-forced-win-deal',
+    payload: { seed: 'e68'.padStart(64, '0'), dealerSeat: 0 }
+  }, { actorId: 'system:susong-rule-engine', actorRole: 'SYSTEM' });
+  await actor.dispatch({
+    type: 'begin_playing',
+    commandId: 'actor-forced-win-begin',
+    payload: {}
+  }, { actorId: 'A' });
+  const result = await actor.dispatch({
+    type: 'action',
+    commandId: 'actor-forced-win-discard',
+    payload: { playerId: 'A', action: { action: 'discard', args: { tileId: 'dots-6-3' } } }
+  }, { actorId: 'A' });
+
+  assert.equal(result.event.type, 'ROUND_SETTLING');
+  assert.equal(store.eventStore.getSnapshot(room.id).status, 'settling');
+  const restarted = new RoomActor({
+    roomId: room.id,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'forced-win-actor-2',
+    snapshotEvery: 100
+  });
+  await restarted.recover();
+  assert.deepEqual(restarted.snapshot(), actor.snapshot());
+});
+
+test('a legal self-draw is privately projected and settled without client-authored facts', () => {
+  const room = susongRoom('self-draw-room');
+  room.dealSusongOpeningRound({ seed: '762'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  let winnerId = null;
+  for (let step = 0; step < 250 && room.status === 'playing'; step += 1) {
+    const playerId = room.turn;
+    if (room.currentRound.turnPhase === 'reaction') {
+      room.applyAction(playerId, 'pass', { commandId: `self-draw-pass-${step}` });
+    } else if (room.currentRound.turnPhase === 'draw') {
+      room.applyAction(playerId, 'draw', { commandId: `self-draw-draw-${step}` });
+    } else {
+      const snapshot = room.snapshot({ viewerId: playerId });
+      if (snapshot.round.availableActions.includes('self_draw')) {
+        winnerId = playerId;
+        break;
+      }
+      const tileId = snapshot.round.privateHand.find(value => !isSusongReplacementFlower(value));
+      room.applyAction(playerId, { action: 'discard', args: { tileId } }, {
+        commandId: `self-draw-discard-${step}`
+      });
+    }
+  }
+  assert.equal(winnerId, 'D');
+  assert.equal('availableActions' in room.snapshot({ viewerId: 'A' }).round, false);
+  const result = room.applyAction(winnerId, 'self_draw');
+
+  assert.equal(result.event.type, 'ROUND_SETTLING');
+  assert.deepEqual(result.settlement.winnerIds, ['D']);
+  assert.equal(result.settlement.outcome, 'self_draw');
+  assert.deepEqual(result.settlement.deltaByPlayer, { A: -2, B: -2, C: -2, D: 6 });
   assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
 });
 

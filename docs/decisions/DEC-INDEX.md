@@ -81,7 +81,7 @@
 | 项目 | 结果 | 日期 | 证据/备注 |
 | --- | --- | --- | --- |
 | 实际工作目录 | `宿松app.migrated-backup`；当前分支 `codex/be-101-protocol`，尚无提交 | 2026-08-28 | 当前工作区检查；DEC-001 已确认目录，分支/提交策略仍需补充 |
-| `npm test` | 154 个 Node 测试通过 | 2026-09-07 | `npm run check` 通过；包含 BE-201～207、BE-301～305 牌墙/连续补花/权威摸出牌/过牌响应窗口/服务端碰牌与明杠/碰杠花数/杠后补牌/14 张流局/牌守恒/私密持久化/玩家脱敏、客服、deadline、多实例收敛、真实 adapter 契约、协议和故障矩阵；`verify:real` 与 `verify:multi-instance` 已覆盖真实本地 PG/Redis，生产滚动重启/故障演练仍待 |
+| `npm test` | 160 个 Node 测试通过 | 2026-09-07 | `npm run check` 通过；包含 BE-201～207、BE-301～306 牌墙/连续补花/权威摸出牌/过牌响应窗口/服务端碰牌与明杠/碰杠花数/杠后补牌/标准胡、七对、清混一色与碰碰胡/点炮自摸/必胡自动结算/14 张流局/牌守恒/私密持久化/玩家脱敏、客服、deadline、多实例收敛、真实 adapter 契约、协议和故障矩阵；`verify:real` 与 `verify:multi-instance` 已覆盖真实本地 PG/Redis，生产滚动重启/故障演练仍待 |
 | 服务端启动 | `src/server.js` 可启动 WebSocket 8787（内存骨架） | 2026-08-28 | 仅开发/演示环境 |
 | 数据和认证 | PostgreSQL migrations、Redis Compose/health、repository contract/MemoryRepository、开发期 session/Auth 和审计接口已建立；正式 PG/Redis/外部 Auth 未接入 | 2026-08-28 | 单进程/内存实现；不得开放真实牌局/真实扣费 |
 | 客户端 | `clients/dart_protocol` 协议/连接核心、扩展命令同步、原生 `dart:io` `IoWebSocketTransport`、四客户端 fake 夹具和 `SupportApi`，以及 `clients/flutter_app` Flutter mock 壳通过本机验证 | 2026-09-04 | `dart analyze`、协议/IO/multi-client/support 脚本、`flutter test`（15/15）、`dart analyze`；房间桌面、命令 outbox、维护/版本冲突/前台恢复 UI、客服 REST 注入已接入；尚无三端真机安装包 |
@@ -120,6 +120,7 @@
 | 2026-09-07 | AI/DEV | 出牌后三家顺序响应/过牌、超时截止字段和稀疏快照事件尾恢复完成；服务端候选器可识别碰/明杠/下家吃，但未签字优先级前不执行候选动作 | BE-304、BE-307 | `be-303-susong-wall.test.js`、`npm run check`（Node 148/148） |
 | 2026-09-07 | AI/DEV | 唯一合法碰牌按玩家私有投影并服务端执行：私牌减两张、最新弃牌转入公开牌组、碰牌者获得出牌权；seed/history 守恒、篡改拒绝、原子 checkpoint 和重启恢复通过 | BE-304、BE-307 | `be-303-susong-wall.test.js`、`npm run check`（Node 150/150）；胡/杠/吃优先级仍待 |
 | 2026-09-07 | AI/DEV | 服务端权威明杠及杠后补牌完成：私牌减三张、弃牌生成四张公开牌组，从候选尾部补牌；碰风累计 1 花，普通/风牌明杠分别累计 1/2 花，补到花按飘状态打花或连续补花，恢复时校验牌序、守恒和私密操作历史 | BE-304、BE-305、BE-307 | `be-301-susong-rule.test.js`、`be-303-susong-wall.test.js`、`npm run check`（Node 154/154）；补牌方向 provisional，胡/吃/暗杠/巴杠优先级仍待 |
+| 2026-09-07 | AI/DEV | 标准四组一对、七对、清一色、混一色与碰碰胡的服务端识别、点炮/自摸候选投影、胡优先的一炮多响收集、必胡自动结算和 RoomActor 双事件原子恢复完成；同时修复连续补花可能撞入保留 14 张的预判 | BE-304、BE-306、BE-307 | `be-303-susong-wall.test.js`、`npm run check`（Node 160/160）；三西识别、过圈和其余特殊胡型仍 fail-closed |
 
 ## 8. 变更记录
 
@@ -152,6 +153,7 @@
 | 0.1.25 | 2026-09-07 | 登记三家顺序响应/过牌窗口、重启恢复与服务端碰/明杠/吃候选识别 | AI/DEV |
 | 0.1.26 | 2026-09-07 | 登记服务端权威碰牌、按玩家私有候选投影、公开牌组、操作历史守恒与原子恢复 | AI/DEV |
 | 0.1.27 | 2026-09-07 | 登记服务端权威明杠、普通/风牌杠花、杠后尾部补牌、补到花连续处理及确定性恢复 | AI/DEV |
+| 0.1.28 | 2026-09-07 | 登记服务端标准胡/七对/清混一色/碰碰胡、自摸/点炮、一炮多响收集、必胡自动结算、actor 原子恢复和补花保留墙边界修复 | AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 

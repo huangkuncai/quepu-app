@@ -103,6 +103,52 @@ export function getSusongDiscardReactionCandidates({ hand, tileId, isNextPlayer 
 }
 
 /**
+ * Recognize a server-owned concealed hand. This slice deliberately supports
+ * the ordinary four-groups-and-a-pair shape plus seven pairs; other named
+ * one-bamboo patterns remain closed until their exact legacy definitions are
+ * signed.
+ */
+export function getSusongWinningHand({
+  hand,
+  claimedTileId = null,
+  meldCount = 0,
+  melds = []
+} = {}) {
+  if (!Array.isArray(hand)) throw new TypeError('hand must be an array');
+  if (!Array.isArray(melds)) throw new TypeError('melds must be an array');
+  const effectiveMeldCount = melds.length > 0 ? melds.length : meldCount;
+  if (!Number.isInteger(effectiveMeldCount) || effectiveMeldCount < 0 || effectiveMeldCount > 4) {
+    throw new TypeError('meldCount must be an integer from 0 through 4');
+  }
+  const tileIds = [...hand, ...(claimedTileId === null ? [] : [claimedTileId])];
+  const expectedTileCount = 14 - effectiveMeldCount * 3;
+  if (tileIds.length !== expectedTileCount || tileIds.some(isSusongReplacementFlower)) {
+    return deepFreeze({ winning: false, kind: null, patterns: [] });
+  }
+  let faces;
+  try {
+    faces = tileIds.map(susongTileFace);
+  } catch {
+    return deepFreeze({ winning: false, kind: null, patterns: [] });
+  }
+  const counts = faceCounts(faces);
+  if (effectiveMeldCount === 0 && counts.size === 7 && [...counts.values()].every(count => count === 2)) {
+    return deepFreeze({ winning: true, kind: 'seven_pairs', patterns: ['seven_pairs'] });
+  }
+  if (isStandardWinningCounts(counts, 4 - effectiveMeldCount)) {
+    const publicTileIds = melds.flatMap(meld => Array.isArray(meld?.tileIds) ? meld.tileIds : []);
+    const allFaces = [...faces, ...publicTileIds.map(susongTileFace)];
+    const patterns = suitedPattern(allFaces);
+    if (melds.every(meld => meld?.action !== 'chi')
+      && isTripletWinningCounts(counts, 4 - effectiveMeldCount)) {
+      patterns.push('all_triplets');
+    }
+    return deepFreeze({ winning: true, kind: 'standard', patterns });
+  }
+  return deepFreeze({ winning: false, kind: null, patterns: [] });
+}
+
+/**
  * Shuffle a fresh wall. The seed is private round state; only its commitment
  * may be sent to clients until the round is finished.
  */
@@ -296,6 +342,81 @@ function normalizeWall(wall) {
   }
   if (new Set(wall.tileIds).size !== 144) throw new TypeError('wall tile IDs must be unique');
   return [...wall.tileIds];
+}
+
+function faceCounts(faces) {
+  const counts = new Map();
+  for (const face of faces) counts.set(face, (counts.get(face) || 0) + 1);
+  return counts;
+}
+
+function isStandardWinningCounts(counts, groupCount) {
+  for (const [face, count] of counts) {
+    if (count < 2) continue;
+    const next = new Map(counts);
+    changeFaceCount(next, face, -2);
+    if (consumeSusongGroups(next, groupCount)) return true;
+  }
+  return false;
+}
+
+function isTripletWinningCounts(counts, groupCount) {
+  for (const [face, count] of counts) {
+    if (count < 2) continue;
+    const rest = new Map(counts);
+    changeFaceCount(rest, face, -2);
+    if ([...rest.values()].every(value => value === 3)
+      && [...rest.values()].reduce((sum, value) => sum + value, 0) === groupCount * 3) return true;
+  }
+  return false;
+}
+
+function suitedPattern(faces) {
+  const suits = new Set();
+  let hasWind = false;
+  for (const face of faces) {
+    const suited = /^(characters|bamboo|dots)-[1-9]$/.exec(face);
+    if (suited) suits.add(suited[1]);
+    else hasWind = true;
+  }
+  if (suits.size !== 1) return [];
+  return [hasWind ? 'mixed_one_suit' : 'pure_one_suit'];
+}
+
+function consumeSusongGroups(counts, groupsRemaining) {
+  if (groupsRemaining === 0) return counts.size === 0;
+  const face = [...counts.keys()].sort(compareSusongFaces)[0];
+  if (!face) return false;
+  if ((counts.get(face) || 0) >= 3) {
+    const triplet = new Map(counts);
+    changeFaceCount(triplet, face, -3);
+    if (consumeSusongGroups(triplet, groupsRemaining - 1)) return true;
+  }
+  const suited = /^(characters|bamboo|dots)-([1-9])$/.exec(face);
+  if (!suited || Number(suited[2]) > 7) return false;
+  const sequence = [0, 1, 2].map(offset => `${suited[1]}-${Number(suited[2]) + offset}`);
+  if (sequence.every(candidate => (counts.get(candidate) || 0) > 0)) {
+    const rest = new Map(counts);
+    for (const candidate of sequence) changeFaceCount(rest, candidate, -1);
+    if (consumeSusongGroups(rest, groupsRemaining - 1)) return true;
+  }
+  return false;
+}
+
+function changeFaceCount(counts, face, delta) {
+  const next = (counts.get(face) || 0) + delta;
+  if (next < 0) throw new TypeError('tile face count cannot be negative');
+  if (next === 0) counts.delete(face);
+  else counts.set(face, next);
+}
+
+function compareSusongFaces(left, right) {
+  const order = { characters: 0, bamboo: 1, dots: 2, east: 3, south: 4, west: 5, north: 6 };
+  const [leftKind, leftRank = '0'] = left.split('-');
+  const [rightKind, rightRank = '0'] = right.split('-');
+  return (order[leftKind] ?? 99) - (order[rightKind] ?? 99)
+    || Number(leftRank) - Number(rightRank)
+    || left.localeCompare(right);
 }
 
 function deepFreeze(value) {

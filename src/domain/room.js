@@ -2,11 +2,13 @@ import { createHash, randomInt, randomUUID } from 'node:crypto';
 import { AppError } from '../shared/errors.js';
 import {
   createSusongFlowerState,
+  evaluateSusongWin,
   flowerUnitsForMeld,
   recordSusongFlowerDraw,
   recordSusongMeldFlowers,
   resolveSusongFlowers
 } from './rules/susong.js';
+import { scoreSusongRound } from './rules/susong-scoring.js';
 import {
   buildSusongTileSet,
   createSusongShuffledWall,
@@ -14,6 +16,7 @@ import {
   drawSusongLiveTile,
   drawSusongReplacementTile,
   getSusongDiscardReactionCandidates,
+  getSusongWinningHand,
   isSusongReplacementFlower,
   publicSusongWallState,
   susongTileFace,
@@ -1189,6 +1192,10 @@ export class Room {
     if (!pending || this.currentRound.turnPhase !== 'reaction' || this.turn !== playerId) return [];
     const actions = ['pass'];
     const candidates = this._susongReactionCandidates(playerId);
+    if (this._susongWinningCandidate(playerId, 'discard')) {
+      if (this.ruleSnapshot.config?.forcedHu === true) return ['hu'];
+      actions.push('hu');
+    }
     const pengPlayers = pending.responderOrder.filter(id => this._susongReactionCandidates(id)
       .some(candidate => candidate.action === 'peng'));
     // Until the legacy priority rule is signed, execute only an unambiguous
@@ -1199,6 +1206,82 @@ export class Room {
       actions.push('peng');
     }
     return actions;
+  }
+
+  _susongWinningCandidate(playerId, winSource) {
+    const hand = this._privateRoundState?.handsByPlayer?.[playerId];
+    const flowerState = this.currentRound?.flowerStates?.[playerId];
+    const melds = this.currentRound?.meldsByPlayer?.[playerId] ?? [];
+    const meldCount = melds.length;
+    if (!Array.isArray(hand) || !flowerState) return null;
+    const lastTurnAction = this._privateRoundState.turnHistory.at(-1)?.action ?? null;
+    if (winSource === 'self_draw' && lastTurnAction
+      && !['draw', 'exposed_kong'].includes(lastTurnAction)) return null;
+    const claimedTileId = winSource === 'discard'
+      ? this.currentRound?.pendingReaction?.tileId ?? null
+      : null;
+    const shape = getSusongWinningHand({ hand, claimedTileId, meldCount, melds });
+    if (!shape.winning) return null;
+    const patterns = [...shape.patterns];
+    if (winSource === 'self_draw' && this._privateRoundState.turnHistory.length === 0) {
+      patterns.push('heavenly_win');
+    }
+    const gangWinCount = winSource === 'self_draw' && lastTurnAction === 'exposed_kong' ? 1 : 0;
+    const decision = evaluateSusongWin({ flowerState, winSource, patterns, gangWinCount });
+    return decision.allowed ? { playerId, patterns, gangWinCount } : null;
+  }
+
+  _settleSusongWin({ outcome, winners, discarderId = null }, command) {
+    const playerIds = this._orderedPlayers().map(player => player.id);
+    let settlement;
+    try {
+      settlement = scoreSusongRound({
+        config: this.ruleSnapshot.config,
+        playerIds,
+        outcome,
+        discarderId,
+        winners: winners.map(winner => ({
+          winnerId: winner.playerId,
+          flowerState: clone(this.currentRound.flowerStates[winner.playerId]),
+          patterns: [...winner.patterns],
+          gangWinCount: winner.gangWinCount
+        })),
+        zengByPlayer: Object.fromEntries(this.zengByPlayer),
+        // The identifying condition for Sanxi is still unsigned. Keep this
+        // draft gameplay slice at no Sanxi instead of accepting client facts.
+        sanxiPairs: []
+      });
+    } catch (cause) {
+      throw new AppError('INVALID_ACTION', { cause });
+    }
+    for (const [playerId, delta] of Object.entries(settlement.deltaByPlayer)) {
+      this.scores.set(playerId, (this.scores.get(playerId) || 0) + delta);
+    }
+    this._setStatus(ROOM_STATUS.SETTLING);
+    this.currentRound.status = ROOM_STATUS.SETTLING;
+    this.currentRound.settlement = clone(settlement);
+    this.currentRound.endedAt = iso(this.clock);
+    this.currentRound.turnPhase = null;
+    this.currentRound.pendingReaction = null;
+    this.currentRound.turnStartedAt = null;
+    this.currentRound.turnDeadlineAt = null;
+    this.turn = null;
+    this.turnPlayerId = null;
+    const event = this._append('ROUND_SETTLING', {
+      matchId: this.matchId,
+      roundId: this.roundId,
+      roundNumber: this.roundNumber,
+      status: this.status,
+      settlement: clone(settlement),
+      scoreAuthority: 'server',
+      scores: Object.fromEntries(this.scores),
+      reason: outcome === 'self_draw' ? 'SELF_DRAW' : 'DISCARD_WIN'
+    }, command);
+    return this._result(event, {
+      matchId: this.matchId,
+      roundId: this.roundId,
+      settlement: clone(settlement)
+    });
   }
 
   _canResolveSusongExposedKong(playerId) {
@@ -1215,6 +1298,20 @@ export class Room {
         wall = [...draw.remainingWall];
       }
       return true;
+    } catch {
+      return false;
+    }
+  }
+
+  _canResolveSusongFlowerReplacements(remainingWall) {
+    if (!Array.isArray(remainingWall)) return false;
+    let wall = [...remainingWall];
+    try {
+      while (true) {
+        const draw = drawSusongReplacementTile(wall);
+        if (!isSusongReplacementFlower(draw.tileId)) return true;
+        wall = [...draw.remainingWall];
+      }
     } catch {
       return false;
     }
@@ -1334,6 +1431,16 @@ export class Room {
     const complete = pending.respondedPlayerIds.length === pending.responderOrder.length;
     let resolution = null;
     if (complete) {
+      const winners = pending.responderOrder
+        .filter(id => pending.responsesByPlayer[id] === 'hu')
+        .map(id => this._susongWinningCandidate(id, 'discard'));
+      if (winners.length > 0) {
+        return this._settleSusongWin({
+          outcome: 'discard',
+          winners,
+          discarderId: pending.discarderId
+        }, command);
+      }
       const claimantId = pending.responderOrder.find(id =>
         ['exposed_kong', 'peng'].includes(pending.responsesByPlayer[id]));
       if (claimantId) {
@@ -1409,10 +1516,17 @@ export class Room {
     if (!this._privateRoundState || !this.currentRound?.wall) throw new AppError('INVALID_ACTION');
     const phase = this.currentRound.turnPhase;
     if (phase === 'reaction') {
-      if (!['pass', 'peng', 'exposed_kong'].includes(action) || (args && Object.keys(args).length > 0)) {
+      if (!['pass', 'hu', 'peng', 'exposed_kong'].includes(action)
+        || (args && Object.keys(args).length > 0)) {
         throw new AppError('INVALID_ACTION');
       }
       return this._respondSusongReaction(playerId, action, command);
+    }
+    if (action === 'self_draw') {
+      if (phase !== 'discard' || (args && Object.keys(args).length > 0)) throw new AppError('INVALID_ACTION');
+      const winner = this._susongWinningCandidate(playerId, 'self_draw');
+      if (!winner) throw new AppError('INVALID_ACTION');
+      return this._settleSusongWin({ outcome: 'self_draw', winners: [winner] }, command);
     }
     if (!['draw', 'discard'].includes(action)) throw new AppError('INVALID_ACTION');
     if (action !== phase) throw new AppError('INVALID_ACTION', {
@@ -1438,7 +1552,8 @@ export class Room {
       const drawnFlowerState = isSusongReplacementFlower(draw.tileId)
         ? recordSusongFlowerDraw(this.currentRound.flowerStates[playerId], 1)
         : null;
-      if (drawnFlowerState?.status !== 'piao' && draw.remainingWall.length <= 14) {
+      if (drawnFlowerState && drawnFlowerState.status !== 'piao'
+        && !this._canResolveSusongFlowerReplacements(draw.remainingWall)) {
         return this._settleSusongWallDraw(command);
       }
       privateState.remainingWall = [...draw.remainingWall];
@@ -1529,6 +1644,14 @@ export class Room {
       turnStartedAt: this.currentRound.turnStartedAt,
       turnDeadlineAt: this.currentRound.turnDeadlineAt
     }, command);
+    if (this.ruleSnapshot.config?.forcedHu === true) {
+      const winners = this.currentRound.pendingReaction.responderOrder
+        .map(id => this._susongWinningCandidate(id, 'discard'))
+        .filter(Boolean);
+      if (winners.length > 0) {
+        return this._settleSusongWin({ outcome: 'discard', winners, discarderId: playerId }, command);
+      }
+    }
     return this._result(event, {
       playerId,
       action,
@@ -1928,6 +2051,12 @@ export class Room {
     if (privateHand) result.round.privateHand = privateHand;
     if (result.round && id && id === this.turn && this.currentRound?.turnPhase === 'reaction') {
       result.round.availableReactions = this._susongAvailableReactionActions(id);
+    }
+    if (result.round && id && id === this.turn && this.currentRound?.turnPhase === 'discard') {
+      result.round.availableActions = [
+        'discard',
+        ...(this._susongWinningCandidate(id, 'self_draw') ? ['self_draw'] : [])
+      ];
     }
     return result;
   }
