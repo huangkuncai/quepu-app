@@ -282,6 +282,96 @@ test('Susong turns enforce server-owned draw, hand ownership and public discards
   assert.equal(JSON.stringify(room.snapshot()).includes('turnHistory'), false);
 });
 
+test('an unambiguous peng is private-player projected and resolved by the server', () => {
+  const pengSeed = '1'.padStart(64, '0');
+  const room = susongRoom('peng-room');
+  room.dealSusongOpeningRound({ seed: pengSeed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  const discardedTileId = 'characters-8-2';
+  assert.ok(room.snapshot({ viewerId: 'A' }).round.privateHand.includes(discardedTileId));
+  room.applyAction('A', { action: 'discard', args: { tileId: discardedTileId } });
+
+  assert.deepEqual(room.snapshot({ viewerId: 'B' }).round.availableReactions, ['pass']);
+  assert.throws(
+    () => room.applyAction('B', 'peng'),
+    error => error.code === 'INVALID_ACTION'
+  );
+  room.applyAction('B', 'pass');
+  assert.deepEqual(room.snapshot({ viewerId: 'C' }).round.availableReactions, ['pass', 'peng']);
+  assert.equal('availableReactions' in room.snapshot({ viewerId: 'D' }).round, false);
+  const claimed = room.applyAction('C', 'peng');
+  assert.equal(claimed.event.type, 'SUSONG_REACTION_CLAIMED');
+  assert.equal(room.turn, 'D');
+  assert.equal(room.currentRound.turnPhase, 'reaction');
+
+  const resolved = room.applyAction('D', 'pass');
+  assert.equal(resolved.resolution.action, 'peng');
+  assert.equal(resolved.resolution.playerId, 'C');
+  assert.equal(room.turn, 'C');
+  assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.equal(room.currentRound.pendingReaction, null);
+  assert.deepEqual(room.currentRound.discardsByPlayer.A, []);
+  assert.equal(room.currentRound.meldsByPlayer.C.length, 1);
+  assert.equal(room.currentRound.meldsByPlayer.C[0].tileIds.length, 3);
+  assert.equal(room.snapshot({ viewerId: 'C' }).round.privateHand.length, 11);
+  assert.equal('availableReactions' in room.snapshot({ viewerId: 'C' }).round, false);
+
+  const persisted = room.persistenceSnapshot();
+  assert.deepEqual(Room.fromSnapshot(persisted).persistenceSnapshot(), persisted);
+  const tampered = structuredClone(persisted);
+  delete tampered.snapshotHash;
+  tampered.round.meldsByPlayer.C[0].tileIds[0] = 'dots-1-1';
+  assert.throws(
+    () => Room.fromSnapshot(tampered),
+    error => error.code === 'INVALID_ACTION'
+  );
+});
+
+test('RoomActor atomically checkpoints a resolved peng with its private hand mutation', async () => {
+  const store = createMemoryGameStore();
+  const room = susongRoom('actor-peng-room');
+  const actor = new RoomActor({
+    room,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'peng-actor-1',
+    snapshotEvery: 100
+  });
+  await actor.dispatch({
+    type: 'deal_susong_round',
+    commandId: 'actor-peng-deal',
+    payload: { seed: '1'.padStart(64, '0'), dealerSeat: 0 }
+  }, { actorId: 'system:susong-rule-engine', actorRole: 'SYSTEM' });
+  await actor.dispatch({ type: 'begin_playing', commandId: 'actor-peng-begin', payload: {} }, { actorId: 'A' });
+  await actor.dispatch({
+    type: 'action',
+    commandId: 'actor-peng-discard',
+    payload: { playerId: 'A', action: { action: 'discard', args: { tileId: 'characters-8-2' } } }
+  }, { actorId: 'A' });
+  for (const [playerId, action] of [['B', 'pass'], ['C', 'peng'], ['D', 'pass']]) {
+    await actor.dispatch({
+      type: 'action',
+      commandId: `actor-peng-${playerId}`,
+      payload: { playerId, action }
+    }, { actorId: playerId });
+  }
+  const durable = store.eventStore.getSnapshot(room.id);
+  assert.equal(durable.round.meldsByPlayer.C.length, 1);
+  assert.equal(durable.privateRoundState.handsByPlayer.C.length, 11);
+  const restarted = new RoomActor({
+    roomId: room.id,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'peng-actor-2',
+    snapshotEvery: 100
+  });
+  await restarted.recover();
+  assert.deepEqual(restarted.snapshot({ viewerId: 'C' }), actor.snapshot({ viewerId: 'C' }));
+});
+
 test('non-piao live flower is replaced server-side without exposing either private tile', () => {
   const flowerSeed = '17'.padStart(64, '0');
   const room = susongRoom('turn-flower-replace-room');

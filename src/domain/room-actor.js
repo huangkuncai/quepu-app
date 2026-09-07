@@ -560,7 +560,9 @@ export class RoomActor {
           'SUSONG_PIAO_CHOSEN',
           'SUSONG_FLOWER_RESOLVED',
           'SUSONG_TILE_DRAWN',
-          'SUSONG_TILE_DISCARDED'
+          'SUSONG_TILE_DISCARDED',
+          'SUSONG_REACTION_PASSED',
+          'SUSONG_REACTION_CLAIMED'
         ].includes(event.type));
         const shouldSnapshot = (events.length > 0 && (
           containsPrivateStateChange

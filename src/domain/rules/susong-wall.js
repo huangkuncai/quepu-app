@@ -11,6 +11,7 @@ export const SUSONG_REPLACEMENT_DRAW_POLICY = 'tail-v1-provisional';
 const SUITS = Object.freeze(['characters', 'bamboo', 'dots']);
 const WINDS = Object.freeze(['east', 'south', 'west', 'north']);
 const DRAGONS = Object.freeze(['red_dragon', 'green_dragon', 'white_dragon']);
+let tileById;
 
 /** Build the physical 144-tile candidate wall with stable, unique tile IDs. */
 export function buildSusongTileSet() {
@@ -61,7 +62,8 @@ export function isSusongReplacementFlower(tileId) {
 /** Return the logical face shared by the physical copies of one tile. */
 export function susongTileFace(tileId) {
   const id = String(tileId ?? '');
-  const tile = buildSusongTileSet().find(candidate => candidate.id === id);
+  tileById ??= new Map(buildSusongTileSet().map(tile => [tile.id, tile]));
+  const tile = tileById.get(id);
   if (!tile) throw new TypeError('tileId must identify a Susong tile');
   if (tile.category === 'suited') return `${tile.suit}-${tile.rank}`;
   return tile.value;
