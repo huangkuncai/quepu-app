@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:susong_protocol_client/client.dart';
@@ -7,6 +8,7 @@ import 'package:susong_protocol_client/protocol.dart';
 import 'package:susong_protocol_client/support.dart';
 
 import 'src/fake_transport.dart';
+import 'src/runtime_config.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,14 +16,20 @@ Future<void> main() async {
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
-  runApp(const SusongApp());
+  runApp(SusongApp(runtimeConfig: AppRuntimeConfig.fromEnvironment()));
 }
 
 class SusongApp extends StatefulWidget {
-  const SusongApp({super.key, this.transport, this.supportApi});
+  const SusongApp({
+    super.key,
+    this.transport,
+    this.supportApi,
+    this.runtimeConfig,
+  });
 
   final ProtocolTransport? transport;
   final SupportApi? supportApi;
+  final AppRuntimeConfig? runtimeConfig;
 
   @override
   State<SusongApp> createState() => _SusongAppState();
@@ -30,16 +38,22 @@ class SusongApp extends StatefulWidget {
 class _SusongAppState extends State<SusongApp> with WidgetsBindingObserver {
   late final ProtocolTransport _transport;
   late final ClientSessionController _client;
+  late final AppRuntimeConfig _runtimeConfig;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _transport = widget.transport ?? FakeTransport();
+    _runtimeConfig = widget.runtimeConfig ?? AppRuntimeConfig.parse();
+    _transport =
+        widget.transport ??
+        (_runtimeConfig.usesRemoteBackend
+            ? _runtimeConfig.createTransport()
+            : FakeTransport());
     _client = ClientSessionController(
       transport: _transport,
       deviceId: 'poc-device',
-      platform: 'web',
+      platform: defaultTargetPlatform.name,
     );
   }
 
@@ -92,7 +106,11 @@ class _SusongAppState extends State<SusongApp> with WidgetsBindingObserver {
         builder: (context, state) {
           final snapshot = state.data ?? _client.snapshot;
           if (!snapshot.isAuthenticated) {
-            return LoginPage(client: _client, snapshot: snapshot);
+            return LoginPage(
+              client: _client,
+              snapshot: snapshot,
+              backendLabel: _runtimeConfig.displayLabel,
+            );
           }
           return HomePage(
             client: _client,
@@ -106,10 +124,16 @@ class _SusongAppState extends State<SusongApp> with WidgetsBindingObserver {
 }
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({required this.client, required this.snapshot, super.key});
+  const LoginPage({
+    required this.client,
+    required this.snapshot,
+    required this.backendLabel,
+    super.key,
+  });
 
   final ClientSessionController client;
   final ClientSnapshot snapshot;
+  final String backendLabel;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -173,6 +197,16 @@ class _LoginPageState extends State<LoginPage> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              Text(
+                                widget.backendLabel,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Color(0xff4d6d64),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
                               Text(
                                 '账号登录',
                                 style: Theme.of(context).textTheme.headlineSmall

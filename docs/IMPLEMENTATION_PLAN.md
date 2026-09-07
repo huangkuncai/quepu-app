@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-07（CL-301 权威手牌、动作与公开牌桌状态，Node 168/168、Flutter 18/18）
+> 最近更新：2026-09-07（CL-201 可配置原生 WSS 运行时，Node 168/168、Flutter 21/21）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -279,9 +279,9 @@ I1 的目标不是“能打麻将”，而是先让所有后续模块使用同�
 - Node 质量门：`npm run lint`、`npm run typecheck`、`npm run validate:protocol`、`npm run validate:contracts`、`npm run validate:migrations`、`npm test`（当前 108 个测试）和组合命令 `npm run check` 均通过；`npm run scan:secrets` 与高危依赖审计通过；`npm run verify:real` 与 `npm run verify:multi-instance` 均在本地 Colima 的真实 PostgreSQL/Redis 上通过。
 - 安全/依赖门：`npm run scan:secrets` 通过，`npm audit --omit=dev --audit-level=high` 未发现高危漏洞。
 - 运行基线：`docker compose -f infra/docker-compose.dev.yml config --quiet` 通过；`npm start` 可在 `127.0.0.1:8787` 启动开发 WebSocket 服务。
-- 客户端协议/连接 POC：在 `clients/dart_protocol` 执行 `dart analyze`、`dart run tool/test.dart`、`dart run tool/io_transport_test.dart`、`dart run tool/multi_client_acceptance.dart` 和 `dart run tool/support_test.dart` 通过；`clients/flutter_app` 的 `flutter test`（18/18）和 `dart analyze` 通过，覆盖 envelope、协议主版本、扩展房间命令同步、重复/缺口同步检测、登录、命令 outbox、ACK/超时安全重试、断线重新鉴权、房间同步、维护/版本冲突/前台恢复、房间桌面座位/准备交互、服务端权威手牌/出牌/吃碰杠胡动作、公开弃牌/副露/花数/牌墙/回合倒计时和 SupportApi 注入表单。尚无 Android/iOS 真机签名安装包，鸿蒙暂缓。
+- 客户端协议/连接 POC：在 `clients/dart_protocol` 执行 `dart analyze`、`dart run tool/test.dart`、`dart run tool/io_transport_test.dart`、`dart run tool/multi_client_acceptance.dart` 和 `dart run tool/support_test.dart` 通过；`clients/flutter_app` 的 `flutter test`（21/21）、`dart analyze` 和 Android debug APK 构建通过，覆盖 envelope、协议主版本、扩展房间命令同步、重复/缺口同步检测、登录、命令 outbox、ACK/超时安全重试、断线重新鉴权、房间同步、维护/版本冲突/前台恢复、房间桌面座位/准备交互、服务端权威手牌/出牌/吃碰杠胡动作、公开弃牌/副露/花数/牌墙/回合倒计时、可配置原生 WSS 和 SupportApi 注入表单。尚无 Android/iOS 真机签名安装包，鸿蒙暂缓。
 - 数据边界：MemoryRepository 的必填 `expiresAt`、非法日期和时钟异常回归测试已补齐（BE-104 定向测试 7/7）；当前会话、房间、限流和指标仍是单进程内存实现。
-- 以上证据只证明开发/演示基线；Flutter 壳仍只连接 `FakeTransport`，不代表 ArkUI 工程、三端安装包、正式身份供应商、生产 PostgreSQL/Redis、多实例裁判或真实钻石账本已就绪。
+- 以上证据只证明开发/演示基线；Flutter 壳已具备原生 WSS 配置入口，但尚未留下真实服务四客户端和真机证据，不代表正式身份供应商、生产 PostgreSQL/Redis、多实例裁判或真实钻石账本已就绪。
 
 ### I2 已完成/进行中纵切（BE-201～BE-205、BE-206/QA-201，2026-08-29）
 
@@ -307,7 +307,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | BE-204 | Snapshot/delta reconnect | BE-202/203 | `lastRoomVersion`、snapshotHash、事件窗口、sync_required、重连宽限、显式服务端 deadline、presence overlay、PG/Redis adapter 装配、durable room inventory、deadline claim/lease | 丢包/乱序/重复/重启后同一时刻 hash 一致；房间枚举后能恢复并重新 arm deadline；同一 deadline 只能由一个租约执行；stale deadline 不得推进新回合；生产 adapter 事务和多实例验证通过 | AI | IN_PROGRESS（真实 adapter 与双实例开发 smoke 已通过；生产滚动重启/故障演练和长期压测待） |
 | BE-205 | Room REST/BFF | BE-201 | room create/get/join/leave/ready/start/disband、ETag/If-Match/version、`Idempotency-Key` | REST 与 WS 命令权限和结果一致；错误 envelope、成员边界和重试幂等通过 | AI | DONE（内存/fake-staging；生产 adapter/多实例仍待） |
 | BE-206 | 纵切故障测试 | 全部 I2 | fake rule + 四客户端 + fault injection + restart test | 基础房间可演示；尚不开放真实钻石/麻将计分 | AI + QA | DONE（fake-rule 基础） |
-| CL-201 | 房间导航/桌面 beta | CL-101/103、BE-203 | 房间列表、座位、准备、公共状态、私牌占位、错误提示 | 4 个实例显示同一 roomVersion | AI + CL | IN_PROGRESS（4 客户端 framework-neutral fake 夹具通过；真实 WSS/设备验收待） |
+| CL-201 | 房间导航/桌面 beta | CL-101/103、BE-203 | 房间列表、座位、准备、公共状态、私牌占位、错误提示 | 4 个实例显示同一 roomVersion | AI + CL | IN_PROGRESS（4 客户端 framework-neutral fake 夹具通过；Flutter 已可用 `SUSONG_WSS_URL` 切换原生 WSS，Android debug APK 构建通过；真实服务/设备四客户端验收待） |
 | CL-202 | 命令 outbox/幂等 | CL-103、BE-204 | commandId 队列、ACK 后移除、超时安全重试 | 重试不产生重复事件；同步中禁操作 | AI + CL | DONE（Flutter/fake-staging POC） |
 | CL-203 | 重连 UI | BE-204 | 连接状态、同步中、维护、版本冲突和手动重试 | 前后台/杀进程回前台可恢复 | AI + CL | DONE（Flutter 本机 POC；真实设备前后台/杀进程验收属于 G1） |
 | QA-201 | 四客户端验收脚本 | 全部 I2 | 自动化/录屏脚本和事件对比器 | 顺序、版本、快照 hash、私有字段检查通过 | AI + QA | DONE（基础故障矩阵） |
@@ -545,7 +545,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 日期：2026-09-04
 本次完成：BE-101～BE-106 开发基线、BE-201 内存 Room aggregate、BE-202 内存 event store/RoomActor/fencing/snapshot/outbox 契约、BE-203 WSS gateway/actor/reconnect 纵切、BE-204 内存重连和显式 deadline 基础、PostgreSQL/Redis adapter、presence overlay 与异步启动装配、durable `DeadlineStore` claim/lease、BE-205 共享 RoomService/REST/BFF（ETag/If-Match/Idempotency-Key）、BE-206/QA-201 fake-rule 故障矩阵、服务关闭态和主动连接清理；增加 `pg`/`redis` 运行依赖和 `npm run verify:real`、`npm run verify:multi-instance` 临时数据库/双实例验证脚本，完成真实迁移、事件/快照恢复、deadline 租约接管、Redis fencing、双 actor 连续版本与最终 snapshotHash smoke；补充 RoomActor crash-gap 相关回归；完成 BE-207 纯文本客服 REST（用户隔离、幂等、审计、房间关联）与 CL-201 四客户端 framework-neutral fake 验收夹具；当前 108 个 Node 测试、完整 npm 质量门、secret scan、Docker/Colima 配置检查通过；CL-101/103 Dart 核心、扩展命令同步与原生 transport POC、Flutter POC 壳、CL-201 房间桌面、CL-202 命令 outbox 和 CL-203 维护/版本冲突/前台恢复 UI 本机验证；OPS-101 本地环境/备份恢复边界手册完成
 未完成：BE-204 生产滚动重启、故障演练和长期最终一致性压测，CL-201 真实 WSS/设备验收，ArkUI-X/ArkTS 候选、平台生命周期、CL-204 真实 REST 联调，生产级外部 Auth、规则裁判、真机/签名 POC 仍待执行
-新增限制：Flutter 壳目前只连接 FakeTransport；当前无 Android SDK、完整 Xcode 或 HarmonyOS 工具链，不能声称三端可安装；DEVICE_MATRIX.md、POC_ACCEPTANCE.md 保持 PLANNED/TBD
+新增限制：Flutter 壳已可在离线 FakeTransport 与可配置原生 WSS 之间切换；Android SDK、Xcode 和 CocoaPods 预检已通过，但尚无 Android/iOS 真机、签名和 WSS 证据，HarmonyOS 暂缓；DEVICE_MATRIX.md、POC_ACCEPTANCE.md 保持 PLANNED/TBD
 新增阻塞：BLOCKER-ID / owner / 截止
 需求或规则变更：DEC-ID / 影响范围
 下一步：在 `verify:real`/`verify:multi-instance` 基础上做真实多进程滚动重启、租约接管、备份恢复和最终一致性压测；完成 CL-201 真实 WSS/设备验收与 CL-204 REST 联调。继续使用 fake/staging，不开放真实牌局、规则结算或钻石扣费
@@ -602,6 +602,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.35 | 2026-09-07 | 从服务端私牌、公开牌组、庄位和私密行牌历史识别全求人、天胡和地胡并封顶；修正起手补花不应破坏天胡、巴杠补牌自摸应计杠开的边界 | `npm run check`（Node 168/168）；下一纵切为三西关系识别与 golden cases |
 | 0.1.36 | 2026-09-07 | CL-301 横屏牌桌接入服务端权威本人手牌与动作面板：手牌点选出牌，摸/过/胡/自摸/碰/明杠和多候选吃/暗杠/巴杠均按快照动态生成；Dart 命令仅透传候选编号或所选牌 ID | `flutter test`（18/18）、Flutter/Dart analyze 和协议核心测试通过；待公开弃牌/牌组、花数/deadline 与真实 WSS 设备联调 |
 | 0.1.37 | 2026-09-07 | 完成 CL-301 公开牌桌状态：按座位展示服务端弃牌、副露、花数/飘花状态、当前行动玩家、牌墙剩余数和回合 deadline 倒计时；局数不再硬编码 | `flutter test`（18/18）、`dart analyze`通过；真实 WSS/Android/iOS 设备验收仍归 CL-201/G1 |
+| 0.1.38 | 2026-09-07 | Flutter 默认保留离线 FakeTransport，增加经 `SUSONG_WSS_URL`/`SUSONG_ENV` dart-define 选择的 Android/iOS 原生 WSS 运行时；登录页显示后端环境，URL fail-closed 校验，Android release 联网权限与 debug-only 明文 WS 边界已配置 | `flutter test`（21/21）、`dart analyze`、`flutter build apk --debug`通过；真实服务四客户端与真机仍待验收 |
 
 ## 16. 我们下一次具体做什么
 

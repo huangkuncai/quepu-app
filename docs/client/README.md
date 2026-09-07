@@ -4,7 +4,7 @@
 > 关联决策：`DEC-011`、`G1`  
 > 关联文档：[DEVELOPMENT.md](../DEVELOPMENT.md)、[IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md)、[决策索引](../decisions/DEC-INDEX.md)
 
-本目录用于记录 Android、iOS、HarmonyOS 的跨平台技术验证。当前已建立 `clients/flutter_app` 的 Flutter POC 壳和共享 Dart 协议核心；它只使用 FakeTransport，不能替代 ArkUI-X/ArkTS 候选、三端工具链、设备日志和签名安装验收。所有待确认内容保留为 `TBD`，由执行人以实际构建、设备日志和录屏补齐。
+本目录用于记录 Android、iOS、HarmonyOS 的跨平台技术验证。当前已建立 `clients/flutter_app` 的 Flutter POC 壳和共享 Dart 协议核心；默认使用 FakeTransport，也可通过 `SUSONG_WSS_URL` 构建参数接入原生 WebSocket transport。这不能替代 Android/iOS 真机、设备日志和签名安装验收；鸿蒙按当前决定暂缓。所有待确认内容保留为 `TBD`，由执行人以实际构建、设备日志和录屏补齐。
 
 ## 使用边界
 

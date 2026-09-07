@@ -156,4 +156,4 @@ artifacts/client-poc/<runId>/
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` |
 
-当前本机证据（不替代下表的真机记录）：`clients/flutter_app` 执行 `flutter test` 18/18、`dart analyze` 通过；覆盖房间桌面、命令 outbox、维护/版本冲突提示、手动重试、前台恢复、权威手牌/动作面板、弃牌/副露/花数/牌墙/回合倒计时和 SupportApi 注入表单。当前仍只使用 `FakeTransport`，未连接生产或 staging WSS；Android/iOS 真机与签名门保持 `G1_BLOCKED`，鸿蒙按当前决定暂缓。
+当前本机证据（不替代下表的真机记录）：`clients/flutter_app` 执行 `flutter test` 21/21、`dart analyze` 和 Android debug APK 构建通过；覆盖房间桌面、命令 outbox、维护/版本冲突提示、手动重试、前台恢复、权威手牌/动作面板、弃牌/副露/花数/牌墙/回合倒计时、可配置原生 WSS 和 SupportApi 注入表单。当前未连接生产或 staging WSS；Android/iOS 真机与签名门保持 `G1_BLOCKED`，鸿蒙按当前决定暂缓。
