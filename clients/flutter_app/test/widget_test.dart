@@ -116,6 +116,72 @@ void main() {
     expect(find.text('准备 1/4'), findsOneWidget);
   });
 
+  testWidgets(
+    'room table renders server-owned hand and submits selected tile',
+    (tester) async {
+      final transport = FakeTransport();
+      await tester.pumpWidget(SusongApp(transport: transport));
+      await tester.tap(find.text('进入大厅'));
+      await tester.pump(const Duration(milliseconds: 180));
+      await tester.tap(find.text('创建演示房'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确认创建'));
+      await tester.pump(const Duration(milliseconds: 80));
+      await tester.tap(find.text('进入牌桌'));
+      await tester.pumpAndSettle();
+
+      transport.inject({
+        'protocolVersion': '1.0',
+        'type': 'room_event',
+        'eventId': '11111111-1111-4111-8111-111111111111',
+        'roomId': 'demo-room',
+        'roomVersion': 1,
+        'payload': {
+          'snapshot': {
+            'id': 'demo-room',
+            'roomId': 'demo-room',
+            'ownerId': 'poc-user',
+            'status': 'playing',
+            'maxPlayers': 4,
+            'players': [
+              {
+                'id': 'poc-user',
+                'displayName': '演示玩家',
+                'seat': 0,
+                'ready': true,
+                'connected': true,
+              },
+            ],
+            'round': {
+              'privateHand': ['characters-1-1', 'bamboo-9-2', 'east-1'],
+              'availableActions': ['discard', 'concealed_kong'],
+              'kongOptions': {
+                'concealed_kong': [
+                  {'candidateIndex': 0, 'face': 'east'},
+                ],
+              },
+            },
+          },
+        },
+        'occurredAt': DateTime.now().toUtc().toIso8601String(),
+      });
+      await tester.pump(const Duration(milliseconds: 80));
+
+      expect(find.text('1万'), findsOneWidget);
+      expect(find.text('9条'), findsOneWidget);
+      expect(find.text('暗杠 东'), findsOneWidget);
+      await tester.tap(find.text('1万'));
+      await tester.pump(const Duration(milliseconds: 30));
+      final action = transport.sentMessages.lastWhere(
+        (message) => message['type'] == 'action',
+      );
+      expect(action['payload'], {
+        'action': 'discard',
+        'args': {'tileId': 'characters-1-1'},
+      });
+    },
+  );
+
   testWidgets('connection card exposes safe disconnect and maintenance retry', (
     tester,
   ) async {

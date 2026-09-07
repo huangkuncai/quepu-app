@@ -447,9 +447,17 @@ class ClientSessionController {
         roomVersion: _room.roomVersion < 0 ? null : _room.roomVersion,
       );
 
-  Future<String> action(String roomId, String action) => sendCommand(
+  Future<String> action(
+    String roomId,
+    String action, {
+    Map<String, dynamic> args = const {},
+  }) =>
+      sendCommand(
         'action',
-        {'action': action},
+        {
+          'action': action,
+          if (args.isNotEmpty) 'args': Map<String, dynamic>.from(args),
+        },
         roomId: roomId,
         roomVersion: _room.roomVersion < 0 ? null : _room.roomVersion,
       );

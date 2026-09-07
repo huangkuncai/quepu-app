@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-07（BE-304/306 天胡、地胡、全求人权威识别，Node 168/168、Flutter 16/16）
+> 最近更新：2026-09-07（CL-301 服务端权威手牌与动作面板，Node 168/168、Flutter 18/18）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -279,7 +279,7 @@ I1 的目标不是“能打麻将”，而是先让所有后续模块使用同�
 - Node 质量门：`npm run lint`、`npm run typecheck`、`npm run validate:protocol`、`npm run validate:contracts`、`npm run validate:migrations`、`npm test`（当前 108 个测试）和组合命令 `npm run check` 均通过；`npm run scan:secrets` 与高危依赖审计通过；`npm run verify:real` 与 `npm run verify:multi-instance` 均在本地 Colima 的真实 PostgreSQL/Redis 上通过。
 - 安全/依赖门：`npm run scan:secrets` 通过，`npm audit --omit=dev --audit-level=high` 未发现高危漏洞。
 - 运行基线：`docker compose -f infra/docker-compose.dev.yml config --quiet` 通过；`npm start` 可在 `127.0.0.1:8787` 启动开发 WebSocket 服务。
-- 客户端协议/连接 POC：在 `clients/dart_protocol` 执行 `dart analyze`、`dart run tool/test.dart`、`dart run tool/io_transport_test.dart`、`dart run tool/multi_client_acceptance.dart` 和 `dart run tool/support_test.dart` 通过；`clients/flutter_app` 的 `flutter test`（15/15）和 `dart analyze` 通过，覆盖 envelope、协议主版本、扩展房间命令同步、重复/缺口同步检测、登录、命令 outbox、ACK/超时安全重试、断线重新鉴权、房间同步、维护/版本冲突/前台恢复、房间桌面座位/准备交互和 SupportApi 注入表单。尚无三端真机安装包。
+- 客户端协议/连接 POC：在 `clients/dart_protocol` 执行 `dart analyze`、`dart run tool/test.dart`、`dart run tool/io_transport_test.dart`、`dart run tool/multi_client_acceptance.dart` 和 `dart run tool/support_test.dart` 通过；`clients/flutter_app` 的 `flutter test`（18/18）和 `dart analyze` 通过，覆盖 envelope、协议主版本、扩展房间命令同步、重复/缺口同步检测、登录、命令 outbox、ACK/超时安全重试、断线重新鉴权、房间同步、维护/版本冲突/前台恢复、房间桌面座位/准备交互、服务端权威手牌/出牌/吃碰杠胡动作和 SupportApi 注入表单。尚无 Android/iOS 真机签名安装包，鸿蒙暂缓。
 - 数据边界：MemoryRepository 的必填 `expiresAt`、非法日期和时钟异常回归测试已补齐（BE-104 定向测试 7/7）；当前会话、房间、限流和指标仍是单进程内存实现。
 - 以上证据只证明开发/演示基线；Flutter 壳仍只连接 `FakeTransport`，不代表 ArkUI 工程、三端安装包、正式身份供应商、生产 PostgreSQL/Redis、多实例裁判或真实钻石账本已就绪。
 
@@ -343,7 +343,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | BE-306 | 结算和两级积分账本 | DEC-RULE-004/005/008 | `RoundSettlement`、原因明细、累计战绩、零和/系统项策略 | 服务端重算；幂等；流局和多响样例通过；IN_PROGRESS（自摸、点炮、一冲二/三、流局、SYSTEM 写入、累计积分、重放/幂等和零和校验已实现；真实行牌现可直接触发服务端结算，三西识别仍保持关闭） |
 | BE-307 | 回放/确定性验证器 | BE-301~306 | 规则版本 + seed + event replay、snapshot hash | 历史规则重放不变，divergence 告警 |
 | BE-308 | golden/property/fuzz tests | BE-301~307 | 至少 20 个签字 golden cases、属性测试和模糊测试 | 10,000 次回放 0 divergence（阈值最终确认） |
-| CL-301 | 牌桌牌面和动作面板 | BE-302/304 | 手牌、公共牌、花/杠、可行动作、deadline | 只渲染服务端状态，不上传分数/牌墙 |
+| CL-301 | 牌桌牌面和动作面板 | BE-302/304 | 手牌、公共牌、花/杠、可行动作、deadline | 只渲染服务端状态，不上传分数/牌墙；IN_PROGRESS（本人手牌、点选出牌、摸/过/胡/自摸/碰/明杠及多候选吃/暗杠/巴杠已按服务端快照接入；待公共弃牌/牌组、花数和 deadline 可视化） |
 | CL-302 | 单局/整场结算页 | BE-306 | 每人 delta、原因、累计、规则版本 | 与服务端结果完全一致 |
 | QA-301 | 规则验收包 | DEC-RULE 全部 | 牌局输入、事件、预期分数和截图/日志 | 规则负责人签字，未签项不进 production flag |
 
@@ -600,6 +600,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.33 | 2026-09-07 | 实现巴杠两阶段事务：服务端候选声明后先进入三家抢杠胡/过窗口，全部过牌才升级碰牌、增量计 1 花并尾部补牌；抢杠胡取消巴杠，保留原碰牌和第四张私牌，由声明者按点炮方支付且胡型封顶；声明稀疏事件重放、私密操作历史、牌守恒和篡改拒绝均覆盖 | `npm run check`（Node 166/166）；下一纵切为不必胡过圈，旧服优先级仍需 golden case |
 | 0.1.34 | 2026-09-07 | 实现不必胡过圈状态：主动放弃合法点炮或抢杠胡后屏蔽后续点炮胡，自摸保持可用；本人实际摸牌或通过吃碰杠取得出牌权时解除，状态进入公开快照、事件及重启恢复 | `npm run check`（Node 167/167）；解除边界标记为 `turn-return-v1-provisional`，待旧服连续牌局样本确认 |
 | 0.1.35 | 2026-09-07 | 从服务端私牌、公开牌组、庄位和私密行牌历史识别全求人、天胡和地胡并封顶；修正起手补花不应破坏天胡、巴杠补牌自摸应计杠开的边界 | `npm run check`（Node 168/168）；下一纵切为三西关系识别与 golden cases |
+| 0.1.36 | 2026-09-07 | CL-301 横屏牌桌接入服务端权威本人手牌与动作面板：手牌点选出牌，摸/过/胡/自摸/碰/明杠和多候选吃/暗杠/巴杠均按快照动态生成；Dart 命令仅透传候选编号或所选牌 ID | `flutter test`（18/18）、Flutter/Dart analyze 和协议核心测试通过；待公开弃牌/牌组、花数/deadline 与真实 WSS 设备联调 |
 
 ## 16. 我们下一次具体做什么
 

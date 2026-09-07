@@ -5,6 +5,32 @@ import 'package:susong_protocol_client/protocol.dart';
 import 'package:susong_app/src/fake_transport.dart';
 
 void main() {
+  test(
+    'game action forwards only the selected server candidate arguments',
+    () async {
+      final transport = FakeTransport();
+      final client = ClientSessionController(
+        transport: transport,
+        deviceId: 'test-device',
+        platform: 'android',
+      );
+      await client.login('13800000000', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.createRoom();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      await client.action('demo-room', 'chi', args: {'candidateIndex': 1});
+      final message = transport.sentMessages.lastWhere(
+        (entry) => entry['type'] == 'action',
+      );
+      expect(message['payload'], {
+        'action': 'chi',
+        'args': {'candidateIndex': 1},
+      });
+      await client.dispose();
+    },
+  );
+
   test('session controller recovers a room after transport loss', () async {
     final transport = FakeTransport();
     final client = ClientSessionController(

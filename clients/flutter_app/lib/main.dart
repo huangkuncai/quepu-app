@@ -1069,6 +1069,12 @@ class _RoomTable extends StatelessWidget {
     final connectedCount =
         _positiveInt(room['connectedCount']) ??
         players.where((player) => player['connected'] == true).length;
+    final round = _dynamicMap(room['round']);
+    final privateHand = _stringValues(round?['privateHand']);
+    final availableActions = _stringValues(round?['availableActions']);
+    final availableReactions = _stringValues(round?['availableReactions']);
+    final hasAuthoritativeActions =
+        availableActions.isNotEmpty || availableReactions.isNotEmpty;
     return LayoutBuilder(
       builder: (context, constraints) => ListView(
         padding: const EdgeInsets.all(12),
@@ -1160,6 +1166,35 @@ class _RoomTable extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 8),
+                            if (privateHand.isNotEmpty) ...[
+                              SizedBox(
+                                height: 62,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: privateHand.length,
+                                  separatorBuilder: (_, _) =>
+                                      const SizedBox(width: 4),
+                                  itemBuilder: (context, index) {
+                                    final tileId = privateHand[index];
+                                    return _MahjongTile(
+                                      tileId: tileId,
+                                      enabled:
+                                          connected &&
+                                          availableActions.contains('discard'),
+                                      onTap: () => _run(
+                                        () => client.action(
+                                          roomId,
+                                          'discard',
+                                          args: {'tileId': tileId},
+                                        ),
+                                        context,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
                             SizedBox(
                               height: 92,
                               child: _SeatTile(
@@ -1240,7 +1275,17 @@ class _RoomTable extends StatelessWidget {
                                     label: const Text('开始演示局'),
                                   ),
                                 ],
-                                if (status == 'playing') ...[
+                                if (hasAuthoritativeActions) ...[
+                                  const SizedBox(height: 6),
+                                  _AuthoritativeActionButtons(
+                                    client: client,
+                                    roomId: roomId,
+                                    round: round!,
+                                    connected: connected,
+                                    run: (operation) =>
+                                        _run(operation, context),
+                                  ),
+                                ] else if (status == 'playing') ...[
                                   const SizedBox(height: 6),
                                   OutlinedButton.icon(
                                     onPressed: connected
@@ -1266,8 +1311,10 @@ class _RoomTable extends StatelessWidget {
                                 ),
                                 const Spacer(),
                                 const Divider(),
-                                const Text(
-                                  '手牌区待规则裁判接入',
+                                Text(
+                                  privateHand.isEmpty
+                                      ? '等待服务端下发本人手牌'
+                                      : '手牌与动作均由服务端裁决',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: Color(0xffaec8c1),
@@ -1305,6 +1352,176 @@ class _RoomTable extends StatelessWidget {
       }
     }
   }
+}
+
+class _AuthoritativeActionButtons extends StatelessWidget {
+  const _AuthoritativeActionButtons({
+    required this.client,
+    required this.roomId,
+    required this.round,
+    required this.connected,
+    required this.run,
+  });
+
+  final ClientSessionController client;
+  final String roomId;
+  final Map<String, dynamic> round;
+  final bool connected;
+  final Future<void> Function(Future<String> Function()) run;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = _stringValues(round['availableActions']);
+    final reactions = _stringValues(round['availableReactions']);
+    final reactionOptions = _dynamicMap(round['reactionOptions']) ?? const {};
+    final kongOptions = _dynamicMap(round['kongOptions']) ?? const {};
+    final buttons = <Widget>[];
+
+    for (final action in reactions.where((value) => value != 'chi')) {
+      buttons.add(_button(action, const {}));
+    }
+    final chiOptions = reactionOptions['chi'];
+    if (reactions.contains('chi') && chiOptions is List) {
+      for (final raw in chiOptions.whereType<Map>()) {
+        final option = Map<String, dynamic>.from(raw);
+        final index = option['candidateIndex'];
+        final sequence = _stringValues(option['sequence'])
+            .map(_mahjongFaceLabel)
+            .join('');
+        if (index is int) {
+          buttons.add(
+            _button('chi', {'candidateIndex': index}, suffix: sequence),
+          );
+        }
+      }
+    }
+    for (final action in actions.where(
+      (value) => !['discard', 'concealed_kong', 'added_kong'].contains(value),
+    )) {
+      buttons.add(_button(action, const {}));
+    }
+    for (final action in const ['concealed_kong', 'added_kong']) {
+      final options = kongOptions[action];
+      if (!actions.contains(action) || options is! List) continue;
+      for (final raw in options.whereType<Map>()) {
+        final option = Map<String, dynamic>.from(raw);
+        final index = option['candidateIndex'];
+        if (index is int) {
+          buttons.add(
+            _button(action, {
+              'candidateIndex': index,
+            }, suffix: _mahjongFaceLabel(option['face']?.toString() ?? '')),
+          );
+        }
+      }
+    }
+    if (actions.contains('discard')) {
+      buttons.add(
+        const Text(
+          '请点击手牌出牌',
+          style: TextStyle(color: Color(0xffffd369), fontSize: 12),
+        ),
+      );
+    }
+    return Wrap(spacing: 6, runSpacing: 6, children: buttons);
+  }
+
+  Widget _button(
+    String action,
+    Map<String, dynamic> args, {
+    String suffix = '',
+  }) {
+    final label =
+        '${_gameActionLabel(action)}${suffix.isEmpty ? '' : ' $suffix'}';
+    return FilledButton.tonal(
+      onPressed: connected
+          ? () => run(() => client.action(roomId, action, args: args))
+          : null,
+      style: FilledButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      ),
+      child: Text(label),
+    );
+  }
+}
+
+class _MahjongTile extends StatelessWidget {
+  const _MahjongTile({
+    required this.tileId,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String tileId;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: enabled ? const Color(0xfffff8df) : const Color(0xffc8c4b8),
+    borderRadius: BorderRadius.circular(7),
+    elevation: enabled ? 4 : 1,
+    child: InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(7),
+      child: Container(
+        width: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: const Color(0xffb59a58)),
+        ),
+        child: Text(
+          _mahjongFaceLabel(tileId),
+          style: const TextStyle(
+            color: Color(0xff173b34),
+            fontWeight: FontWeight.w900,
+            fontSize: 16,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+String _gameActionLabel(String action) =>
+    const {
+      'draw': '摸牌',
+      'pass': '过',
+      'hu': '胡',
+      'self_draw': '自摸',
+      'chi': '吃',
+      'peng': '碰',
+      'exposed_kong': '明杠',
+      'concealed_kong': '暗杠',
+      'added_kong': '巴杠',
+    }[action] ??
+    action;
+
+String _mahjongFaceLabel(String tileId) {
+  final face = tileId.replaceFirst(RegExp(r'-\d+$'), '');
+  final suited = RegExp(r'^(characters|bamboo|dots)-(\d)$').firstMatch(face);
+  if (suited != null) {
+    final suffix = const {
+      'characters': '万',
+      'bamboo': '条',
+      'dots': '筒',
+    }[suited.group(1)];
+    return '${suited.group(2)}$suffix';
+  }
+  return const {
+        'east': '东',
+        'south': '南',
+        'west': '西',
+        'north': '北',
+        'red_dragon': '中',
+        'green_dragon': '发',
+        'white_dragon': '白',
+        'red_flower': '红花',
+        'black_flower': '黑花',
+      }[face] ??
+      face;
 }
 
 class _RoomStatusStrip extends StatelessWidget {
@@ -1440,6 +1657,13 @@ List<Map<String, dynamic>> _roomPlayers(Map<String, dynamic> room) {
       .map((value) => Map<String, dynamic>.from(value))
       .toList(growable: false);
 }
+
+Map<String, dynamic>? _dynamicMap(Object? value) =>
+    value is Map ? Map<String, dynamic>.from(value) : null;
+
+List<String> _stringValues(Object? value) => value is List
+    ? value.map((entry) => entry.toString()).toList(growable: false)
+    : const [];
 
 List<Map<String, dynamic>?> _roomSeats(Map<String, dynamic> room) {
   final rawSeats = room['seats'];
