@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-04（BE-207 客服纯文本 MVP、CL-201 四客户端 fake 夹具、Node 108/108）
+> 最近更新：2026-09-07（用户确认采用参考 APK 8931 规则；开房配置与可验证计分边界进入代码）
 > 状态：ACTIVE（I1 开发基线已建立；I2/BE-201～204、BE-206/QA-201 内存/fake-rule 纵切完成；BE-204 presence overlay、异步装配和 deadline claim/lease 基础、真实本地 PG/Redis adapter 与双实例 smoke 已完成，生产滚动重启/故障演练仍待；G0/G1 仍进行中）
 > 关联计划：[IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md)
 > 关联规格：[DEVELOPMENT.md](../DEVELOPMENT.md)
@@ -54,15 +54,15 @@
 
 | ID | 必须确定的内容 | 当前答案 | 来源 | DRI | 截止 | 状态 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| DEC-RULE-001 | 人数/座位、牌组、风箭花牌数量、总牌数、初始手牌 | TBD | S/Q | USER + RULE | GR | TODO | — |
-| DEC-RULE-002 | 吃/碰/杠/补花/抢杠/胡/过及多家胡优先级 | TBD | S/Q | USER + RULE | GR | TODO | — |
-| DEC-RULE-003 | 首局庄、庄轮转、多家胡、流局、剩余牌墙和杠后牌 | TBD | S/Q | USER + RULE | GR | TODO | — |
-| DEC-RULE-004 | 底分 1～9 的选择方式及第二档映射 | TBD | S/Q | USER + RULE | GR | TODO | — |
-| DEC-RULE-005 | 花奖、杠花、出增、强飘、三西/三道的叠加公式 | TBD | S/Q | USER + RULE | GR | TODO | — |
-| DEC-RULE-006 | 无花果、“一察/一素”等术语、数值和触发 | TBD | S/Q | USER + RULE | GR | TODO | — |
-| DEC-RULE-007 | 必胡/不必胡、“过圈”和超时默认动作 | TBD | S/Q | USER + RULE | GR | TODO | — |
-| DEC-RULE-008 | 小胡/大胡、特殊胡型、≥9、封顶、舍入、零和 | TBD | S/Q | USER + RULE | GR | TODO | — |
-| DEC-RULE-009 | 4/8/16 局、出增中途调整和房周期边界 | TBD | S/Q | USER + RULE | GR | TODO | — |
+| DEC-RULE-001 | 人数/座位、牌组、风箭花牌数量、总牌数、初始手牌 | 4 人；万/条/筒、风牌、箭牌和红/黑花；精确牌墙数量待旧服牌局样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | 用户 2026-09-07；8931 客户端牌 ID |
+| DEC-RULE-002 | 吃/碰/杠/补花/抢杠/胡/过及多家胡优先级 | 动作集确认；同时可行动作优先级待旧服样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `MsgXYSSMJ.pb`、回放 opcode |
+| DEC-RULE-003 | 首局庄、庄轮转、多家胡、流局、剩余牌墙和杠后牌 | 上局最先胡者坐庄、流局连庄、剩 14 张流局、一炮多响；首局庄和杠后牌方向待样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt` |
+| DEC-RULE-004 | 底分 1～9 的选择方式及第二档映射 | 1～9 必须选择 4 个递增档；默认 1/2/3/4；第二档用于花奖 | M+APK | USER + RULE | GR | CONFIRMED | 创建房配置及规则文本 |
+| DEC-RULE-005 | 花奖、杠花、出增、强飘、三西/三道的叠加公式 | 花奖/杠花边界确认；增、飘、三西组合叠加顺序待旧服结算样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt`、协议字段 |
+| DEC-RULE-006 | 无花果、“一察/一素”等术语、数值和触发 | APK 原文术语为“无花果”“一索”；无花果归一索且只能自摸 | M+APK | USER + RULE | GR | CONFIRMED | `8931_rule.txt` |
+| DEC-RULE-007 | 必胡/不必胡、“过圈”和超时默认动作 | 必胡自动胡；不必胡可放弃但必须过圈；超时动作待旧服样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | 创建房配置及规则文本 |
+| DEC-RULE-008 | 小胡/大胡、特殊胡型、≥9、封顶、舍入、零和 | 花数档、九类一索和杠开档确认；多条件叠加/封顶待旧服结算样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt` |
+| DEC-RULE-009 | 4/8/16 局、出增中途调整和房周期边界 | 4/8/16 局；默认 4；房周期内增可加不可减 | M+APK | USER + RULE | GR | CONFIRMED | 创建房配置及规则文本 |
 
 ## 5. 阻塞登记
 
@@ -71,7 +71,7 @@
 | BLOCKER-ID | 影响 REQ/RULE/任务 | 缺失决策或证据 | Owner | 截止 | 临时降级 | 解除证据 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | BLOCKER-G0-001 | BE-103 生产接入、CL-102～103、发布合规 | DEC-002 登录和年龄/地区/实名边界 | USER + LEGAL | G0 | fake auth；禁止生产房间 | 已确认 Auth 策略和验收样例 | OPEN |
-| BLOCKER-G0-002 | R-*、BE-301～306 | DEC-RULE-001～009 规则签字 | USER + RULE | GR | fake/draft rule；禁止生产结算 | ruleVersion、计分表、≥20 golden cases | OPEN |
+| BLOCKER-G0-002 | R-*、BE-301～306 | 已确认采用 8931；旧服务端独有的叠加公式、牌墙细节和优先级仍缺结算/回放样本 | USER + RULE | GR | 已验证部分使用 `8931-apk-baseline.1`；缺失部分禁止生产结算 | 旧 App 牌局样本、计分表、≥20 golden cases | OPEN（范围缩小） |
 | BLOCKER-G0-003 | BE-401～405、Club/Floor | DEC-003～006 俱乐部/楼层/访问权限 | USER/PM | G0 | 只读 mock 数据 | RBAC 与 ruleSnapshot schema 已确认 | OPEN |
 | BLOCKER-G0-004 | BE-501～504 | DEC-008～009 钻石归属和扣费策略 | USER + OPS | G0 | ledger sandbox；不扣真实钻石 | reserve/consume/release/reverse 流程签字 | OPEN |
 | BLOCKER-G0-005 | CL-102～103、OPS-301～304、G1 | Android/iOS 设备、SDK/API/签名清单（鸿蒙已暂缓） | USER + CL | G0/G1 | Dart 原生 transport 与 Flutter/FakeTransport POC 可本机验证；不生成可安装包 | Android+iOS 真机矩阵和签名条件 | OPEN |
@@ -112,6 +112,7 @@
 | 2026-08-29 | AI/DEV | BE-204 增加 `game_deadlines` 持久化 lease 表、Memory/PostgreSQL deadline store、claim/complete/fail/cancel 端口和双 scheduler winner-only 回归；自动生成的 deadline commandId 改为稳定 UUID，server 显式装配 deadline store | BE-204、I2 | `test/be-204-deadline-store.test.js`、`npm run check`；Node 99/99；真实 PG/Redis 容器、多实例最终一致性和三端真机仍待 |
 | 2026-09-02 | AI/DEV | BE-204 真实 PG/Redis adapter 与双实例 smoke 通过；双 actor 重复/并发命令、连续事件/outbox、最终 snapshotHash 和 crash-gap replay 纳入回归；CL-203 维护/版本冲突/前台恢复 UI 与 OPS-101 本地环境手册完成 | BE-204、CL-203、OPS-101、I2 | `npm run check`（Node 106/106）、`npm run verify:real`、`npm run verify:multi-instance`、Flutter 13/13、Dart protocol/IO tests；生产滚动重启、三端真机、规则和账本仍待 |
 | 2026-09-04 | AI/DEV | BE-207 纯文本客服 REST 完成（用户隔离、幂等、审计、房间关联；附件/外部渠道关闭）；CL-201 四客户端 framework-neutral fake 夹具验证事件顺序、snapshotHash 与重连收敛 | BE-207、CL-201、I2 | `npm run check`（Node 108/108）、`dart run tool/multi_client_acceptance.dart`；真实 WSS/三端真机、客服持久化仓储仍待 |
+| 2026-09-07 | USER/AI | 用户确认宿松麻将采用参考 APK 的 8931 规则；客户端内置规则文本、创建配置、协议和回放操作码作为证据，旧服务端独有公式继续以 golden case 解除 | DEC-RULE-001～009、BE-301～306 | `SUSONG_8931_RULE_BASELINE.md`、`be-301-susong-rule.test.js` |
 
 ## 8. 变更记录
 

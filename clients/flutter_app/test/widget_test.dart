@@ -90,6 +90,10 @@ void main() {
     await tester.tap(find.text('进入大厅'));
     await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(find.text('创建演示房'));
+    await tester.pumpAndSettle();
+    expect(find.text('创建宿松麻将房'), findsOneWidget);
+    expect(find.textContaining('小胡 / 大胡 / 大大胡 / 一索'), findsOneWidget);
+    await tester.tap(find.text('确认创建'));
     await tester.pump(const Duration(milliseconds: 80));
     await tester.tap(find.text('进入牌桌'));
     await tester.pumpAndSettle();

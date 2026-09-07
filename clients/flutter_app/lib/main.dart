@@ -537,6 +537,137 @@ class LobbyTab extends StatelessWidget {
     }
   }
 
+  Future<void> _showCreateRoom(BuildContext context) async {
+    var rounds = 4;
+    var zeng = 1;
+    var strongPiao = false;
+    var forcedHu = false;
+    final scoreTiers = <int>{1, 2, 3, 4};
+    final config = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          title: const Text('创建宿松麻将房'),
+          content: SizedBox(
+            width: 620,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          initialValue: rounds,
+                          decoration: const InputDecoration(labelText: '游戏局数'),
+                          items: const [4, 8, 16]
+                              .map(
+                                (value) => DropdownMenuItem(
+                                  value: value,
+                                  child: Text('$value 局'),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) =>
+                              setModalState(() => rounds = value ?? rounds),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          initialValue: zeng,
+                          decoration: const InputDecoration(labelText: '出增分数'),
+                          items: const [0, 1, 2, 3, 5]
+                              .map(
+                                (value) => DropdownMenuItem(
+                                  value: value,
+                                  child: Text(value == 0 ? '不出增' : '$value 分'),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) =>
+                              setModalState(() => zeng = value ?? zeng),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    '选择四档底分（依次对应小胡 / 大胡 / 大大胡 / 一索）',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 7,
+                    children: [
+                      for (var value = 1; value <= 9; value++)
+                        FilterChip(
+                          label: Text('$value 分'),
+                          selected: scoreTiers.contains(value),
+                          onSelected: (selected) => setModalState(() {
+                            if (selected && scoreTiers.length < 4) {
+                              scoreTiers.add(value);
+                            }
+                            if (!selected) scoreTiers.remove(value);
+                          }),
+                        ),
+                    ],
+                  ),
+                  if (scoreTiers.length != 4)
+                    const Text(
+                      '必须且只能选择四档底分',
+                      style: TextStyle(color: Colors.orangeAccent),
+                    ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('强飘'),
+                    subtitle: const Text('关闭时为不强飘'),
+                    value: strongPiao,
+                    onChanged: (value) =>
+                        setModalState(() => strongPiao = value),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('必胡'),
+                    subtitle: const Text('点炮可胡时由服务端自动胡牌'),
+                    value: forcedHu,
+                    onChanged: (value) => setModalState(() => forcedHu = value),
+                  ),
+                  const Text(
+                    '积分仅用于本场结算；本页面没有充值或支付入口。',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: scoreTiers.length == 4
+                  ? () => Navigator.pop(context, {
+                      'rounds': rounds,
+                      'scoreTiers': scoreTiers.toList()..sort(),
+                      'zeng': zeng,
+                      'piao': strongPiao ? 'strong' : 'optional',
+                      'forcedHu': forcedHu,
+                    })
+                  : null,
+              child: const Text('确认创建'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (config != null && context.mounted) {
+      await _run(() => client.createRoom(ruleConfig: config), context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = snapshot.roomSnapshot;
@@ -572,7 +703,7 @@ class LobbyTab extends StatelessWidget {
                           title: '创建演示房',
                           subtitle: '宿松麻将 · 积分制',
                           onTap: connected
-                              ? () => _run(client.createRoom, context)
+                              ? () => _showCreateRoom(context)
                               : null,
                         ),
                       ),
@@ -790,10 +921,23 @@ class _CurrentRoomCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   '宿松麻将 · ${room['status'] ?? 'waiting'} · $playerCount/4 人',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Color(0xffc4d9d3)),
                 ),
                 Text(
                   '规则快照 ${room['rule'] ?? 'susong_v1'} · v${snapshot.roomVersion}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xffa9c4bd),
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  _susongConfigSummary(room['ruleConfig']),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xffa9c4bd),
                     fontSize: 12,
@@ -1567,7 +1711,7 @@ class _ClubTabState extends State<ClubTab> {
               SizedBox(height: 6),
               Text('8 局 · 4 人 · 楼层开房规则一致'),
               SizedBox(height: 6),
-              Text('当前为 P0 演示规则；正式番型、计分和钻石扣除须经规则签字后启用。'),
+              Text('采用参考 APK 8931 规则基线；未能从旧服务端恢复的叠加公式暂不启用。'),
             ],
           ),
         ),
@@ -1672,6 +1816,18 @@ class _ClubDesk extends StatelessWidget {
       ),
     ),
   );
+}
+
+String _susongConfigSummary(Object? value) {
+  final config = value is Map ? value : const <String, dynamic>{};
+  final rounds = config['rounds'] ?? 4;
+  final tiers = config['scoreTiers'] is List
+      ? (config['scoreTiers'] as List).join('/')
+      : '1/2/3/4';
+  final zeng = config['zeng'] ?? 1;
+  final piao = config['piao'] == 'strong' ? '强飘' : '不强飘';
+  final hu = config['forcedHu'] == true ? '必胡' : '不必胡';
+  return '$rounds 局 · 底分 $tiers · 增 $zeng · $piao · $hu';
 }
 
 class HistoryTab extends StatelessWidget {

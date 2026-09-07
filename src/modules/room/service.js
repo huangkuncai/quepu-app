@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { Room, stableCommandString } from '../../domain/room.js';
+import { normalizeSusongConfig, susongRule } from '../../domain/rules/susong.js';
 import { AppError } from '../../shared/errors.js';
 
 const ROOM_COMMAND_TYPES = new Set([
@@ -166,6 +167,31 @@ export class RoomService {
     }
 
     const roomId = text(String(this.idFactory()).slice(0, 8), 'roomId', { max: 64 });
+    const requestedRuleId = payload.ruleId
+      || payload.ruleSnapshot?.ruleId
+      || payload.ruleVersion
+      || payload.ruleSnapshot?.ruleVersion
+      || 'susong_v1';
+    let ruleSnapshot = payload.ruleSnapshot;
+    let totalRounds = payload.totalRounds || payload.roundCount;
+    let maxPlayers = payload.maxPlayers || 4;
+    if (requestedRuleId === susongRule.id) {
+      try {
+        const config = normalizeSusongConfig(ruleSnapshot?.config ?? payload.ruleConfig);
+        ruleSnapshot = {
+          gameType: 'mahjong',
+          ruleId: susongRule.id,
+          ruleVersion: susongRule.version,
+          config
+        };
+        totalRounds = config.rounds;
+        maxPlayers = susongRule.players;
+      } catch (error) {
+        throw new AppError('INVALID_ACTION', {
+          details: [{ path: 'ruleConfig', message: error.message }]
+        });
+      }
+    }
     const room = new Room({
       id: roomId,
       clubId: payload.clubId || null,
@@ -175,12 +201,12 @@ export class RoomService {
       ruleVersion: payload.ruleVersion,
       gameType: payload.gameType,
       ruleConfig: payload.ruleConfig,
-      ruleSnapshot: payload.ruleSnapshot,
+      ruleSnapshot,
       accessPolicy: payload.accessPolicy || payload.roomAccessPolicy,
-      totalRounds: payload.totalRounds || payload.roundCount,
+      totalRounds,
       deadlinePolicy: payload.deadlinePolicy,
       ownerId: actorId,
-      maxPlayers: payload.maxPlayers || 4
+      maxPlayers
     });
     this.rooms.set(roomId, room);
     this.registry.register(room, roomId);

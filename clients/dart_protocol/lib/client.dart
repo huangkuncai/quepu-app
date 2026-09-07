@@ -380,10 +380,16 @@ class ClientSessionController {
   }
 
   Future<String> createRoom(
-      {String? clubId, String ruleVersion = 'susong_v1'}) {
+      {String? clubId,
+      String? floorId,
+      String ruleVersion = 'susong_v1',
+      Map<String, dynamic>? ruleConfig}) {
     return sendCommand('create_room', {
       'clubId': clubId,
+      'floorId': floorId,
       'ruleVersion': ruleVersion,
+      if (ruleConfig != null)
+        'ruleConfig': Map<String, dynamic>.from(ruleConfig),
       'maxPlayers': 4,
     });
   }
@@ -966,12 +972,14 @@ class ClientSessionController {
       _emit();
       return;
     }
-    final preserveManualConflict = _snapshot.lastErrorCode == 'VERSION_CONFLICT';
+    final preserveManualConflict =
+        _snapshot.lastErrorCode == 'VERSION_CONFLICT';
     _snapshot = _snapshot.copyWith(
       roomVersion: _room.roomVersion,
       roomSnapshot: _room.snapshot,
       syncRequired: gapDetected || _room.syncRequired,
-      clearError: !(gapDetected || _room.syncRequired) && !preserveManualConflict,
+      clearError:
+          !(gapDetected || _room.syncRequired) && !preserveManualConflict,
     );
     if (gapDetected || _room.syncRequired) {
       _setError('SYNC_REQUIRED', 'room sync response still has a version gap');

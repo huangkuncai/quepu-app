@@ -196,12 +196,12 @@ R-A → R-B 计分/边缘场景签字 → W5-W7 宿松规则裁判
 | DEC-RULE-001 | 人数/座位、牌组构成、风/箭/花牌数量、总牌数、初始手牌 | 牌组规范和牌 ID 表 | USER + RULE | TODO |
 | DEC-RULE-002 | 吃/碰/杠/补花/抢杠/胡/过，以及多家同时胡优先级 | 动作和状态机规范 | USER + RULE | TODO |
 | DEC-RULE-003 | 首局庄、多家胡、流局、剩余 14 张、杠后牌墙 | 回合/庄轮转表 | USER + RULE | TODO |
-| DEC-RULE-004 | 底分 1～9 是单选、多选还是候选集合；底分第二档 | 配置 schema 和 UI 选择器 | USER + RULE | TODO |
+| DEC-RULE-004 | 底分 1～9 是单选、多选还是候选集合；底分第二档 | 配置 schema 和 UI 选择器 | USER + RULE | CONFIRMED（参考 APK：1～9 选 4 个递增档，默认 1/2/3/4） |
 | DEC-RULE-005 | 花奖、花朵、杠花、出增、强飘、三西/三道叠加公式 | 表驱动计分表 | USER + RULE | TODO |
-| DEC-RULE-006 | 无花果及“一察/一素”标准术语、数值和触发 | 术语表/测试样例 | USER + RULE | TODO |
+| DEC-RULE-006 | 无花果及“一察/一素”标准术语、数值和触发 | 术语表/测试样例 | USER + RULE | CONFIRMED（APK 原文术语为“无花果”“一索”） |
 | DEC-RULE-007 | 必胡/不必胡、“过圈”、超时默认动作 | 玩家状态/超时表 | USER + RULE | TODO |
 | DEC-RULE-008 | 小胡/大胡、特殊胡型、≥9、封顶、舍入、零和/系统项 | 结算规范 | USER + RULE | TODO |
-| DEC-RULE-009 | 4/8/16 局、出增中途加减、房周期边界 | 房间配置和回合策略 | USER + RULE | TODO |
+| DEC-RULE-009 | 4/8/16 局、出增中途加减、房周期边界 | 房间配置和回合策略 | USER + RULE | CONFIRMED（4/8/16 局；房周期内增可加不可减） |
 
 ### 5.3 W0 产出物
 
@@ -335,8 +335,8 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 
 | ID | 任务 | 依赖 | 主要产出 | 验收 |
 | --- | --- | --- | --- | --- |
-| BE-301 | 牌组、牌 ID、CSPRNG/seed | DEC-RULE-001 | 牌组表、服务端随机、seed hash/算法版本 | 牌数/手牌/补花守恒，未结束牌墙不泄露 |
-| BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照 |
+| BE-301 | 牌组、牌 ID、CSPRNG/seed | DEC-RULE-001 | 牌组表、服务端随机、seed hash/算法版本 | 牌数/手牌/补花守恒，未结束牌墙不泄露；IN_PROGRESS（8931 客户端牌类/花牌 ID 已提取，精确牌墙待牌局样本） |
+| BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.1` 配置规范化/冻结/旧字段转换已实现） |
 | BE-303 | 发牌、补花、牌墙、庄轮转 | DEC-RULE-002/003 | round state、dealer、wall、deadline | 固定 seed 重现；流局边界正确 |
 | BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝 |
 | BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；feature flag 隔离未决项 |
@@ -524,16 +524,16 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 
 ## 15. 进度面板与变更记录
 
-### 15.1 当前进度（截至 2026-09-02）
+### 15.1 当前进度（截至 2026-09-07）
 
 | 范围 | 状态 | 当前任务 | 下一出口 |
 | --- | --- | --- | --- |
 | 文档基线 | DONE | DEVELOPMENT.md、IMPLEMENTATION_PLAN.md、[DEC-INDEX.md](decisions/DEC-INDEX.md) | 用户确认 G0 决策 |
 | G0 | IN_PROGRESS | 已登记推荐基线；正式登录/规则/设备等细节仍待确认 | G0 checklist 全勾 |
 | I1 | IN_PROGRESS | BE-101～BE-106 已完成（开发/单进程基线）；CL-101 已完成；CL-102 Flutter POC 与 CL-103 framework-neutral 核心/原生 transport 已完成本机验证；OPS-101 开发环境手册已完成；ArkUI/平台生命周期和真实设备仍待 | G2 预审 |
-| G1 | BLOCKED | Flutter Web POC 已通过，但本机缺 Android SDK、完整 Xcode、目标 Android/iOS 真机和签名条件；鸿蒙暂缓，不纳入当前 G1 | Android/iOS 设备、签名清单和 SDK 就绪 |
+| G1 | IN_PROGRESS | Android/iOS 工具链预检已通过，Android debug APK 已构建；Android/iOS 真机矩阵和发布签名仍待，鸿蒙暂缓 | Android/iOS 真机与签名验收 |
 | I2 | IN_PROGRESS | BE-201～BE-205 已完成（业务纵切仍为内存/fake-staging）；BE-204 PG/Redis adapter、presence overlay、异步启动装配、snapshot/delta、重连、显式 deadline 和 durable claim/lease 已完成，`verify:real` 与 `verify:multi-instance` 本地真实容器 smoke 通过，生产滚动重启/故障演练仍待；BE-207 纯文本客服 REST 已完成；CL-201 Flutter 房间桌面、四客户端 fake 验收夹具、CL-202 命令 outbox、CL-203 重连 UI 本机 POC 已完成；真实 WSS/设备验收和 CL-204 REST 联调待 | G3 实时纵切 |
-| 宿松规则 | BLOCKED | DEC-RULE-001～009 未签 | 规则 A/B 签字 |
+| 宿松规则 | IN_PROGRESS | 用户已确认采用参考 APK 8931 规则；开房配置、花数/胡型/杠开边界已编码，旧服务端叠加公式和优先级仍缺牌局样本 | ≥20 个旧 App 结算/回放 golden cases |
 | Club/Floor | BLOCKED | 依赖 DEC-003～006 | G2 + schema |
 | Diamond | BLOCKED | 依赖 DEC-008～009 | 计费决策会 |
 | History/Support | IN_PROGRESS | BE-207 纯文本工单 REST 已完成并通过 2 个集成用例；CL-204 共享 Dart SupportApi 与 Flutter 注入已完成，真实 REST/三端联调待 | G3 |

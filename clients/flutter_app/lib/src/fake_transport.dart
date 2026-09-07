@@ -124,7 +124,11 @@ class FakeTransport implements ProtocolTransport {
       case 'create_room':
         _roomId = 'demo-room';
         _roomVersion = 0;
-        _room = _emptyRoom();
+        _room = _emptyRoom(
+          Map<String, dynamic>.from(
+            (payload['ruleConfig'] as Map?) ?? const <String, dynamic>{},
+          ),
+        );
         _history.clear();
         _emit(
           _event(
@@ -375,10 +379,21 @@ class FakeTransport implements ProtocolTransport {
     };
   }
 
-  static Map<String, dynamic> _emptyRoom() => {
+  static Map<String, dynamic> _emptyRoom([
+    Map<String, dynamic> ruleConfig = const {},
+  ]) => {
     'id': 'demo-room',
     'clubId': null,
     'rule': 'susong_v1',
+    'ruleVersion': '8931-apk-baseline.1',
+    'ruleConfig': {
+      'rounds': ruleConfig['rounds'] ?? 4,
+      'scoreTiers': ruleConfig['scoreTiers'] ?? [1, 2, 3, 4],
+      'zeng': ruleConfig['zeng'] ?? 1,
+      'piao': ruleConfig['piao'] ?? 'optional',
+      'forcedHu': ruleConfig['forcedHu'] ?? false,
+    },
+    'totalRounds': ruleConfig['rounds'] ?? 4,
     'status': 'waiting',
     'version': 0,
     'roomVersion': 0,
