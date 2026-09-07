@@ -93,6 +93,60 @@ function normalizeOptions(options) {
   return isRecord(options) ? options : {};
 }
 
+function serverSettlementDeltas(settlement, players, command) {
+  if (!isRecord(settlement) || settlement.scoreAuthority !== 'server') return null;
+  if (command.actorRole !== 'SYSTEM') {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'settlement.scoreAuthority', message: 'requires SYSTEM actorRole' }]
+    });
+  }
+  const playerIds = [...players.keys()];
+  const raw = settlement.deltaByPlayer;
+  if (!isRecord(raw) || Object.keys(raw).length !== playerIds.length
+    || Object.keys(raw).some(playerId => !players.has(playerId))) {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'settlement.deltaByPlayer', message: 'must contain every seated player exactly once' }]
+    });
+  }
+  const deltas = {};
+  for (const playerId of playerIds) {
+    const value = raw[playerId];
+    if (!Number.isSafeInteger(value)) {
+      throw new AppError('INVALID_ACTION', {
+        details: [{ path: `settlement.deltaByPlayer.${playerId}`, message: 'must be a safe integer' }]
+      });
+    }
+    deltas[playerId] = value;
+  }
+  if (Object.values(deltas).reduce((sum, value) => sum + value, 0) !== 0) {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'settlement.deltaByPlayer', message: 'must be zero-sum' }]
+    });
+  }
+  if (!Array.isArray(settlement.transfers)) {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'settlement.transfers', message: 'must be an array' }]
+    });
+  }
+  const reconstructed = Object.fromEntries(playerIds.map(playerId => [playerId, 0]));
+  for (const [index, transfer] of settlement.transfers.entries()) {
+    if (!isRecord(transfer) || !players.has(transfer.from) || !players.has(transfer.to)
+      || transfer.from === transfer.to || !Number.isSafeInteger(transfer.amount) || transfer.amount <= 0) {
+      throw new AppError('INVALID_ACTION', {
+        details: [{ path: `settlement.transfers.${index}`, message: 'contains an invalid transfer' }]
+      });
+    }
+    reconstructed[transfer.from] -= transfer.amount;
+    reconstructed[transfer.to] += transfer.amount;
+  }
+  if (playerIds.some(playerId => reconstructed[playerId] !== deltas[playerId])) {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'settlement.transfers', message: 'does not reconcile with deltaByPlayer' }]
+    });
+  }
+  return deltas;
+}
+
 function normalizeDeadlinePolicy(policy) {
   if (policy === undefined || policy === null) {
     return deepFreeze({
@@ -793,6 +847,12 @@ export class Room {
       if (actorId && actorId !== this.ownerId && !command.isAdmin && !command.admin && command.actorRole !== 'SYSTEM') {
         throw new AppError('NOT_ROOM_OWNER');
       }
+      const scoreDeltas = serverSettlementDeltas(result, this.players, command);
+      if (scoreDeltas) {
+        for (const [playerId, delta] of Object.entries(scoreDeltas)) {
+          this.scores.set(playerId, (this.scores.get(playerId) || 0) + delta);
+        }
+      }
       this._setStatus(ROOM_STATUS.SETTLING);
       this.currentRound.status = ROOM_STATUS.SETTLING;
       this.currentRound.settlement = clone(result);
@@ -805,9 +865,8 @@ export class Room {
         roundNumber: this.roundNumber,
         status: this.status,
         settlement: clone(result),
-        // Scoring belongs to the rule engine; no client-provided score is
-        // applied to `scores` here.
-        scoreAuthority: 'rule-engine-pending'
+        scoreAuthority: scoreDeltas ? 'server' : 'rule-engine-pending',
+        scores: Object.fromEntries(this.scores)
       }, command);
       return this._result(event, { matchId: this.matchId, roundId: this.roundId, settlement: clone(result) });
     });
@@ -1345,6 +1404,16 @@ export class Room {
           this.currentRound.endedAt = this.currentRound.endedAt || event.occurredAt || event.at || null;
           this.currentRound.turnStartedAt = null;
           this.currentRound.turnDeadlineAt = null;
+        }
+        if (isRecord(payload.scores)) {
+          const restoredScores = new Map();
+          for (const id of this.players.keys()) {
+            const value = payload.scores[id];
+            if (!Number.isSafeInteger(value)) throw new AppError('INVALID_ACTION');
+            restoredScores.set(id, value);
+          }
+          if (Object.keys(payload.scores).length !== restoredScores.size) throw new AppError('INVALID_ACTION');
+          this.scores = restoredScores;
         }
         break;
       case 'NEXT_ROUND':

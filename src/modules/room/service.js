@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { Room, stableCommandString } from '../../domain/room.js';
 import { normalizeSusongConfig, susongRule } from '../../domain/rules/susong.js';
+import { scoreSusongWin } from '../../domain/rules/susong-scoring.js';
 import { AppError } from '../../shared/errors.js';
 
 const ROOM_COMMAND_TYPES = new Set([
@@ -287,6 +288,47 @@ export class RoomService {
       roomVersion: afterVersion,
       version: afterVersion,
       replay: afterVersion <= beforeVersion,
+      commandId: command.commandId,
+      requestId: command.requestId
+    };
+  }
+
+  /** Internal rule-engine entry point; it is intentionally not mounted on REST/WSS. */
+  async settleSusongRound({ roomId, facts = {}, commandId, requestId, roomVersion } = {}) {
+    const actor = await this._actor(roomId);
+    if (actor.room.ruleId !== susongRule.id) throw new AppError('INVALID_ACTION');
+    const players = [...actor.room.players.values()]
+      .sort((left, right) => left.seat - right.seat)
+      .map(player => player.id);
+    const settlement = scoreSusongWin({
+      ...clone(facts),
+      config: actor.room.ruleSnapshot.config,
+      playerIds: players
+    });
+    const command = {
+      protocolVersion: '1.0',
+      type: 'settle_round',
+      roomId: actor.room.id,
+      commandId: commandIdOf(commandId),
+      requestId: requestIdOf(requestId),
+      ...(roomVersion === undefined || roomVersion === null ? {} : { roomVersion }),
+      payload: { result: settlement }
+    };
+    const result = await this.registry.dispatch(actor.room.id, command, {
+      actorId: 'system:susong-rule-engine',
+      actorRole: 'SYSTEM',
+      commandId: command.commandId,
+      requestId: command.requestId,
+      expectedRoomVersion: roomVersion
+    });
+    this.deadlines?.refresh?.(actor.room);
+    return {
+      ...clone(result),
+      room: roomSnapshot(actor.room),
+      snapshot: roomSnapshot(actor.room),
+      roomId: actor.room.id,
+      roomVersion: result.roomVersion ?? actor.version,
+      version: result.roomVersion ?? actor.version,
       commandId: command.commandId,
       requestId: command.requestId
     };

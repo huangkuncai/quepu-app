@@ -128,6 +128,45 @@ test('settlement, next-round and reconnect preserve ordered history without scor
   assert.throws(() => room.reconnectSync('missing', 0), error => error.code === 'PLAYER_NOT_FOUND');
 });
 
+test('SYSTEM-authored settlement applies reconciled scores exactly once', () => {
+  const room = makeRoom();
+  fillRoom(room);
+  readyRoom(room);
+  room.start({ actorId: 'p1' });
+  room.beginPlaying({ actorId: 'p1' });
+  const settlement = {
+    scoreAuthority: 'server',
+    transfers: [
+      { from: 'p2', to: 'p1', amount: 15 },
+      { from: 'p3', to: 'p1', amount: 11 },
+      { from: 'p4', to: 'p1', amount: 19 }
+    ],
+    deltaByPlayer: { p1: 45, p2: -15, p3: -11, p4: -19 }
+  };
+  assert.throws(
+    () => room.settleRound(settlement, { actorId: 'p1' }),
+    error => error.code === 'INVALID_ACTION'
+  );
+  const beforeSettlement = room.snapshot();
+  const first = room.settleRound(settlement, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM',
+    commandId: 'system-settle-1'
+  });
+  assert.deepEqual(room.snapshot().scores, { p1: 45, p2: -15, p3: -11, p4: -19 });
+  const replay = room.settleRound(settlement, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM',
+    commandId: 'system-settle-1'
+  });
+  assert.deepEqual(replay, first);
+  assert.deepEqual(room.snapshot().scores, { p1: 45, p2: -15, p3: -11, p4: -19 });
+
+  const recovered = Room.fromSnapshot(beforeSettlement);
+  recovered.applyPersistedEvent(first.event);
+  assert.deepEqual(recovered.snapshot().scores, room.snapshot().scores);
+});
+
 test('history window asks for a full sync when the requested version is too old', () => {
   const room = makeRoom({ historyLimit: 2 });
   room.join({ id: 'p1' });

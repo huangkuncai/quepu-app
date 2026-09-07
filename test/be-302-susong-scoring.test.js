@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import { createSusongFlowerState, resolveSusongFlowers } from '../src/domain/rules/susong.js';
 import { scoreSusongWin } from '../src/domain/rules/susong-scoring.js';
+import { Room } from '../src/domain/room.js';
+import { RoomService } from '../src/modules/room/service.js';
 
 const players = ['A', 'B', 'C', 'D'];
 const config = {
@@ -96,4 +98,49 @@ test('no-flower self-draw remains at the cap tier', () => {
   });
   assert.equal(settlement.settledTier, 'one_bamboo');
   assert.deepEqual(settlement.deltaByPlayer, { A: 24, B: -8, C: -8, D: -8 });
+});
+
+test('internal RoomService settlement scores and persists through SYSTEM authority', async () => {
+  let sequence = 0;
+  const room = new Room({
+    id: 'score-room',
+    ownerId: 'A',
+    idFactory: () => `score-generated-${++sequence}`,
+    ruleSnapshot: {
+      gameType: 'mahjong',
+      ruleId: 'susong_v1',
+      ruleVersion: '8931-apk-baseline.3',
+      config
+    }
+  });
+  for (const playerId of players) room.join({ id: playerId });
+  for (const playerId of players) room.setReady(playerId);
+  room.start({ actorId: 'A' });
+  room.beginPlaying({ actorId: 'A' });
+  const actor = { room, version: room.version };
+  const registry = {
+    get: id => id === room.id ? actor : null,
+    recover: async () => null,
+    dispatch: async (id, command, context) => {
+      assert.equal(id, room.id);
+      const result = room.execute(command, context);
+      actor.version = room.version;
+      return result;
+    }
+  };
+  const service = new RoomService({ registry });
+  const result = await service.settleSusongRound({
+    roomId: room.id,
+    roomVersion: room.version,
+    commandId: 'system-score-example',
+    requestId: 'system-score-request',
+    facts: {
+      winnerId: 'A',
+      winSource: 'self_draw',
+      flowerState: flowerState(4),
+      zengByPlayer: { A: 2, B: 3, C: 1, D: 5 }
+    }
+  });
+  assert.equal(result.snapshot.round.settlement.scoreAuthority, 'server');
+  assert.deepEqual(result.snapshot.scores, { A: 45, B: -15, C: -11, D: -19 });
 });
