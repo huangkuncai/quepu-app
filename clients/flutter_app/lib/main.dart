@@ -67,13 +67,23 @@ class _SusongAppState extends State<SusongApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xff126e67),
-          brightness: Brightness.light,
+          seedColor: const Color(0xff0a705a),
+          brightness: Brightness.dark,
         ),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xfff5f7f6),
+        scaffoldBackgroundColor: const Color(0xff063f36),
+        cardTheme: CardThemeData(
+          color: const Color(0xff163f38).withValues(alpha: 0.96),
+          elevation: 5,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: const BorderSide(color: Color(0x55755a2b)),
+          ),
+        ),
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(),
+          filled: true,
+          fillColor: Color(0xfff8f2df),
         ),
       ),
       home: StreamBuilder<ClientSnapshot>(
@@ -140,71 +150,96 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final snapshot = widget.snapshot;
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 430),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Icon(Icons.grid_view_rounded, size: 52),
-                  const SizedBox(height: 18),
-                  Text(
-                    '宿松麻将',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '亲友圈实时牌局',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 34),
-                  TextField(
-                    controller: _phone,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: '手机号',
-                      prefixIcon: Icon(Icons.phone_outlined),
+      body: _GameBackdrop(
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 48,
+                ),
+                child: Row(
+                  children: [
+                    const Expanded(flex: 6, child: _LoginBrandPanel()),
+                    const SizedBox(width: 28),
+                    Expanded(
+                      flex: 4,
+                      child: Card(
+                        color: const Color(0xfff8f2df),
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                '账号登录',
+                                style: Theme.of(context).textTheme.headlineSmall
+                                    ?.copyWith(
+                                      color: const Color(0xff173d35),
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                              const SizedBox(height: 18),
+                              TextField(
+                                controller: _phone,
+                                keyboardType: TextInputType.phone,
+                                style: const TextStyle(
+                                  color: Color(0xff173d35),
+                                ),
+                                decoration: const InputDecoration(
+                                  labelText: '手机号',
+                                  prefixIcon: Icon(Icons.phone_outlined),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _code,
+                                keyboardType: TextInputType.number,
+                                style: const TextStyle(
+                                  color: Color(0xff173d35),
+                                ),
+                                decoration: const InputDecoration(
+                                  labelText: '验证码',
+                                  helperText: '开发环境验证码：000000',
+                                  prefixIcon: Icon(Icons.lock_outline),
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+                              FilledButton.icon(
+                                onPressed: _submitting ? null : _login,
+                                icon: _submitting
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.login),
+                                label: Text(_submitting ? '登录中' : '进入大厅'),
+                              ),
+                              if (snapshot.lastErrorMessage != null) ...[
+                                const SizedBox(height: 12),
+                                _ErrorBanner(snapshot: snapshot),
+                              ],
+                              const SizedBox(height: 14),
+                              const Text(
+                                '无充值、支付或提现入口 · 积分仅用于牌局结算',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Color(0xff53665f),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: _code,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: '验证码',
-                      helperText: '开发环境验证码：000000',
-                      prefixIcon: Icon(Icons.lock_outline),
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                  FilledButton.icon(
-                    onPressed: _submitting ? null : _login,
-                    icon: _submitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.login),
-                    label: Text(_submitting ? '登录中' : '进入大厅'),
-                  ),
-                  if (snapshot.lastErrorMessage != null) ...[
-                    const SizedBox(height: 14),
-                    _ErrorBanner(snapshot: snapshot),
                   ],
-                  const SizedBox(height: 30),
-                  Text(
-                    '当前为开发期 POC，未接入支付、充值或提现能力。',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -212,6 +247,71 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
+}
+
+class _LoginBrandPanel extends StatelessWidget {
+  const _LoginBrandPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xffffcf68),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: const Icon(
+              Icons.grid_view_rounded,
+              color: Color(0xff17483d),
+              size: 48,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            '宿松麻将',
+            style: Theme.of(context).textTheme.displaySmall?.copyWith(
+              color: const Color(0xffffe4a3),
+              fontWeight: FontWeight.w900,
+              letterSpacing: 3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '亲友圈 · 横屏实时牌局',
+            style: TextStyle(fontSize: 20, color: Colors.white),
+          ),
+          const SizedBox(height: 20),
+          const Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _FeatureChip(icon: Icons.sync, label: '断线重连'),
+              _FeatureChip(icon: Icons.groups_2_outlined, label: '多人同步'),
+              _FeatureChip(icon: Icons.layers_outlined, label: '楼层规则'),
+              _FeatureChip(icon: Icons.scoreboard_outlined, label: '积分战绩'),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const Text('P0 开发演示版', style: TextStyle(color: Color(0xffb6d8cd))),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeatureChip extends StatelessWidget {
+  const _FeatureChip({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+  @override
+  Widget build(BuildContext context) =>
+      Chip(avatar: Icon(icon, size: 18), label: Text(label));
 }
 
 class HomePage extends StatefulWidget {
@@ -240,47 +340,181 @@ class _HomePageState extends State<HomePage> {
       ClubTab(snapshot: widget.snapshot),
       HistoryTab(snapshot: widget.snapshot),
       SupportTab(api: widget.supportApi),
+      SettingsTab(onLogout: widget.client.logout),
     ];
     return Scaffold(
-      appBar: AppBar(
-        title: Text(['大厅', '俱乐部', '战绩', '客服'][_index]),
-        actions: [
+      body: _GameBackdrop(
+        child: SafeArea(
+          child: Column(
+            children: [
+              _LobbyTopBar(
+                snapshot: widget.snapshot,
+                onLogout: widget.client.logout,
+              ),
+              Expanded(child: pages[_index]),
+              _GameNavigation(
+                index: _index,
+                onChanged: (value) => setState(() => _index = value),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LobbyTopBar extends StatelessWidget {
+  const _LobbyTopBar({required this.snapshot, required this.onLogout});
+  final ClientSnapshot snapshot;
+  final VoidCallback onLogout;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 72,
+      margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      decoration: BoxDecoration(
+        color: const Color(0xdd123d38),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x88efd58c)),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            backgroundColor: Color(0xffffd66f),
+            child: Icon(Icons.person, color: Color(0xff18443a)),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                snapshot.displayName ?? '宿松玩家',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              Text(
+                'ID ${snapshot.userId ?? '—'}',
+                style: const TextStyle(fontSize: 12, color: Color(0xffc8ddd7)),
+              ),
+            ],
+          ),
+          const SizedBox(width: 24),
+          const _TopMetric(
+            icon: Icons.diamond_outlined,
+            label: '钻石',
+            value: '后台发放',
+          ),
+          const Spacer(),
+          const Text(
+            '宿松麻将',
+            style: TextStyle(
+              fontSize: 24,
+              color: Color(0xffffdc82),
+              fontWeight: FontWeight.w900,
+              letterSpacing: 2,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: '公告',
+            onPressed: () {},
+            icon: const Icon(Icons.campaign_outlined),
+          ),
           IconButton(
             tooltip: '退出登录',
-            onPressed: widget.client.logout,
+            onPressed: onLogout,
             icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: SafeArea(child: pages[_index]),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: '大厅',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.groups_outlined),
-            selectedIcon: Icon(Icons.groups),
-            label: '俱乐部',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history),
-            label: '战绩',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.support_agent_outlined),
-            selectedIcon: Icon(Icons.support_agent),
-            label: '客服',
           ),
         ],
       ),
     );
   }
+}
+
+class _TopMetric extends StatelessWidget {
+  const _TopMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, size: 20, color: const Color(0xff8bded2)),
+      const SizedBox(width: 7),
+      Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: Color(0xffb7d2cb)),
+          ),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    ],
+  );
+}
+
+class _GameNavigation extends StatelessWidget {
+  const _GameNavigation({required this.index, required this.onChanged});
+  final int index;
+  final ValueChanged<int> onChanged;
+  static const items = [
+    (Icons.home_outlined, '大厅'),
+    (Icons.groups_outlined, '俱乐部'),
+    (Icons.history_outlined, '战绩'),
+    (Icons.support_agent_outlined, '客服'),
+    (Icons.settings_outlined, '设置'),
+  ];
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 66,
+    margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+    decoration: BoxDecoration(
+      color: const Color(0xee102e2a),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: const Color(0x557fd0ba)),
+    ),
+    child: Row(
+      children: List.generate(
+        items.length,
+        (i) => Expanded(
+          child: InkWell(
+            onTap: () => onChanged(i),
+            borderRadius: BorderRadius.circular(18),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              margin: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: i == index
+                    ? const Color(0xffd29b3d)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(items[i].$1, size: 22),
+                  const SizedBox(height: 2),
+                  Text(
+                    items[i].$2,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class LobbyTab extends StatelessWidget {
@@ -309,131 +543,290 @@ class LobbyTab extends StatelessWidget {
     final players = room?['players'];
     final playerCount = players is List ? players.length : 0;
     final connected = snapshot.phase == ConnectionPhase.online;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-      children: [
-        _ConnectionCard(snapshot: snapshot, client: client),
-        const SizedBox(height: 14),
-        Text('快速开始', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: connected
-                    ? () => _run(client.createRoom, context)
-                    : null,
-                icon: const Icon(Icons.add_box_outlined),
-                label: const Text('创建演示房'),
-              ),
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: Column(
+              children: [
+                Expanded(child: _PromoPanel(connected: connected)),
+                const SizedBox(height: 12),
+                _ConnectionCard(snapshot: snapshot, client: client),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: snapshot.roomId == null
-                    ? null
-                    : () => _run(
-                        () => client.joinRoom(snapshot.roomId!),
-                        context,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            flex: 6,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _LobbyActionCard(
+                          color: const Color(0xffdf843b),
+                          icon: Icons.add_box_outlined,
+                          title: '创建演示房',
+                          subtitle: '宿松麻将 · 积分制',
+                          onTap: connected
+                              ? () => _run(client.createRoom, context)
+                              : null,
+                        ),
                       ),
-                icon: const Icon(Icons.login),
-                label: const Text('加入房间'),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _LobbyActionCard(
+                          color: const Color(0xffbe4161),
+                          icon: Icons.login,
+                          title: '加入房间',
+                          subtitle: '输入或使用当前房号',
+                          onTap: snapshot.roomId == null
+                              ? null
+                              : () => _run(
+                                  () => client.joinRoom(snapshot.roomId!),
+                                  context,
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: room == null
+                      ? const _EmptyState(
+                          icon: Icons.table_restaurant_outlined,
+                          title: '还没有进行中的房间',
+                          message: '创建演示房后可验证多人同步与断线重连。',
+                        )
+                      : _CurrentRoomCard(
+                          client: client,
+                          snapshot: snapshot,
+                          room: room,
+                          playerCount: playerCount,
+                          run: (operation) => _run(operation, context),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PromoPanel extends StatelessWidget {
+  const _PromoPanel({required this.connected});
+  final bool connected;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        colors: [Color(0xff217c72), Color(0xff17473f)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0x88f4d980)),
+    ),
+    child: ListView(
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.campaign_outlined, color: Color(0xffffd873)),
+            SizedBox(width: 8),
+            Text(
+              '公告',
+              style: TextStyle(
+                color: Color(0xffffdf8c),
+                fontWeight: FontWeight.w800,
               ),
             ),
           ],
         ),
         const SizedBox(height: 18),
-        Text('当前房间', style: Theme.of(context).textTheme.titleLarge),
+        const Text(
+          '好友相聚\n公平竞技',
+          style: TextStyle(
+            fontSize: 30,
+            height: 1.15,
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
         const SizedBox(height: 10),
-        if (room == null)
-          const _EmptyState(
-            icon: Icons.table_restaurant_outlined,
-            title: '还没有进行中的房间',
-            message: '创建演示房后可验证公共事件和断线同步。',
-          )
-        else ...[
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+        const Text(
+          '首版聚焦宿松麻将，后续规则通过统一游戏模块接入。',
+          style: TextStyle(color: Color(0xffcce4de)),
+        ),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Icon(
+              connected ? Icons.cloud_done : Icons.cloud_off,
+              size: 18,
+              color: connected
+                  ? const Color(0xff8de2a6)
+                  : const Color(0xffffa8a8),
+            ),
+            const SizedBox(width: 7),
+            Text(connected ? '大厅服务在线' : '大厅服务未连接'),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _LobbyActionCard extends StatelessWidget {
+  const _LobbyActionCard({
+    required this.color,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+  final Color color;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: onTap == null ? color.withValues(alpha: 0.45) : color,
+    borderRadius: BorderRadius.circular(20),
+    elevation: 5,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 30),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '房号 ${snapshot.roomId}',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                      Chip(label: Text('版本 ${snapshot.roomVersion}')),
-                    ],
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text('规则：${room['rule'] ?? 'susong_v1'}'),
-                  Text('状态：${room['status'] ?? 'waiting'} · $playerCount/4 人'),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      FilledButton.tonalIcon(
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => RoomPage(client: client),
-                          ),
-                        ),
-                        icon: const Icon(Icons.table_restaurant),
-                        label: const Text('进入牌桌'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => _run(
-                          () => client.joinRoom(snapshot.roomId!),
-                          context,
-                        ),
-                        icon: const Icon(Icons.person_add_alt_1),
-                        label: const Text('加入'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => _run(
-                          () => client.action(snapshot.roomId!, 'pass'),
-                          context,
-                        ),
-                        icon: const Icon(Icons.touch_app_outlined),
-                        label: const Text('模拟动作'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => _run(
-                          () => client.reconnectRoom(snapshot.roomId!),
-                          context,
-                        ),
-                        icon: const Icon(Icons.sync),
-                        label: const Text('同步'),
-                      ),
-                    ],
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xfff5eee3),
+                    ),
                   ),
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _CurrentRoomCard extends StatelessWidget {
+  const _CurrentRoomCard({
+    required this.client,
+    required this.snapshot,
+    required this.room,
+    required this.playerCount,
+    required this.run,
+  });
+  final ClientSessionController client;
+  final ClientSnapshot snapshot;
+  final Map<String, dynamic> room;
+  final int playerCount;
+  final Future<void> Function(Future<String> Function()) run;
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: EdgeInsets.zero,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 28,
+            backgroundColor: Color(0xff15705e),
+            child: Icon(Icons.table_restaurant, color: Colors.white),
           ),
-          const SizedBox(height: 10),
-          FilledButton.tonalIcon(
-            onPressed: connected ? () => client.sendCommand('ping', {}) : null,
-            icon: const Icon(Icons.wifi_tethering),
-            label: const Text('发送心跳'),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '房号 ${snapshot.roomId}',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '宿松麻将 · ${room['status'] ?? 'waiting'} · $playerCount/4 人',
+                  style: const TextStyle(color: Color(0xffc4d9d3)),
+                ),
+                Text(
+                  '规则快照 ${room['rule'] ?? 'susong_v1'} · v${snapshot.roomVersion}',
+                  style: const TextStyle(
+                    color: Color(0xffa9c4bd),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => RoomPage(client: client),
+                  ),
+                ),
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('进入牌桌'),
+              ),
+              const SizedBox(height: 6),
+              TextButton.icon(
+                onPressed: () =>
+                    run(() => client.reconnectRoom(snapshot.roomId!)),
+                icon: const Icon(Icons.sync, size: 18),
+                label: const Text('同步'),
+              ),
+            ],
           ),
         ],
-        const SizedBox(height: 18),
-        OutlinedButton.icon(
-          onPressed: client.transport is FakeTransport
-              ? (client.transport as FakeTransport).simulateDisconnect
-              : null,
-          icon: const Icon(Icons.signal_wifi_connected_no_internet_4),
-          label: const Text('模拟断线'),
-        ),
-      ],
-    );
-  }
+      ),
+    ),
+  );
 }
 
 class RoomPage extends StatelessWidget {
@@ -451,6 +844,7 @@ class RoomPage extends StatelessWidget {
         final room = snapshot.roomSnapshot;
         return Scaffold(
           appBar: AppBar(
+            backgroundColor: const Color(0xff0c332d),
             title: Text('房间 ${snapshot.roomId ?? '—'}'),
             actions: [
               IconButton(
@@ -465,13 +859,15 @@ class RoomPage extends StatelessWidget {
               ),
             ],
           ),
-          body: room == null
-              ? const _EmptyState(
-                  icon: Icons.table_restaurant_outlined,
-                  title: '房间状态暂不可用',
-                  message: '返回大厅后重新进入房间。',
-                )
-              : _RoomTable(client: client, snapshot: snapshot, room: room),
+          body: _GameBackdrop(
+            child: room == null
+                ? const _EmptyState(
+                    icon: Icons.table_restaurant_outlined,
+                    title: '房间状态暂不可用',
+                    message: '返回大厅后重新进入房间。',
+                  )
+                : _RoomTable(client: client, snapshot: snapshot, room: room),
+          ),
         );
       },
     );
@@ -523,112 +919,232 @@ class _RoomTable extends StatelessWidget {
         (status == 'waiting' || status == 'ready');
     final connected = snapshot.phase == ConnectionPhase.online;
     final maxPlayers = _positiveInt(room['maxPlayers']) ?? seats.length;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 28),
-      children: [
-        _RoomStatusStrip(
-          status: _roomStatusLabel(status),
-          version: snapshot.roomVersion,
-          connected:
-              _positiveInt(room['connectedCount']) ??
-              players.where((player) => player['connected'] == true).length,
-          maxPlayers: maxPlayers,
-          ready:
-              _positiveInt(room['readyCount']) ??
-              players.where((player) => player['ready'] == true).length,
-        ),
-        const SizedBox(height: 18),
-        Row(
-          children: [
-            Text('座位', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            Text(
-              '${players.length}/$maxPlayers',
-              style: Theme.of(context).textTheme.bodyMedium,
+    final readyCount =
+        _positiveInt(room['readyCount']) ??
+        players.where((player) => player['ready'] == true).length;
+    final connectedCount =
+        _positiveInt(room['connectedCount']) ??
+        players.where((player) => player['connected'] == true).length;
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          SizedBox(
+            height: constraints.maxHeight - 24,
+            child: Column(
+              children: [
+                _RoomStatusStrip(
+                  status: _roomStatusLabel(status),
+                  version: snapshot.roomVersion,
+                  connected: connectedCount,
+                  maxPlayers: maxPlayers,
+                  ready: readyCount,
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 150,
+                        child: _SeatTile(
+                          seat: 3,
+                          player: seats.length > 3 ? seats[3] : null,
+                          ownerId: room['ownerId']?.toString(),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              height: 92,
+                              child: _SeatTile(
+                                seat: 2,
+                                player: seats.length > 2 ? seats[2] : null,
+                                ownerId: room['ownerId']?.toString(),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: const RadialGradient(
+                                    colors: [
+                                      Color(0xff238b72),
+                                      Color(0xff075544),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(28),
+                                  border: Border.all(
+                                    color: const Color(0xffe6c25e),
+                                    width: 2,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black38,
+                                      blurRadius: 12,
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(
+                                        Icons.grid_view_rounded,
+                                        size: 38,
+                                        color: Color(0x99ffe49a),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      const Text(
+                                        '宿松麻将',
+                                        style: TextStyle(
+                                          fontSize: 21,
+                                          color: Color(0xffffe4a3),
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                      Text(
+                                        '第 1/8 局 · ${_roomStatusLabel(status)}',
+                                        style: const TextStyle(
+                                          color: Color(0xffc6e0da),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              height: 92,
+                              child: _SeatTile(
+                                seat: 0,
+                                player: seats.isNotEmpty ? seats[0] : null,
+                                ownerId: room['ownerId']?.toString(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 150,
+                        child: _SeatTile(
+                          seat: 1,
+                          player: seats.length > 1 ? seats[1] : null,
+                          ownerId: room['ownerId']?.toString(),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 190,
+                        child: Card(
+                          margin: EdgeInsets.zero,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const Text(
+                                  '牌桌操作',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                if (current == null)
+                                  FilledButton.icon(
+                                    onPressed: connected
+                                        ? () => _run(
+                                            () => client.joinRoom(roomId),
+                                            context,
+                                          )
+                                        : null,
+                                    icon: const Icon(Icons.person_add_alt_1),
+                                    label: const Text('加入房间'),
+                                  ),
+                                if (canReady)
+                                  FilledButton.tonalIcon(
+                                    onPressed: connected
+                                        ? () => _run(
+                                            () => client.setReady(
+                                              roomId,
+                                              ready: !ready,
+                                            ),
+                                            context,
+                                          )
+                                        : null,
+                                    icon: Icon(
+                                      ready
+                                          ? Icons.undo
+                                          : Icons.check_circle_outline,
+                                    ),
+                                    label: Text(ready ? '取消准备' : '准备'),
+                                  ),
+                                if (canStart) ...[
+                                  const SizedBox(height: 6),
+                                  FilledButton.icon(
+                                    onPressed: connected
+                                        ? () => _run(
+                                            () => client.startRound(roomId),
+                                            context,
+                                          )
+                                        : null,
+                                    icon: const Icon(Icons.play_arrow),
+                                    label: const Text('开始演示局'),
+                                  ),
+                                ],
+                                if (status == 'playing') ...[
+                                  const SizedBox(height: 6),
+                                  OutlinedButton.icon(
+                                    onPressed: connected
+                                        ? () => _run(
+                                            () => client.action(roomId, 'pass'),
+                                            context,
+                                          )
+                                        : null,
+                                    icon: const Icon(Icons.touch_app_outlined),
+                                    label: const Text('模拟动作'),
+                                  ),
+                                ],
+                                const SizedBox(height: 6),
+                                OutlinedButton.icon(
+                                  onPressed: connected
+                                      ? () => _run(
+                                          () => client.reconnectRoom(roomId),
+                                          context,
+                                        )
+                                      : null,
+                                  icon: const Icon(Icons.sync),
+                                  label: const Text('同步状态'),
+                                ),
+                                const Spacer(),
+                                const Divider(),
+                                const Text(
+                                  '手牌区待规则裁判接入',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Color(0xffaec8c1),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (snapshot.lastErrorMessage != null)
+                  _ErrorBanner(snapshot: snapshot),
+              ],
             ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: seats.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 1.35,
           ),
-          itemBuilder: (context, index) => _SeatTile(
-            seat: index,
-            player: seats[index],
-            ownerId: room['ownerId']?.toString(),
-          ),
-        ),
-        const SizedBox(height: 18),
-        Text('牌桌操作', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            if (current == null)
-              FilledButton.icon(
-                onPressed: connected
-                    ? () => _run(() => client.joinRoom(roomId), context)
-                    : null,
-                icon: const Icon(Icons.person_add_alt_1),
-                label: const Text('加入房间'),
-              ),
-            if (canReady)
-              FilledButton.tonalIcon(
-                onPressed: connected
-                    ? () => _run(
-                        () => client.setReady(roomId, ready: !ready),
-                        context,
-                      )
-                    : null,
-                icon: Icon(ready ? Icons.undo : Icons.check_circle_outline),
-                label: Text(ready ? '取消准备' : '准备'),
-              ),
-            if (canStart)
-              FilledButton.icon(
-                onPressed: connected
-                    ? () => _run(() => client.startRound(roomId), context)
-                    : null,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('开始演示局'),
-              ),
-            if (status == 'playing')
-              OutlinedButton.icon(
-                onPressed: connected
-                    ? () => _run(() => client.action(roomId, 'pass'), context)
-                    : null,
-                icon: const Icon(Icons.touch_app_outlined),
-                label: const Text('模拟动作'),
-              ),
-            OutlinedButton.icon(
-              onPressed: connected
-                  ? () => _run(() => client.reconnectRoom(roomId), context)
-                  : null,
-              icon: const Icon(Icons.sync),
-              label: const Text('同步状态'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.visibility_off_outlined),
-          title: const Text('我的手牌'),
-          subtitle: const Text('牌面将在规则裁判接入后显示'),
-          trailing: const Chip(label: Text('占位')),
-        ),
-        if (snapshot.lastErrorMessage != null) ...[
-          const SizedBox(height: 8),
-          _ErrorBanner(snapshot: snapshot),
         ],
-      ],
+      ),
     );
   }
 
@@ -840,42 +1356,194 @@ String _roomStatusLabel(String status) {
   return labels[status] ?? status;
 }
 
-class ClubTab extends StatelessWidget {
+class ClubTab extends StatefulWidget {
   const ClubTab({required this.snapshot, super.key});
 
   final ClientSnapshot snapshot;
 
   @override
+  State<ClubTab> createState() => _ClubTabState();
+}
+
+class _ClubTabState extends State<ClubTab> {
+  int _floor = 0;
+  bool _applicationSubmitted = false;
+
+  @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-      children: [
-        const _SectionTitle(title: '我的俱乐部', subtitle: '申请和楼层规则由服务端审批控制'),
-        Card(
-          child: ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.groups)),
-            title: const Text('宿松亲友圈演示俱乐部'),
-            subtitle: const Text('成员状态：待审核 · 仅成员可按房号进入'),
-            trailing: IconButton(
-              tooltip: '查看楼层',
-              onPressed: () => _showFloor(context),
-              icon: const Icon(Icons.chevron_right),
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 230,
+            child: Column(
+              children: [
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const CircleAvatar(
+                          radius: 30,
+                          backgroundColor: Color(0xffffce68),
+                          child: Icon(
+                            Icons.groups_2,
+                            color: Color(0xff17443b),
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          '宿松亲友圈',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const Text(
+                          'ID 827867 · 开发演示',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xffb8cec7),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Chip(
+                          avatar: Icon(Icons.verified_user_outlined, size: 16),
+                          label: Text('成员状态：已通过'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _showApplication(context),
+                          icon: const Icon(Icons.person_add_alt_1),
+                          label: Text(
+                            _applicationSubmitted ? '申请待审批' : '申请加入其他亲友圈',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: ListView(
+                      children: [
+                        const ListTile(
+                          dense: true,
+                          leading: Icon(Icons.layers_outlined),
+                          title: Text('切换楼层'),
+                        ),
+                        for (var i = 0; i < 2; i++)
+                          ListTile(
+                            selected: _floor == i,
+                            selectedTileColor: const Color(0x335fcab0),
+                            leading: CircleAvatar(child: Text('${i + 1}')),
+                            title: Text(i == 0 ? '宿松麻将' : '备用楼层'),
+                            subtitle: Text(i == 0 ? '积分场 · 6 桌' : '暂未配置'),
+                            onTap: () => setState(() => _floor = i),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        const SizedBox(height: 16),
-        const _SectionTitle(title: '楼层规则', subtitle: '创建房间时冻结规则快照'),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.layers_outlined),
-            title: const Text('宿松麻将 · 积分场'),
-            subtitle: Text(
-              '规则版本 susong_v1 · 当前房间版本 ${snapshot.roomVersion < 0 ? '-' : snapshot.roomVersion}',
-            ),
-            onTap: () => _showFloor(context),
+          const SizedBox(width: 14),
+          Expanded(
+            child: _floor == 0
+                ? Column(
+                    children: [
+                      _ClubHeader(onDetails: () => _showFloor(context)),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: GridView.builder(
+                          itemCount: 6,
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                mainAxisSpacing: 10,
+                                crossAxisSpacing: 10,
+                                childAspectRatio: 1.7,
+                              ),
+                          itemBuilder: (context, index) => _ClubDesk(
+                            number: index + 1,
+                            occupied: index == 0,
+                            onTap: () => ScaffoldMessenger.of(context)
+                                .showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      index == 0
+                                          ? '1 号桌已有 1 位玩家'
+                                          : '包厢开房将在俱乐部服务接入后启用',
+                                    ),
+                                  ),
+                                ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : const _EmptyState(
+                    icon: Icons.layers_clear_outlined,
+                    title: '备用楼层尚未配置',
+                    message: '管理员可在管理端新增楼层并配置固定规则。',
+                  ),
           ),
+        ],
+      ),
+    );
+  }
+
+  void _showApplication(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('申请加入亲友圈'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const TextField(
+              decoration: InputDecoration(
+                labelText: '亲友圈 ID',
+                prefixIcon: Icon(Icons.tag),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text('提交后由亲友圈管理员审批，客户端不能自行通过。'),
+            if (_applicationSubmitted)
+              const Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: Chip(
+                  avatar: Icon(Icons.hourglass_top, size: 16),
+                  label: Text('当前状态：待审批'),
+                ),
+              ),
+          ],
         ),
-      ],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: _applicationSubmitted
+                ? null
+                : () {
+                    setState(() => _applicationSubmitted = true);
+                    Navigator.pop(context);
+                  },
+            child: const Text('提交申请'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -897,13 +1565,113 @@ class ClubTab extends StatelessWidget {
               SizedBox(height: 12),
               Text('宿松麻将 · 积分结算 · 规则快照在开房时锁定'),
               SizedBox(height: 6),
-              Text('当前为 POC 占位规则，未开放真实牌局和钻石扣除。'),
+              Text('8 局 · 4 人 · 楼层开房规则一致'),
+              SizedBox(height: 6),
+              Text('当前为 P0 演示规则；正式番型、计分和钻石扣除须经规则签字后启用。'),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+class _ClubHeader extends StatelessWidget {
+  const _ClubHeader({required this.onDetails});
+  final VoidCallback onDetails;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+    decoration: BoxDecoration(
+      color: const Color(0xdd173d37),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0x88efd58c)),
+    ),
+    child: Row(
+      children: [
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '1 楼 · 宿松麻将',
+                style: TextStyle(
+                  fontSize: 19,
+                  color: Color(0xffffdc82),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                '包厢模式：积分 · 在线 1/24',
+                style: TextStyle(color: Color(0xffc2d7d1)),
+              ),
+            ],
+          ),
+        ),
+        TextButton.icon(
+          onPressed: onDetails,
+          icon: const Icon(Icons.info_outline),
+          label: const Text('规则详情'),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.tonalIcon(
+          onPressed: null,
+          icon: Icon(Icons.rocket_launch_outlined),
+          label: Text('快速开始'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ClubDesk extends StatelessWidget {
+  const _ClubDesk({
+    required this.number,
+    required this.occupied,
+    required this.onTap,
+  });
+  final int number;
+  final bool occupied;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: const Color(0xff245d51),
+    borderRadius: BorderRadius.circular(18),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 76,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xff168c70),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xffffd46b), width: 2),
+              ),
+              child: Text(
+                '$number',
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              occupied ? '1/4 人 · 等待中' : '空闲 · 点击进入',
+              style: const TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class HistoryTab extends StatelessWidget {
@@ -913,20 +1681,56 @@ class HistoryTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-      children: [
-        const _SectionTitle(title: '战绩', subtitle: '积分只用于每局结果展示，不是消费余额'),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.scoreboard_outlined),
-            title: const Text('暂无已完成牌局'),
-            subtitle: Text(
-              '当前连接房间版本：${snapshot.roomVersion < 0 ? '—' : snapshot.roomVersion}',
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 240,
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.scoreboard_outlined,
+                      size: 38,
+                      color: Color(0xffffd369),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      '我的战绩',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      '积分仅表示每局输赢结果，不是余额，也不能充值或兑换。',
+                      style: TextStyle(color: Color(0xffbed2cc)),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '房间版本 ${snapshot.roomVersion < 0 ? '—' : snapshot.roomVersion}',
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 14),
+          const Expanded(
+            child: _EmptyState(
+              icon: Icons.history_toggle_off,
+              title: '暂无已完成牌局',
+              message: '牌局结算后，这里将展示总分、单局明细与规则快照。',
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -979,39 +1783,233 @@ class _SupportTabState extends State<SupportTab> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-      children: [
-        const _SectionTitle(title: '联系客服', subtitle: '首版使用内置纯文本工单'),
-        TextField(
-          controller: _controller,
-          maxLines: 5,
-          maxLength: 500,
-          decoration: const InputDecoration(
-            labelText: '请描述遇到的问题',
-            alignLabelWithHint: true,
-            prefixIcon: Icon(Icons.chat_bubble_outline),
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          const Expanded(
+            flex: 4,
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: EdgeInsets.all(22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.support_agent,
+                      size: 46,
+                      color: Color(0xffffd369),
+                    ),
+                    SizedBox(height: 14),
+                    Text(
+                      '联系客服',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      '提交问题时请写明房号、发生时间和具体操作。正式环境会自动关联账号与客户端版本。',
+                      style: TextStyle(color: Color(0xffc0d6cf)),
+                    ),
+                    Spacer(),
+                    Text('P0 支持方式：应用内文字工单', style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-        FilledButton.icon(
-          onPressed: _submit,
-          icon: const Icon(Icons.send),
-          label: Text(_submitting ? '提交中' : '提交工单'),
-        ),
-        if (_sent) ...[
-          const SizedBox(height: 14),
-          const Card(
-            child: ListTile(
-              leading: Icon(Icons.check_circle_outline),
-              title: Text('已记录到演示工单'),
-              subtitle: Text('正式环境将关联账号、房间号和客户端版本。'),
+          const SizedBox(width: 14),
+          Expanded(
+            flex: 6,
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        maxLines: null,
+                        expands: true,
+                        maxLength: 500,
+                        style: const TextStyle(color: Color(0xff173d35)),
+                        decoration: const InputDecoration(
+                          labelText: '请描述遇到的问题',
+                          alignLabelWithHint: true,
+                          prefixIcon: Icon(Icons.chat_bubble_outline),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: _submit,
+                      icon: const Icon(Icons.send),
+                      label: Text(_submitting ? '提交中' : '提交工单'),
+                    ),
+                    if (_sent)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle_outline,
+                              color: Color(0xff8ee09e),
+                            ),
+                            SizedBox(width: 8),
+                            Text('已记录到演示工单'),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
-      ],
+      ),
     );
   }
+}
+
+class SettingsTab extends StatefulWidget {
+  const SettingsTab({required this.onLogout, super.key});
+  final VoidCallback onLogout;
+  @override
+  State<SettingsTab> createState() => _SettingsTabState();
+}
+
+class _SettingsTabState extends State<SettingsTab> {
+  bool _music = true;
+  bool _sound = true;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(14),
+    child: Row(
+      children: [
+        const SizedBox(
+          width: 240,
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: EdgeInsets.all(22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.settings_outlined,
+                    size: 44,
+                    color: Color(0xffffd369),
+                  ),
+                  SizedBox(height: 14),
+                  Text(
+                    '设置',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '当前版本 1.0.0 P0\nAndroid / iOS 横屏模式',
+                    style: TextStyle(color: Color(0xffbfd4ce)),
+                  ),
+                  Spacer(),
+                  Text('不包含充值、提现、兑换或转赠能力', style: TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: ListView(
+              padding: const EdgeInsets.all(12),
+              children: [
+                SwitchListTile(
+                  value: _music,
+                  onChanged: (value) => setState(() => _music = value),
+                  secondary: const Icon(Icons.music_note_outlined),
+                  title: const Text('背景音乐'),
+                ),
+                SwitchListTile(
+                  value: _sound,
+                  onChanged: (value) => setState(() => _sound = value),
+                  secondary: const Icon(Icons.volume_up_outlined),
+                  title: const Text('游戏音效'),
+                ),
+                const ListTile(
+                  leading: Icon(Icons.screen_rotation_outlined),
+                  title: Text('屏幕方向'),
+                  subtitle: Text('已锁定横屏，支持左右旋转'),
+                ),
+                const ListTile(
+                  leading: Icon(Icons.privacy_tip_outlined),
+                  title: Text('隐私与权限'),
+                  subtitle: Text('首版不申请通讯录、后台定位或后台录音权限'),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: const Text('退出登录'),
+                  onTap: widget.onLogout,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _GameBackdrop extends StatelessWidget {
+  const _GameBackdrop({required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        colors: [Color(0xff0a5c50), Color(0xff073b35), Color(0xff102f2c)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    ),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned(
+          right: -100,
+          top: -130,
+          child: Container(
+            width: 420,
+            height: 420,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0x0fffd76b),
+            ),
+          ),
+        ),
+        Positioned(
+          left: -120,
+          bottom: -160,
+          child: Container(
+            width: 460,
+            height: 460,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0x1028b89b),
+            ),
+          ),
+        ),
+        child,
+      ],
+    ),
+  );
 }
 
 class _ConnectionCard extends StatelessWidget {
@@ -1249,28 +2247,6 @@ class _ErrorBanner extends StatelessWidget {
         leading: const Icon(Icons.error_outline),
         title: Text(snapshot.lastErrorCode ?? '操作失败'),
         subtitle: Text(snapshot.lastErrorMessage ?? ''),
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, required this.subtitle});
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-        ],
       ),
     );
   }

@@ -20,6 +20,28 @@ void main() {
     expect(find.text('俱乐部'), findsOneWidget);
     expect(find.text('战绩'), findsOneWidget);
     expect(find.text('客服'), findsOneWidget);
+    expect(find.text('设置'), findsOneWidget);
+  });
+
+  testWidgets('P0 club exposes floors, desks and approval-only application', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const SusongApp());
+    await tester.tap(find.text('进入大厅'));
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.tap(find.text('俱乐部').last);
+    await tester.pump();
+
+    expect(find.text('成员状态：已通过'), findsOneWidget);
+    expect(find.text('1 楼 · 宿松麻将'), findsOneWidget);
+    expect(find.text('空闲 · 点击进入'), findsNWidgets(5));
+
+    await tester.tap(find.text('申请加入其他亲友圈'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('客户端不能自行通过'), findsOneWidget);
+    await tester.tap(find.text('提交申请'));
+    await tester.pumpAndSettle();
+    expect(find.text('申请待审批'), findsOneWidget);
   });
 
   testWidgets('support tab accepts a plain text ticket', (tester) async {

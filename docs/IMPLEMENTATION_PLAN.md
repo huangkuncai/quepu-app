@@ -366,7 +366,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | BE-402 | Floor + immutable rule versions | BE-302、DEC-005 | draft→review→publish→disable、结构化 config + displayDescription | 发布后不可变；软停用；历史可查 | AI | TODO |
 | BE-403 | 房间从楼层创建 | BE-201/402 | floorId、ruleId/version、完整 ruleSnapshot/hash | 编辑楼层不影响等待/进行中/历史房间 | AI | TODO |
 | BE-407 | Club/Floor 集成测试 | BE-401~403 | 申请→审批→入会→选楼层→开房→改版脚本 | 越权、跨楼层、重启恢复全绿 | AI + QA | TODO |
-| CL-401 | 成员/申请/楼层页面 | BE-401/402 | 申请状态、拒绝原因、楼层列表/详情 | 待审用户看不到受限房间；无支付文案 | AI + CL | TODO |
+| CL-401 | 成员/申请/楼层页面 | BE-401/402 | 申请状态、拒绝原因、楼层列表/详情 | 待审用户看不到受限房间；无支付文案 | AI + CL | IN_PROGRESS（横屏演示 UI、申请待审、楼层/6 桌与规则详情已完成；生产 API/RBAC 待） |
 | CL-402 | 管理员楼层页面 | BE-401/402 | 新增/编辑/停用/发布规则版本、权限提示 | 客户端按钮与服务端权限一致 | AI + CL | TODO |
 
 ### 9.2 钻石账本
@@ -377,7 +377,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | BE-405 | 后台 grant/adjust 双审 | BE-404、MFA 方案 | 后台人工发放/调账、审批、审计 | 普通客户端无权限；重复请求只一笔流水 | AI | TODO |
 | BE-406 | reserve/consume/release/reverse | BE-202/306/404 | `billing_intent` 状态机、事务/outbox、对账任务 | 并发开房不超扣；首局重试不重复；解散策略正确 | AI | TODO |
 | BE-408 | 账本故障演练 | BE-404~406 | 余额不足、服务重启、outbox 重试、冲正报告 | 账本重放余额一致；无悬挂负数 | AI + QA | TODO |
-| CL-403 | 钻石只读状态 | BE-404 | diamondBalance/hold/consumed 展示 | 无支付 SDK、充值/提现/转赠路由、深链和文案 | AI + CL | TODO |
+| CL-403 | 钻石只读状态 | BE-404 | diamondBalance/hold/consumed 展示 | 无支付 SDK、充值/提现/转赠路由、深链和文案 | AI + CL | IN_PROGRESS（大厅只读“后台发放”状态已完成；真实余额/冻结/消耗 API 待） |
 | QA-401 | 无支付入口扫描 | CL-403、BE-405 | 路由/依赖/文案/商店截图 grep 检查 | `payment/recharge/withdraw/cashout/transfer` 不出现在客户端能力 | AI + QA | TODO |
 
 ### 9.3 推荐计费状态机（在 DEC-009 确认前仅 sandbox）
@@ -402,7 +402,7 @@ CONSUMED ──────────→ REVERSED（经审批的纠错）
 | BE-503 | Support ticket/message（纯文本 MVP） | BE-103、DEC-010 | 工单状态、回复、room/match 关联 | 大厅/俱乐部/牌桌均可提交；状态流转可审计；W4/W5 可演示 | AI | TODO |
 | BE-504 | 附件安全 | BE-503、隐私决策 | MIME/大小校验、病毒扫描、私有桶、短期签名 URL、留存 | 无越权下载；日志无敏感字段 | AI | TODO |
 | BE-505 | Admin moderation/audit | BE-401/405 | 用户封禁、审批、审计查询/导出、注销匿名化 | 审计不可篡改；最小权限 | AI | TODO |
-| CL-501 | 战绩/回放页面 | BE-501/502 | 单局、整场、规则详情、回放入口 | 私牌按 viewer 过滤；无未确认规则说明 | AI + CL | TODO |
+| CL-501 | 战绩/回放页面 | BE-501/502 | 单局、整场、规则详情、回放入口 | 私牌按 viewer 过滤；无未确认规则说明 | AI + CL | IN_PROGRESS（横屏入口与安全空状态已完成；正式结算/历史 API 待） |
 | CL-502 | 客服入口和工单 | BE-503/504 | 新建、消息、状态；附件仅在合规决策后开启 | 失败可重试；敏感信息脱敏；纯文本 MVP 不得延期 | AI + CL | TODO |
 | CL-503 | 账号/隐私设置 | DEC-002、BE-103/505 | 会话、注销申请、隐私和用户协议 | 注销走异步冷静期/留存流程 | AI + CL | TODO |
 
