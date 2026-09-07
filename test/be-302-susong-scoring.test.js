@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createSusongFlowerState, resolveSusongFlowers } from '../src/domain/rules/susong.js';
-import { scoreSusongWin } from '../src/domain/rules/susong-scoring.js';
+import { scoreSusongRound, scoreSusongWin } from '../src/domain/rules/susong-scoring.js';
 import { Room } from '../src/domain/room.js';
 import { RoomService } from '../src/modules/room/service.js';
 
@@ -100,6 +100,47 @@ test('no-flower self-draw remains at the cap tier', () => {
   assert.deepEqual(settlement.deltaByPlayer, { A: 24, B: -8, C: -8, D: -8 });
 });
 
+test('discard win charges only the discarder', () => {
+  const settlement = scoreSusongRound({
+    config,
+    playerIds: players,
+    outcome: 'discard',
+    discarderId: 'D',
+    winnerId: 'A',
+    flowerState: flowerState(4),
+    zengByPlayer: { A: 2, B: 3, C: 1, D: 5 }
+  });
+  assert.deepEqual(settlement.winnerIds, ['A']);
+  assert.deepEqual(settlement.transfers.map(item => [item.from, item.to, item.amount]), [['D', 'A', 19]]);
+  assert.deepEqual(settlement.deltaByPlayer, { A: 19, B: 0, C: 0, D: -19 });
+});
+
+test('one discard can pay two or three independently classified winners', () => {
+  const settlement = scoreSusongRound({
+    config,
+    playerIds: players,
+    outcome: 'discard',
+    discarderId: 'D',
+    winners: [
+      { playerId: 'A', flowerState: flowerState(4) },
+      { playerId: 'B', flowerState: flowerState(5) },
+      { playerId: 'C', flowerState: flowerState(10) }
+    ],
+    zengByPlayer: { A: 2, B: 3, C: 1, D: 5 }
+  });
+  assert.deepEqual(settlement.winnerIds, ['A', 'B', 'C']);
+  assert.deepEqual(settlement.wins.map(win => win.tier), ['small', 'big', 'double_big']);
+  assert.deepEqual(settlement.transfers.map(item => item.amount), [19, 22, 19]);
+  assert.deepEqual(settlement.deltaByPlayer, { A: 19, B: 22, C: 19, D: -60 });
+});
+
+test('draw at the wall boundary is an auditable zero settlement', () => {
+  const settlement = scoreSusongRound({ config, playerIds: players, outcome: 'draw' });
+  assert.deepEqual(settlement.winnerIds, []);
+  assert.deepEqual(settlement.transfers, []);
+  assert.deepEqual(settlement.deltaByPlayer, { A: 0, B: 0, C: 0, D: 0 });
+});
+
 test('internal RoomService settlement scores and persists through SYSTEM authority', async () => {
   let sequence = 0;
   const room = new Room({
@@ -135,8 +176,8 @@ test('internal RoomService settlement scores and persists through SYSTEM authori
     commandId: 'system-score-example',
     requestId: 'system-score-request',
     facts: {
+      outcome: 'self_draw',
       winnerId: 'A',
-      winSource: 'self_draw',
       flowerState: flowerState(4),
       zengByPlayer: { A: 2, B: 3, C: 1, D: 5 }
     }

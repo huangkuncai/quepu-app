@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { Room, stableCommandString } from '../../domain/room.js';
 import { normalizeSusongConfig, susongRule } from '../../domain/rules/susong.js';
-import { scoreSusongWin } from '../../domain/rules/susong-scoring.js';
+import { scoreSusongRound } from '../../domain/rules/susong-scoring.js';
 import { AppError } from '../../shared/errors.js';
 
 const ROOM_COMMAND_TYPES = new Set([
@@ -300,7 +300,7 @@ export class RoomService {
     const players = [...actor.room.players.values()]
       .sort((left, right) => left.seat - right.seat)
       .map(player => player.id);
-    const settlement = scoreSusongWin({
+    const settlement = scoreSusongRound({
       ...clone(facts),
       config: actor.room.ruleSnapshot.config,
       playerIds: players

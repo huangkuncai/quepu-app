@@ -89,6 +89,100 @@ export function scoreSusongWin({
   });
 }
 
+/** Score a complete draw, self-draw, discard win, or one-discard-multi-win round. */
+export function scoreSusongRound(input = {}) {
+  const players = normalizePlayers(input.playerIds);
+  const config = normalizeSusongConfig(input.config);
+  const outcome = input.outcome ?? input.winSource;
+  if (outcome === 'draw') {
+    return deepFreeze({
+      scoreAuthority: 'server',
+      outcome: 'draw',
+      winnerIds: [],
+      discarderId: null,
+      wins: [],
+      transfers: [],
+      deltaByPlayer: Object.fromEntries(players.map(playerId => [playerId, 0]))
+    });
+  }
+  if (!['self_draw', 'discard'].includes(outcome)) {
+    throw new TypeError('outcome must be draw, self_draw or discard');
+  }
+
+  const winnerInputs = normalizeWinnerInputs(input);
+  if (outcome === 'self_draw' && winnerInputs.length !== 1) {
+    throw new TypeError('self_draw must contain exactly one winner');
+  }
+  const winnerIds = winnerInputs.map(winner => member(winner.winnerId, players, 'winnerId'));
+  if (new Set(winnerIds).size !== winnerIds.length) {
+    throw new TypeError('winners must be unique');
+  }
+  const discarderId = outcome === 'discard'
+    ? member(input.discarderId, players, 'discarderId')
+    : null;
+  if (discarderId && winnerIds.includes(discarderId)) {
+    throw new TypeError('discarderId cannot be a winner');
+  }
+
+  const wins = winnerInputs.map(winner => scoreSusongWin({
+    config,
+    playerIds: players,
+    winnerId: winner.winnerId,
+    winSource: outcome,
+    discarderId,
+    flowerState: winner.flowerState,
+    zengByPlayer: input.zengByPlayer,
+    patterns: winner.patterns ?? [],
+    gangWinCount: winner.gangWinCount ?? 0,
+    sanxiPairs: input.sanxiPairs ?? []
+  }));
+  const transfers = wins.flatMap(win => win.transfers);
+  const deltaByPlayer = Object.fromEntries(players.map(playerId => [playerId, 0]));
+  for (const transfer of transfers) {
+    deltaByPlayer[transfer.from] -= transfer.amount;
+    deltaByPlayer[transfer.to] += transfer.amount;
+  }
+  if (Object.values(deltaByPlayer).reduce((sum, value) => sum + value, 0) !== 0) {
+    throw new Error('Susong round settlement must be zero-sum');
+  }
+  return deepFreeze({
+    scoreAuthority: 'server',
+    outcome,
+    winnerIds,
+    discarderId,
+    wins: wins.map(win => ({
+      winnerId: win.winnerId,
+      flowerCount: win.flowerCount,
+      tier: win.settledTier
+    })),
+    transfers,
+    deltaByPlayer
+  });
+}
+
+function normalizeWinnerInputs(input) {
+  if (Array.isArray(input.winners)) {
+    if (input.winners.length < 1 || input.winners.length > 3) {
+      throw new TypeError('winners must contain between one and three winners');
+    }
+    return input.winners.map((winner, index) => {
+      if (!winner || typeof winner !== 'object' || Array.isArray(winner)) {
+        throw new TypeError(`winners.${index} must be an object`);
+      }
+      return {
+        ...winner,
+        winnerId: winner.winnerId ?? winner.playerId
+      };
+    });
+  }
+  return [{
+    winnerId: input.winnerId,
+    flowerState: input.flowerState,
+    patterns: input.patterns,
+    gangWinCount: input.gangWinCount
+  }];
+}
+
 function normalizePlayers(value) {
   if (!Array.isArray(value) || value.length !== 4) {
     throw new TypeError('playerIds must contain exactly four players');
