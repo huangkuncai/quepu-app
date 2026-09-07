@@ -5,7 +5,9 @@ import {
   buildSusongTileSet,
   createSusongShuffledWall,
   dealSusongOpeningHands,
+  drawSusongLiveTile,
   drawSusongReplacementTile,
+  isSusongReplacementFlower,
   publicSusongWallState,
   verifySusongSeedCommitment
 } from '../src/domain/rules/susong-wall.js';
@@ -83,6 +85,17 @@ test('candidate replacement draw consumes the tail and respects the 14-tile rese
   assert.equal(draw.wallRemaining, 2);
   assert.throws(
     () => drawSusongReplacementTile(Array.from({ length: 14 }, (_, index) => String(index))),
+    /reserved wall boundary/
+  );
+});
+
+test('normal turn draw consumes the live-wall head and respects the 14-tile reserve', () => {
+  const draw = drawSusongLiveTile(['head', 'second', 'tail'], { reserveTiles: 1 });
+  assert.equal(draw.tileId, 'head');
+  assert.deepEqual(draw.remainingWall, ['second', 'tail']);
+  assert.equal(draw.wallRemaining, 2);
+  assert.throws(
+    () => drawSusongLiveTile(Array.from({ length: 14 }, (_, index) => String(index))),
     /reserved wall boundary/
   );
 });
@@ -165,6 +178,189 @@ test('Room exposes only the viewer hand while persistence retains all private st
   assert.equal(JSON.stringify(room.snapshot()).includes('resolvedFlowerTilesByPlayer'), false);
   room.beginPlaying({ actorId: 'A' });
   assert.equal(room.turn, 'C');
+});
+
+test('Susong turns enforce server-owned draw, hand ownership and public discards', () => {
+  const room = susongRoom('turn-wall-room');
+  room.dealSusongOpeningRound({ seed, dealerSeat: 2 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM',
+    commandId: 'turn-deal'
+  });
+  room.beginPlaying({ actorId: 'A', commandId: 'turn-begin' });
+  assert.equal(room.turn, 'C');
+  assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.throws(
+    () => room.applyAction('C', 'draw', { commandId: 'dealer-illegal-draw' }),
+    error => error.code === 'INVALID_ACTION'
+  );
+
+  const dealerHand = room.snapshot({ viewerId: 'C' }).round.privateHand;
+  const dealerDiscard = dealerHand.find(tileId => !tileId.includes('flower') && !tileId.includes('dragon'));
+  const discarded = room.applyAction('C', {
+    action: 'discard',
+    args: { tileId: dealerDiscard }
+  }, { commandId: 'dealer-discard' });
+  assert.equal(discarded.event.type, 'SUSONG_TILE_DISCARDED');
+  assert.equal(room.snapshot({ viewerId: 'C' }).round.privateHand.length, 13);
+  assert.deepEqual(room.currentRound.discardsByPlayer.C, [dealerDiscard]);
+  assert.equal(room.turn, 'D');
+  assert.equal(room.currentRound.turnPhase, 'draw');
+  assert.throws(
+    () => room.applyAction('D', { action: 'draw', args: { tileId: 'forged' } }, { commandId: 'forged-draw' }),
+    error => error.code === 'INVALID_ACTION'
+  );
+
+  const wallBefore = room.currentRound.wall.wallRemaining;
+  const drawn = room.applyAction('D', 'draw', { commandId: 'D-draw' });
+  assert.equal(drawn.event.type, 'SUSONG_TILE_DRAWN');
+  assert.equal(JSON.stringify(drawn.event).includes('tileId'), false);
+  assert.equal(room.currentRound.wall.wallRemaining < wallBefore, true);
+  assert.equal(room.turn, 'D');
+  assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.throws(
+    () => room.applyAction('D', { action: 'discard', args: { tileId: dealerDiscard } }, { commandId: 'D-forged-discard' }),
+    error => error.code === 'INVALID_ACTION'
+  );
+
+  const dHand = room.snapshot({ viewerId: 'D' }).round.privateHand;
+  const dDiscard = dHand.find(tileId => !tileId.includes('flower') && !tileId.includes('dragon'));
+  room.applyAction('D', { action: 'discard', args: { tileId: dDiscard } }, { commandId: 'D-discard' });
+  assert.equal(room.turn, 'A');
+  assert.equal(room.currentRound.turnPhase, 'draw');
+  const persisted = room.persistenceSnapshot();
+  assert.deepEqual(Room.fromSnapshot(persisted).persistenceSnapshot(), persisted);
+  assert.equal(JSON.stringify(room.snapshot()).includes('turnHistory'), false);
+});
+
+test('non-piao live flower is replaced server-side without exposing either private tile', () => {
+  const flowerSeed = '17'.padStart(64, '0');
+  const room = susongRoom('turn-flower-replace-room');
+  room.dealSusongOpeningRound({ seed: flowerSeed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  const aDiscard = room.snapshot({ viewerId: 'A' }).round.privateHand.find(tileId => !isSusongReplacementFlower(tileId));
+  room.applyAction('A', { action: 'discard', args: { tileId: aDiscard } });
+  const wallBefore = room.currentRound.wall.wallRemaining;
+  const result = room.applyAction('B', 'draw');
+  assert.equal(result.flowerDisposition, 'replaced');
+  assert.ok(result.resolvedCount >= 1);
+  assert.ok(room.currentRound.wall.wallRemaining <= wallBefore - 2);
+  assert.equal(room.snapshot({ viewerId: 'B' }).round.privateHand.length, 14);
+  assert.equal(room.turn, 'B');
+  assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.equal(JSON.stringify(result.event).includes('tileId'), false);
+  assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
+});
+
+test('strong-piao live flower is discarded server-side and advances the turn', () => {
+  const flowerSeed = '3c'.padStart(64, '0');
+  const room = susongRoom('turn-flower-discard-room', 'strong');
+  room.dealSusongOpeningRound({ seed: flowerSeed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  for (const playerId of players) {
+    if (room.currentRound.flowerStates[playerId].status !== 'awaiting_piao_choice') continue;
+    room.chooseSusongPiao(playerId, true, { actorId: playerId });
+    while (room.currentRound.flowerStates[playerId].pendingFlowerDiscards > 0) {
+      room.resolveSusongFlower(playerId, 'discard', { actorId: playerId });
+    }
+  }
+  room.beginPlaying({ actorId: 'A' });
+  const aDiscard = room.snapshot({ viewerId: 'A' }).round.privateHand.find(tileId => !isSusongReplacementFlower(tileId));
+  room.applyAction('A', { action: 'discard', args: { tileId: aDiscard } });
+  const wallBefore = room.currentRound.wall.wallRemaining;
+  const result = room.applyAction('B', 'draw');
+  assert.equal(result.flowerDisposition, 'discarded');
+  assert.equal(room.currentRound.wall.wallRemaining, wallBefore - 1);
+  assert.equal(room.snapshot({ viewerId: 'B' }).round.privateHand.length, 13);
+  assert.equal(room.turn, 'C');
+  assert.equal(room.currentRound.turnPhase, 'draw');
+  assert.equal(JSON.stringify(result.event).includes('tileId'), false);
+});
+
+test('Susong live wall settles as a zero-score draw at the reserved 14-tile boundary', () => {
+  const room = susongRoom('reserved-wall-room');
+  room.dealSusongOpeningRound({ seed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  let result;
+  for (let step = 0; step < 300 && room.status === 'playing'; step += 1) {
+    const playerId = room.turn;
+    if (room.currentRound.turnPhase === 'draw') {
+      result = room.applyAction(playerId, 'draw', { commandId: `reserve-draw-${step}` });
+    } else {
+      const tileId = room.snapshot({ viewerId: playerId }).round.privateHand
+        .find(value => !isSusongReplacementFlower(value));
+      result = room.applyAction(playerId, { action: 'discard', args: { tileId } }, {
+        commandId: `reserve-discard-${step}`
+      });
+    }
+  }
+  assert.equal(room.status, 'settling');
+  assert.equal(result.event.type, 'ROUND_SETTLING');
+  assert.equal(result.reason, 'WALL_RESERVED_14');
+  assert.ok(room.currentRound.wall.wallRemaining >= 14);
+  assert.ok(room.currentRound.wall.wallRemaining <= 15);
+  assert.deepEqual(result.settlement.deltaByPlayer, { A: 0, B: 0, C: 0, D: 0 });
+  assert.equal(room.turn, null);
+  assert.equal(room.currentRound.turnPhase, null);
+  assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
+});
+
+test('RoomActor checkpoints private hands after every authoritative turn mutation', async () => {
+  const store = createMemoryGameStore();
+  const room = susongRoom('actor-turn-wall-room');
+  const actor = new RoomActor({
+    room,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'turn-actor-1',
+    snapshotEvery: 100
+  });
+  await actor.dispatch({
+    type: 'deal_susong_round',
+    commandId: 'actor-turn-deal',
+    payload: { seed, dealerSeat: 0 }
+  }, { actorId: 'system:susong-rule-engine', actorRole: 'SYSTEM' });
+  await actor.dispatch({
+    type: 'begin_playing',
+    commandId: 'actor-turn-begin',
+    payload: {}
+  }, { actorId: 'A' });
+  const tileId = actor.snapshot({ viewerId: 'A' }).round.privateHand
+    .find(value => !value.includes('flower') && !value.includes('dragon'));
+  await actor.dispatch({
+    type: 'action',
+    commandId: 'actor-turn-discard',
+    payload: { playerId: 'A', action: { action: 'discard', args: { tileId } } }
+  }, { actorId: 'A' });
+  let durable = store.eventStore.getSnapshot(room.id);
+  assert.deepEqual(durable.round.discardsByPlayer.A, [tileId]);
+  assert.equal(durable.privateRoundState.handsByPlayer.A.includes(tileId), false);
+
+  await actor.dispatch({
+    type: 'action',
+    commandId: 'actor-turn-draw',
+    payload: { playerId: 'B', action: 'draw' }
+  }, { actorId: 'B' });
+  durable = store.eventStore.getSnapshot(room.id);
+  assert.equal(durable.round.turnPhase, 'discard');
+  assert.equal(durable.privateRoundState.handsByPlayer.B.length, 14);
+  const restarted = new RoomActor({
+    roomId: room.id,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'turn-actor-2',
+    snapshotEvery: 100
+  });
+  await restarted.recover();
+  assert.deepEqual(restarted.snapshot({ viewerId: 'B' }), actor.snapshot({ viewerId: 'B' }));
 });
 
 test('RoomActor forces an atomic private checkpoint even with sparse snapshots', async () => {

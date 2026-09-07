@@ -9,6 +9,7 @@ import {
   buildSusongTileSet,
   createSusongShuffledWall,
   dealSusongOpeningHands,
+  drawSusongLiveTile,
   drawSusongReplacementTile,
   isSusongReplacementFlower,
   publicSusongWallState,
@@ -705,6 +706,8 @@ export class Room {
       dealerSeat: options.dealerSeat === undefined ? null : options.dealerSeat,
       ruleSnapshotHash: this.ruleSnapshotHash,
       wall: null,
+      turnPhase: null,
+      discardsByPlayer: null,
       flowerStates: null,
       settlement: null,
       startedAt: null,
@@ -789,7 +792,9 @@ export class Room {
         handsByPlayer: dealt.handsByPlayer,
         remainingWall: dealt.remainingWall,
         resolvedFlowerTilesByPlayer: Object.fromEntries(players.map(player => [player.id, []])),
-        replacementHistory: []
+        replacementHistory: [],
+        turnHistory: [],
+        nextPrivateOperationSequence: 1
       });
       const openingReplacementCountByPlayer = Object.fromEntries(players.map(player => [player.id, 0]));
       for (const player of players) {
@@ -1113,6 +1118,8 @@ export class Room {
       this.currentRound.startedAt = iso(this.clock);
       this.turn = this._firstTurn();
       this.turnPlayerId = this.turn;
+      this.currentRound.turnPhase = 'discard';
+      this.currentRound.discardsByPlayer = Object.fromEntries([...this.players.keys()].map(playerId => [playerId, []]));
       this._setTurnDeadline();
       const event = this._append('ROUND_PLAYING', {
         matchId: this.matchId,
@@ -1120,10 +1127,178 @@ export class Room {
         roundNumber: this.roundNumber,
         status: this.status,
         turn: this.turn,
+        turnPhase: this.currentRound.turnPhase,
+        discardsByPlayer: clone(this.currentRound.discardsByPlayer),
         turnStartedAt: this.currentRound.turnStartedAt,
         turnDeadlineAt: this.currentRound.turnDeadlineAt
       }, command);
       return this._result(event, { matchId: this.matchId, roundId: this.roundId });
+    });
+  }
+
+  _advanceSusongTurn(playerId) {
+    const ordered = this._orderedPlayers();
+    const index = ordered.findIndex(player => player.id === playerId);
+    this.turn = ordered[(index + 1) % ordered.length]?.id || null;
+    this.turnPlayerId = this.turn;
+    this.currentRound.turnPhase = 'draw';
+    this._setTurnDeadline();
+  }
+
+  _settleSusongWallDraw(command) {
+    const players = this._orderedPlayers().map(player => player.id);
+    const settlement = {
+      scoreAuthority: 'server',
+      outcome: 'draw',
+      winnerIds: [],
+      discarderId: null,
+      wins: [],
+      transfers: [],
+      deltaByPlayer: Object.fromEntries(players.map(playerId => [playerId, 0]))
+    };
+    this._setStatus(ROOM_STATUS.SETTLING);
+    this.currentRound.status = ROOM_STATUS.SETTLING;
+    this.currentRound.settlement = clone(settlement);
+    this.currentRound.endedAt = iso(this.clock);
+    this.currentRound.turnPhase = null;
+    this.currentRound.turnStartedAt = null;
+    this.currentRound.turnDeadlineAt = null;
+    this.turn = null;
+    this.turnPlayerId = null;
+    const event = this._append('ROUND_SETTLING', {
+      matchId: this.matchId,
+      roundId: this.roundId,
+      settlement,
+      scores: Object.fromEntries(this.scores),
+      reason: 'WALL_RESERVED_14'
+    }, command);
+    return this._result(event, { settlement: clone(settlement), reason: 'WALL_RESERVED_14' });
+  }
+
+  _applySusongTurnAction(playerId, action, args, command) {
+    if (!this._privateRoundState || !this.currentRound?.wall) throw new AppError('INVALID_ACTION');
+    if (!['draw', 'discard'].includes(action)) throw new AppError('INVALID_ACTION');
+    const phase = this.currentRound.turnPhase;
+    if (action !== phase) throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'round.turnPhase', message: `expected ${phase}` }]
+    });
+    const privateState = clone(this._privateRoundState);
+    const hand = privateState.handsByPlayer[playerId];
+    if (!Array.isArray(hand)) throw new AppError('INVALID_ACTION');
+
+    if (action === 'draw') {
+      if (args && Object.keys(args).length > 0) throw new AppError('INVALID_ACTION');
+      if (privateState.remainingWall.length <= 14) return this._settleSusongWallDraw(command);
+      let draw;
+      try {
+        draw = drawSusongLiveTile(privateState.remainingWall);
+      } catch (cause) {
+        throw new AppError('INVALID_ACTION', { cause });
+      }
+      // A flower cannot be exposed as a playable tile. If taking the live
+      // tile would leave only the reserved wall and therefore make its
+      // mandatory replacement impossible, settle the draw without consuming
+      // either end of the authoritative wall.
+      const drawnFlowerState = isSusongReplacementFlower(draw.tileId)
+        ? recordSusongFlowerDraw(this.currentRound.flowerStates[playerId], 1)
+        : null;
+      if (drawnFlowerState?.status !== 'piao' && draw.remainingWall.length <= 14) {
+        return this._settleSusongWallDraw(command);
+      }
+      privateState.remainingWall = [...draw.remainingWall];
+      hand.push(draw.tileId);
+      appendPrivateTurnOperation(privateState, {
+        action: 'draw',
+        playerId,
+        tileId: draw.tileId
+      });
+      let flowerState = this.currentRound.flowerStates[playerId];
+      let flowerDisposition = null;
+      let resolvedCount = 0;
+      if (isSusongReplacementFlower(draw.tileId)) {
+        flowerState = drawnFlowerState;
+        const flowerAction = flowerState.status === 'piao' ? 'discard' : 'replace';
+        const resolution = resolvePrivateSusongFlowers({
+          privateState,
+          playerId,
+          action: flowerAction,
+          flowerState
+        });
+        this._privateRoundState = resolution.privateState;
+        flowerState = resolution.flowerState;
+        flowerDisposition = flowerAction === 'discard' ? 'discarded' : 'replaced';
+        resolvedCount = resolution.resolvedCount;
+        if (flowerAction === 'discard') this._advanceSusongTurn(playerId);
+        else {
+          this.currentRound.turnPhase = 'discard';
+          this._setTurnDeadline();
+        }
+      } else {
+        this._privateRoundState = privateState;
+        this.currentRound.turnPhase = 'discard';
+        this._setTurnDeadline();
+      }
+      this.currentRound.flowerStates[playerId] = clone(flowerState);
+      const finalHand = this._privateRoundState.handsByPlayer[playerId];
+      this.currentRound.wall.wallRemaining = this._privateRoundState.remainingWall.length;
+      this.currentRound.wall.handCountsByPlayer[playerId] = finalHand.length;
+      const event = this._append('SUSONG_TILE_DRAWN', {
+        matchId: this.matchId,
+        roundId: this.roundId,
+        playerId,
+        handCount: finalHand.length,
+        wallRemaining: this.currentRound.wall.wallRemaining,
+        flowerDisposition,
+        resolvedCount,
+        flowerState: clone(flowerState),
+        nextTurn: this.turn,
+        turnPhase: this.currentRound.turnPhase,
+        turnStartedAt: this.currentRound.turnStartedAt,
+        turnDeadlineAt: this.currentRound.turnDeadlineAt
+      }, command);
+      return this._result(event, {
+        playerId,
+        action,
+        handCount: finalHand.length,
+        wallRemaining: this.currentRound.wall.wallRemaining,
+        flowerDisposition,
+        resolvedCount,
+        nextTurn: this.turn,
+        turnPhase: this.currentRound.turnPhase
+      });
+    }
+
+    const tileId = normalizeId(args?.tileId, 'args.tileId', { max: 128 });
+    if (isSusongReplacementFlower(tileId)) throw new AppError('INVALID_ACTION');
+    const tileIndex = hand.indexOf(tileId);
+    if (tileIndex < 0) throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'args.tileId', message: 'tile is not in the player hand' }]
+    });
+    hand.splice(tileIndex, 1);
+    appendPrivateTurnOperation(privateState, { action: 'discard', playerId, tileId });
+    this._privateRoundState = privateState;
+    this.currentRound.discardsByPlayer[playerId].push(tileId);
+    this.currentRound.wall.handCountsByPlayer[playerId] = hand.length;
+    this._advanceSusongTurn(playerId);
+    const event = this._append('SUSONG_TILE_DISCARDED', {
+      matchId: this.matchId,
+      roundId: this.roundId,
+      playerId,
+      tileId,
+      handCount: hand.length,
+      wallRemaining: this.currentRound.wall.wallRemaining,
+      nextTurn: this.turn,
+      turnPhase: this.currentRound.turnPhase,
+      turnStartedAt: this.currentRound.turnStartedAt,
+      turnDeadlineAt: this.currentRound.turnDeadlineAt
+    }, command);
+    return this._result(event, {
+      playerId,
+      action,
+      tileId,
+      handCount: hand.length,
+      nextTurn: this.turn,
+      turnPhase: this.currentRound.turnPhase
     });
   }
 
@@ -1148,6 +1323,9 @@ export class Room {
       const player = this.players.get(id);
       if (!player) throw new AppError('PLAYER_NOT_FOUND');
       if (this.turn !== id) throw new AppError('NOT_YOUR_TURN');
+      if (this.ruleId === 'susong_v1' && this._privateRoundState) {
+        return this._applySusongTurnAction(id, name, parsed.args, command);
+      }
       if (this.validateAction) {
         let valid = false;
         try {
@@ -1772,6 +1950,8 @@ export class Room {
           dealerSeat: null,
           ruleSnapshotHash: payload.ruleSnapshotHash || this.ruleSnapshotHash,
           wall: null,
+          turnPhase: null,
+          discardsByPlayer: null,
           flowerStates: null,
           settlement: null,
           startedAt: payload.status === ROOM_STATUS.PLAYING ? (event.occurredAt || event.at || null) : null,
@@ -1808,6 +1988,10 @@ export class Room {
         }
         this.turn = payload.turn ?? this.turn;
         this.turnPlayerId = this.turn;
+        this.currentRound.turnPhase = payload.turnPhase ?? this.currentRound.turnPhase;
+        if (isRecord(payload.discardsByPlayer)) {
+          this.currentRound.discardsByPlayer = clone(payload.discardsByPlayer);
+        }
         break;
       case 'SUSONG_FLOWERS_INITIALIZED': {
         if (!this.currentRound || !isRecord(payload.flowerStates)
@@ -1876,6 +2060,36 @@ export class Room {
         }
         break;
       }
+      case 'SUSONG_TILE_DRAWN': {
+        const id = playerId(payload.playerId);
+        if (!id || !this.currentRound?.wall || !Number.isInteger(payload.handCount)
+          || !Number.isInteger(payload.wallRemaining)) throw new AppError('INVALID_ACTION');
+        this.currentRound.wall.handCountsByPlayer[id] = payload.handCount;
+        this.currentRound.wall.wallRemaining = payload.wallRemaining;
+        if (isRecord(payload.flowerState)) this.currentRound.flowerStates[id] = clone(payload.flowerState);
+        this.turn = payload.nextTurn ?? id;
+        this.turnPlayerId = this.turn;
+        this.currentRound.turnPhase = payload.turnPhase;
+        this.currentRound.turnStartedAt = payload.turnStartedAt || null;
+        this.currentRound.turnDeadlineAt = payload.turnDeadlineAt || null;
+        break;
+      }
+      case 'SUSONG_TILE_DISCARDED': {
+        const id = playerId(payload.playerId);
+        if (!id || !this.currentRound?.wall || typeof payload.tileId !== 'string'
+          || !Number.isInteger(payload.handCount)) throw new AppError('INVALID_ACTION');
+        this.currentRound.wall.handCountsByPlayer[id] = payload.handCount;
+        if (!isRecord(this.currentRound.discardsByPlayer)) {
+          this.currentRound.discardsByPlayer = Object.fromEntries([...this.players.keys()].map(key => [key, []]));
+        }
+        this.currentRound.discardsByPlayer[id].push(payload.tileId);
+        this.turn = payload.nextTurn;
+        this.turnPlayerId = this.turn;
+        this.currentRound.turnPhase = payload.turnPhase;
+        this.currentRound.turnStartedAt = payload.turnStartedAt || null;
+        this.currentRound.turnDeadlineAt = payload.turnDeadlineAt || null;
+        break;
+      }
       case 'ACTION_APPLIED':
         this._setStatus(ROOM_STATUS.PLAYING);
         this.turn = payload.nextTurn ?? null;
@@ -1891,9 +2105,12 @@ export class Room {
           this.currentRound.status = ROOM_STATUS.SETTLING;
           this.currentRound.settlement = clone(payload.settlement ?? null);
           this.currentRound.endedAt = this.currentRound.endedAt || event.occurredAt || event.at || null;
+          this.currentRound.turnPhase = null;
           this.currentRound.turnStartedAt = null;
           this.currentRound.turnDeadlineAt = null;
         }
+        this.turn = null;
+        this.turnPlayerId = null;
         if (isRecord(payload.scores)) {
           const restoredScores = new Map();
           for (const id of this.players.keys()) {
@@ -1924,6 +2141,8 @@ export class Room {
           dealerSeat: null,
           ruleSnapshotHash: payload.ruleSnapshotHash || this.ruleSnapshotHash,
           wall: null,
+          turnPhase: null,
+          discardsByPlayer: null,
           flowerStates: null,
           settlement: null,
           startedAt: null,
@@ -2132,7 +2351,11 @@ function resolvePrivateSusongFlowers({ privateState, playerId, action, flowerSta
     }
   }
 
+  const sequence = nextPrivate.nextPrivateOperationSequence;
+  if (!Number.isSafeInteger(sequence) || sequence < 1) throw new TypeError('private operation sequence is invalid');
+  nextPrivate.nextPrivateOperationSequence += 1;
   nextPrivate.replacementHistory.push({
+    sequence,
     action,
     playerId,
     removedTileIds,
@@ -2146,6 +2369,14 @@ function resolvePrivateSusongFlowers({ privateState, playerId, action, flowerSta
     handCount: hand.length,
     wallRemaining: nextPrivate.remainingWall.length
   };
+}
+
+function appendPrivateTurnOperation(privateState, operation) {
+  if (!Array.isArray(privateState.turnHistory)) throw new TypeError('private turn history is incomplete');
+  const sequence = privateState.nextPrivateOperationSequence;
+  if (!Number.isSafeInteger(sequence) || sequence < 1) throw new TypeError('private operation sequence is invalid');
+  privateState.nextPrivateOperationSequence += 1;
+  privateState.turnHistory.push({ sequence, ...operation });
 }
 
 function normalizePrivateRoundState(input, players, round) {
@@ -2170,11 +2401,34 @@ function normalizePrivateRoundState(input, players, round) {
     resolvedFlowerTilesByPlayer[playerId] = resolved.map(value => String(value));
   }
   const remainingWall = input.remainingWall.map(value => String(value));
-  const replacementHistory = input.replacementHistory ?? [];
-  if (!Array.isArray(replacementHistory)) throw new AppError('INVALID_ACTION');
+  const replacementHistory = clone(input.replacementHistory ?? []);
+  const turnHistory = clone(input.turnHistory ?? []);
+  if (!Array.isArray(replacementHistory) || !Array.isArray(turnHistory)) throw new AppError('INVALID_ACTION');
+  if (replacementHistory.some(operation => !Number.isSafeInteger(operation?.sequence))) {
+    if (turnHistory.length > 0) throw new AppError('INVALID_ACTION');
+    replacementHistory.forEach((operation, index) => { operation.sequence = index + 1; });
+  }
+  const operations = [
+    ...replacementHistory.map(operation => ({ kind: 'flower', ...operation })),
+    ...turnHistory.map(operation => ({ kind: 'turn', ...operation }))
+  ].sort((left, right) => left.sequence - right.sequence);
+  if (operations.some((operation, index) => operation.sequence !== index + 1)) {
+    throw new AppError('INVALID_ACTION', {
+      details: [{ path: 'privateRoundState', message: 'private operation sequence must be contiguous' }]
+    });
+  }
+  const nextPrivateOperationSequence = input.nextPrivateOperationSequence ?? operations.length + 1;
+  if (!Number.isSafeInteger(nextPrivateOperationSequence)
+    || nextPrivateOperationSequence !== operations.length + 1) throw new AppError('INVALID_ACTION');
+  const publicDiscards = Object.fromEntries(playerIds.map(playerId => {
+    const values = round.discardsByPlayer?.[playerId] ?? [];
+    if (!Array.isArray(values)) throw new AppError('INVALID_ACTION');
+    return [playerId, values.map(value => String(value))];
+  }));
   const allTileIds = [
     ...Object.values(handsByPlayer).flat(),
     ...Object.values(resolvedFlowerTilesByPlayer).flat(),
+    ...Object.values(publicDiscards).flat(),
     ...remainingWall
   ];
   const allowedTileIds = new Set(buildSusongTileSet().map(tile => tile.id));
@@ -2213,41 +2467,64 @@ function normalizePrivateRoundState(input, players, round) {
     const replayHands = clone(expectedDeal.handsByPlayer);
     let replayWall = [...expectedDeal.remainingWall];
     const replayResolved = Object.fromEntries(playerIds.map(playerId => [playerId, []]));
-    for (const operation of replacementHistory) {
-      if (!isRecord(operation) || !playerIds.includes(operation.playerId)
-        || !['discard', 'replace'].includes(operation.action)
-        || !Array.isArray(operation.removedTileIds)
-        || !Array.isArray(operation.drawnTileIds)) {
-        throw new TypeError('invalid private flower history');
+    const replayDiscards = Object.fromEntries(playerIds.map(playerId => [playerId, []]));
+    for (const operation of operations) {
+      if (!isRecord(operation) || !playerIds.includes(operation.playerId)) {
+        throw new TypeError('invalid private operation history');
       }
-      if (operation.action === 'discard' && operation.drawnTileIds.length !== 0) {
-        throw new TypeError('discard history cannot draw a replacement');
-      }
-      if (operation.action === 'replace'
-        && operation.removedTileIds.length !== operation.drawnTileIds.length) {
-        throw new TypeError('replacement history must pair every removed and drawn tile');
-      }
-      for (let index = 0; index < operation.removedTileIds.length; index += 1) {
-        const removed = String(operation.removedTileIds[index]);
-        const handIndex = replayHands[operation.playerId].indexOf(removed);
-        if (handIndex < 0 || !isSusongReplacementFlower(removed)) {
-          throw new TypeError('flower history removes an unavailable tile');
+      if (operation.kind === 'flower') {
+        if (!['discard', 'replace'].includes(operation.action)
+          || !Array.isArray(operation.removedTileIds)
+          || !Array.isArray(operation.drawnTileIds)) {
+          throw new TypeError('invalid private flower history');
+        }
+        if (operation.action === 'discard' && operation.drawnTileIds.length !== 0) {
+          throw new TypeError('discard history cannot draw a replacement');
+        }
+        if (operation.action === 'replace'
+          && operation.removedTileIds.length !== operation.drawnTileIds.length) {
+          throw new TypeError('replacement history must pair every removed and drawn tile');
+        }
+        for (let index = 0; index < operation.removedTileIds.length; index += 1) {
+          const removed = String(operation.removedTileIds[index]);
+          const handIndex = replayHands[operation.playerId].indexOf(removed);
+          if (handIndex < 0 || !isSusongReplacementFlower(removed)) {
+            throw new TypeError('flower history removes an unavailable tile');
+          }
+          replayHands[operation.playerId].splice(handIndex, 1);
+          replayResolved[operation.playerId].push(removed);
+          if (operation.action === 'replace') {
+            const drawn = String(operation.drawnTileIds[index]);
+            if (replayWall.at(-1) !== drawn || replayWall.length <= 14) {
+              throw new TypeError('flower history draws outside the candidate tail');
+            }
+            replayWall.pop();
+            replayHands[operation.playerId].push(drawn);
+          }
+        }
+      } else if (operation.action === 'draw') {
+        const drawn = String(operation.tileId);
+        if (replayWall[0] !== drawn || replayWall.length <= 14) {
+          throw new TypeError('turn history draws outside the live wall');
+        }
+        replayWall.shift();
+        replayHands[operation.playerId].push(drawn);
+      } else if (operation.action === 'discard') {
+        const discarded = String(operation.tileId);
+        const handIndex = replayHands[operation.playerId].indexOf(discarded);
+        if (handIndex < 0 || isSusongReplacementFlower(discarded)) {
+          throw new TypeError('turn history discards an unavailable tile');
         }
         replayHands[operation.playerId].splice(handIndex, 1);
-        replayResolved[operation.playerId].push(removed);
-        if (operation.action === 'replace') {
-          const drawn = String(operation.drawnTileIds[index]);
-          if (replayWall.at(-1) !== drawn || replayWall.length <= 14) {
-            throw new TypeError('flower history draws outside the candidate tail');
-          }
-          replayWall.pop();
-          replayHands[operation.playerId].push(drawn);
-        }
+        replayDiscards[operation.playerId].push(discarded);
+      } else {
+        throw new TypeError('invalid private turn history');
       }
     }
     if (canonical(replayHands) !== canonical(handsByPlayer)
       || canonical(replayWall) !== canonical(remainingWall)
       || canonical(replayResolved) !== canonical(resolvedFlowerTilesByPlayer)
+      || canonical(replayDiscards) !== canonical(publicDiscards)
       || expectedDeal.wallVersion !== input.wallVersion
       || expectedDeal.shuffleAlgorithm !== input.shuffleAlgorithm
       || expectedDeal.dealAlgorithm !== input.dealAlgorithm
@@ -2271,7 +2548,9 @@ function normalizePrivateRoundState(input, players, round) {
     handsByPlayer,
     remainingWall,
     resolvedFlowerTilesByPlayer,
-    replacementHistory: clone(replacementHistory)
+    replacementHistory,
+    turnHistory,
+    nextPrivateOperationSequence
   });
 }
 

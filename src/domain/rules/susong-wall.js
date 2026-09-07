@@ -153,6 +153,20 @@ export function drawSusongReplacementTile(remainingWall, { reserveTiles = 14 } =
   });
 }
 
+/** Draw one normal turn tile from the live-wall head. */
+export function drawSusongLiveTile(remainingWall, { reserveTiles = 14 } = {}) {
+  if (!Array.isArray(remainingWall)) throw new TypeError('remainingWall must be an array');
+  if (!Number.isInteger(reserveTiles) || reserveTiles < 0) {
+    throw new TypeError('reserveTiles must be a non-negative integer');
+  }
+  if (remainingWall.length <= reserveTiles) {
+    throw new RangeError('live draw reached the reserved wall boundary');
+  }
+  const next = [...remainingWall];
+  const tileId = next.shift();
+  return deepFreeze({ tileId, remainingWall: next, wallRemaining: next.length });
+}
+
 /** Verify a post-round seed reveal against the commitment published at deal. */
 export function verifySusongSeedCommitment(seed, commitment) {
   if (typeof commitment !== 'string' || !/^[0-9a-f]{64}$/i.test(commitment)) return false;

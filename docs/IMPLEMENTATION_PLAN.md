@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-07（BE-303 服务端连续补花、自动起手补花与牌守恒，Node 141/141、Flutter 16/16）
+> 最近更新：2026-09-07（BE-303/304 服务端权威摸牌、出牌、花处理与保留 14 张流局，Node 147/147、Flutter 16/16）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -42,7 +42,7 @@
 | API | OpenAPI/AsyncAPI、JSON Schema 和 Node 校验器已建立；WSS 已接入 RoomActor、ACK/广播/订阅/重连，REST/BFF fake-staging 纵切已完成并纳入 YAML/ref/状态码契约检查 | 以 schema 为唯一协议源，继续扩 REST/WSS |
 | 客户端 | 已有 framework-neutral Dart 协议/连接核心、原生 `dart:io` transport 和 Flutter mock 壳；CL-203 维护/版本冲突/前台恢复 UI 已通过本机测试；尚无三端真机包 | 完成 CL-201 多客户端验收、ArkUI/平台生命周期和真实设备/签名验证 |
 | 数据 | PostgreSQL migrations、Redis Compose/health、repository contract 和 MemoryRepository 已建立；运行时仍为单进程内存 | 本地开发环境可复现，生产接入 PG/Redis 仍待后续任务 |
-| 测试 | 当前 141 个 Node 测试通过；Dart 协议/原生 transport/四客户端 fake 夹具脚本通过；Flutter POC 16/16 通过；`verify:real` 与 `verify:multi-instance` 均通过 | 继续增加真实进程滚动重启、弱网和平台级故障测试 |
+| 测试 | 当前 147 个 Node 测试通过；Dart 协议/原生 transport/四客户端 fake 夹具脚本通过；Flutter POC 16/16 通过；`verify:real` 与 `verify:multi-instance` 均通过 | 继续增加真实进程滚动重启、弱网和平台级故障测试 |
 | 仓库 | 当前实际路径为 `宿松app.migrated-backup`；分支 `codex/be-101-protocol`，尚无提交 | 后续补充分支/提交策略，不清理未跟踪文件 |
 
 ### 1.3 时间假设
@@ -337,8 +337,8 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | --- | --- | --- | --- | --- |
 | BE-301 | 牌组、牌 ID、CSPRNG/seed | DEC-RULE-001 | 牌组表、服务端随机、seed hash/算法版本 | 牌数/手牌/补花守恒，未结束牌墙不泄露；IN_PROGRESS（`susong-144-candidate-v1` 已实现稳定牌 ID、无模偏可复现洗牌、seed commitment 和脱敏公共视图；精确构成待旧服牌局样本签字） |
 | BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.3` 配置、飘花状态机和服务端计分核心已实现） |
-| BE-303 | 发牌、补花、牌墙、庄轮转 | DEC-RULE-002/003 | round state、dealer、wall、deadline | 固定 seed 重现；流局边界正确；IN_PROGRESS（候选开局算法和连续补花已接入 Room/RoomActor/RoomService；不强飘起手花、强飘选择不飘均服务端自动补完，补到花继续补，保留移出花牌并验证 144 张守恒；玩家仅见本人手牌；待正常摸牌/出牌与跨局庄轮转） |
-| BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝 |
+| BE-303 | 发牌、补花、牌墙、庄轮转 | DEC-RULE-002/003 | round state、dealer、wall、deadline | 固定 seed 重现；流局边界正确；IN_PROGRESS（候选开局、连续补花、正常摸出牌与保留 14 张流局已接入 Room/RoomActor/RoomService；私牌及操作历史可按 seed 重放，玩家仅见本人手牌；待跨局庄轮转） |
+| BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝；IN_PROGRESS（draw/discard 回合阶段、手牌归属、服务端取牌和公开弃牌已实现；待响应窗口与 chi/peng/gang/hu/pass） |
 | BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（增、起手飘花选择、摸花、打/补花均已接入房间事件和恢复，结算权威读取；待杠与过圈） |
 | BE-306 | 结算和两级积分账本 | DEC-RULE-004/005/008 | `RoundSettlement`、原因明细、累计战绩、零和/系统项策略 | 服务端重算；幂等；流局和多响样例通过；IN_PROGRESS（自摸、点炮、一冲二/三、流局、SYSTEM 写入、累计积分、重放/幂等和零和校验已实现） |
 | BE-307 | 回放/确定性验证器 | BE-301~306 | 规则版本 + seed + event replay、snapshot hash | 历史规则重放不变，divergence 告警 |
@@ -533,7 +533,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | I1 | IN_PROGRESS | BE-101～BE-106 已完成（开发/单进程基线）；CL-101 已完成；CL-102 Flutter POC 与 CL-103 framework-neutral 核心/原生 transport 已完成本机验证；OPS-101 开发环境手册已完成；ArkUI/平台生命周期和真实设备仍待 | G2 预审 |
 | G1 | IN_PROGRESS | Android/iOS 工具链预检已通过，Android debug APK 已构建；Android/iOS 真机矩阵和发布签名仍待，鸿蒙暂缓 | Android/iOS 真机与签名验收 |
 | I2 | IN_PROGRESS | BE-201～BE-205 已完成（业务纵切仍为内存/fake-staging）；BE-204 PG/Redis adapter、presence overlay、异步启动装配、snapshot/delta、重连、显式 deadline 和 durable claim/lease 已完成，`verify:real` 与 `verify:multi-instance` 本地真实容器 smoke 通过，生产滚动重启/故障演练仍待；BE-207 纯文本客服 REST 已完成；CL-201 Flutter 房间桌面、四客户端 fake 验收夹具、CL-202 命令 outbox、CL-203 重连 UI 本机 POC 已完成；真实 WSS/设备验收和 CL-204 REST 联调待 | G3 实时纵切 |
-| 宿松规则 | IN_PROGRESS | 用户已确认采用参考 APK 8931 规则；开房配置、花数/胡型/杠开、服务端计分、候选 144 张牌墙、发牌和连续补花已编码，私密牌墙已接入持久化和按玩家脱敏视图；补花方向与动作优先级仍缺旧服样本 | 实现正常摸牌/出牌和 14 张流局边界，再形成 ≥20 个 golden cases |
+| 宿松规则 | IN_PROGRESS | 用户已确认采用参考 APK 8931 规则；开房配置、花数/胡型/杠开、服务端计分、候选 144 张牌墙、发牌、连续补花、摸出牌和保留 14 张流局已编码，私密牌墙已接入持久化和按玩家脱敏视图；补花方向与动作优先级仍缺旧服样本 | 实现出牌响应窗口与碰/杠/胡/过，再形成 ≥20 个 golden cases |
 | Club/Floor | BLOCKED | 依赖 DEC-003～006 | G2 + schema |
 | Diamond | BLOCKED | 依赖 DEC-008～009 | 计费决策会 |
 | History/Support | IN_PROGRESS | BE-207 纯文本工单 REST 已完成并通过 2 个集成用例；CL-204 共享 Dart SupportApi 与 Flutter 注入已完成，真实 REST/三端联调待 | G3 |
@@ -591,6 +591,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.24 | 2026-09-07 | 实现 `susong-144-candidate-v1` 服务端牌墙：144 张稳定实体 ID、随机/固定 seed、commitment、无模偏洗牌、庄 14/闲 13 开局发牌和脱敏公共视图 | `test/be-303-susong-wall.test.js`、`npm run check`（Node 136/136）；精确牌墙与补花方向仍待旧服样本，不标 production-ready |
 | 0.1.25 | 2026-09-07 | 将候选牌墙接入 Room/RoomActor/RoomService：开始宿松局后服务端自动发牌，私密状态强制原子 checkpoint，重启可恢复；每名玩家仅见自己的手牌，公共 snapshotHash 保持一致；日志扩展私牌字段脱敏 | `npm run check`（Node 139/139）、`be-303-susong-wall.test.js`；补花实际取牌和跨局庄轮转仍待 |
 | 0.1.26 | 2026-09-07 | 实现候选牌墙尾部连续补花：不强飘起手自动补、强飘选择不飘后自动补、补到花继续补；移出花进入私密已解析区，花牌丢出不消耗牌墙，所有操作可随 seed/history 重放并保持 144 张守恒 | `npm run check`（Node 141/141）；补花方向仍为 `tail-v1-provisional`，待旧服样本签字 |
+| 0.1.27 | 2026-09-07 | 实现服务端权威正常摸牌/出牌：客户端不能指定摸牌，出牌必须属于本人手牌，弃牌公开，私牌变更强制 checkpoint；摸到花按飘/不飘自动打花或连续补花，保留 14 张边界服务端零分流局 | `npm run check`（Node 147/147）；碰/杠/胡/过响应优先级待后续纵切 |
 
 ## 16. 我们下一次具体做什么
 

@@ -558,7 +558,9 @@ export class RoomActor {
         const containsPrivateStateChange = events.some(event => [
           'SUSONG_ROUND_DEALT',
           'SUSONG_PIAO_CHOSEN',
-          'SUSONG_FLOWER_RESOLVED'
+          'SUSONG_FLOWER_RESOLVED',
+          'SUSONG_TILE_DRAWN',
+          'SUSONG_TILE_DISCARDED'
         ].includes(event.type));
         const shouldSnapshot = (events.length > 0 && (
           containsPrivateStateChange
