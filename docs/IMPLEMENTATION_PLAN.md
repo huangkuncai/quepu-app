@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-07（BE-304 响应窗口、玩家私有候选投影与服务端碰牌，Node 150/150、Flutter 16/16）
+> 最近更新：2026-09-07（BE-304/305 服务端明杠、杠后补牌与碰/杠花数累计，Node 154/154、Flutter 16/16）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -338,8 +338,8 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | BE-301 | 牌组、牌 ID、CSPRNG/seed | DEC-RULE-001 | 牌组表、服务端随机、seed hash/算法版本 | 牌数/手牌/补花守恒，未结束牌墙不泄露；IN_PROGRESS（`susong-144-candidate-v1` 已实现稳定牌 ID、无模偏可复现洗牌、seed commitment 和脱敏公共视图；精确构成待旧服牌局样本签字） |
 | BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.3` 配置、飘花状态机和服务端计分核心已实现） |
 | BE-303 | 发牌、补花、牌墙、庄轮转 | DEC-RULE-002/003 | round state、dealer、wall、deadline | 固定 seed 重现；流局边界正确；IN_PROGRESS（候选开局、连续补花、正常摸出牌与保留 14 张流局已接入 Room/RoomActor/RoomService；私牌及操作历史可按 seed 重放，玩家仅见本人手牌；待跨局庄轮转） |
-| BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝；IN_PROGRESS（draw/discard、手牌归属、三家顺序响应/过牌、按玩家私有候选投影及唯一合法碰牌执行已实现；碰后弃牌转入公开牌组、私牌减两张并可原子恢复；待吃/明杠/胡与签字优先级） |
-| BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（增、起手飘花选择、摸花、打/补花均已接入房间事件和恢复，结算权威读取；待杠与过圈） |
+| BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝；IN_PROGRESS（draw/discard、手牌归属、三家顺序响应/过牌、按玩家私有候选投影及唯一合法碰牌/明杠已实现；碰/杠后弃牌转入公开牌组并可原子恢复；待吃/暗杠/巴杠/胡与签字优先级） |
+| BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（增、起手飘花选择、摸花、打/补花、碰风 1 花、普通/风牌明杠花数及杠后尾部连续补牌均已接入房间事件和恢复，结算权威读取；待暗杠、巴杠与过圈） |
 | BE-306 | 结算和两级积分账本 | DEC-RULE-004/005/008 | `RoundSettlement`、原因明细、累计战绩、零和/系统项策略 | 服务端重算；幂等；流局和多响样例通过；IN_PROGRESS（自摸、点炮、一冲二/三、流局、SYSTEM 写入、累计积分、重放/幂等和零和校验已实现） |
 | BE-307 | 回放/确定性验证器 | BE-301~306 | 规则版本 + seed + event replay、snapshot hash | 历史规则重放不变，divergence 告警 |
 | BE-308 | golden/property/fuzz tests | BE-301~307 | 至少 20 个签字 golden cases、属性测试和模糊测试 | 10,000 次回放 0 divergence（阈值最终确认） |
@@ -533,7 +533,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | I1 | IN_PROGRESS | BE-101～BE-106 已完成（开发/单进程基线）；CL-101 已完成；CL-102 Flutter POC 与 CL-103 framework-neutral 核心/原生 transport 已完成本机验证；OPS-101 开发环境手册已完成；ArkUI/平台生命周期和真实设备仍待 | G2 预审 |
 | G1 | IN_PROGRESS | Android/iOS 工具链预检已通过，Android debug APK 已构建；Android/iOS 真机矩阵和发布签名仍待，鸿蒙暂缓 | Android/iOS 真机与签名验收 |
 | I2 | IN_PROGRESS | BE-201～BE-205 已完成（业务纵切仍为内存/fake-staging）；BE-204 PG/Redis adapter、presence overlay、异步启动装配、snapshot/delta、重连、显式 deadline 和 durable claim/lease 已完成，`verify:real` 与 `verify:multi-instance` 本地真实容器 smoke 通过，生产滚动重启/故障演练仍待；BE-207 纯文本客服 REST 已完成；CL-201 Flutter 房间桌面、四客户端 fake 验收夹具、CL-202 命令 outbox、CL-203 重连 UI 本机 POC 已完成；真实 WSS/设备验收和 CL-204 REST 联调待 | G3 实时纵切 |
-| 宿松规则 | IN_PROGRESS | 用户已确认采用参考 APK 8931 规则；开房配置、花数/胡型/杠开、服务端计分、候选 144 张牌墙、发牌、连续补花、摸出牌、保留 14 张流局、响应窗口和服务端碰牌已编码，私密牌墙已接入持久化和按玩家脱敏视图；补花方向与动作优先级仍缺旧服样本 | 实现明杠及杠后补牌，再接入胡牌候选与裁决 |
+| 宿松规则 | IN_PROGRESS | 用户已确认采用参考 APK 8931 规则；开房配置、花数/胡型/杠开、服务端计分、候选 144 张牌墙、发牌、连续补花、摸出牌、保留 14 张流局、响应窗口、碰牌和明杠/杠后补牌已编码，私密牌墙已接入持久化和按玩家脱敏视图；补花方向与动作优先级仍缺旧服样本 | 接入胡牌候选与服务端裁决，再实现暗杠/巴杠/吃 |
 | Club/Floor | BLOCKED | 依赖 DEC-003～006 | G2 + schema |
 | Diamond | BLOCKED | 依赖 DEC-008～009 | 计费决策会 |
 | History/Support | IN_PROGRESS | BE-207 纯文本工单 REST 已完成并通过 2 个集成用例；CL-204 共享 Dart SupportApi 与 Flutter 注入已完成，真实 REST/三端联调待 | G3 |
@@ -594,10 +594,11 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.27 | 2026-09-07 | 实现服务端权威正常摸牌/出牌：客户端不能指定摸牌，出牌必须属于本人手牌，弃牌公开，私牌变更强制 checkpoint；摸到花按飘/不飘自动打花或连续补花，保留 14 张边界服务端零分流局 | `npm run check`（Node 147/147）；碰/杠/胡/过响应优先级待后续纵切 |
 | 0.1.28 | 2026-09-07 | 每次普通出牌后进入可持久化的三家顺序响应窗口；非当前响应人不能操作，三家全部过牌后才轮到下家摸牌，稀疏快照重启可从事件尾部恢复；新增服务端碰/明杠/下家吃候选识别器，未签字优先级尚未执行候选动作 | `npm run check`（Node 148/148） |
 | 0.1.29 | 2026-09-07 | 将唯一合法的碰牌候选只投影给对应玩家；服务端收齐响应后自动从该玩家私牌移出两张，取回最新弃牌并生成三张公开碰牌组；命令不接受客户端指定的组牌 ID，并通过 seed/history 守恒、篡改拒绝、原子 checkpoint 和重启验证 | `npm run check`（Node 150/150） |
+| 0.1.30 | 2026-09-07 | 实现服务端权威明杠：仅向持有另外三张牌的响应者投影，服务端生成四张公开牌组并从候选牌墙尾部补牌；碰风计 1 花、普通明杠计 1 花、风牌明杠计 2 花，补到花时按飘状态自动打花或连续补花；操作历史、144 张守恒、篡改拒绝和恢复校验同步覆盖 | `npm run check`（Node 154/154）；补牌方向仍为 `tail-v1-provisional`，胡/吃/暗杠/巴杠优先级待后续纵切 |
 
 ## 16. 我们下一次具体做什么
 
-下一次执行从 **I2 → BE-204/CL-201/CL-204** 开始，顺序如下：
+下一次规则纵切从 **BE-304 胡牌候选与服务端裁决** 开始；基础设施并行待办仍为 I2 的真实设备/服务验收。顺序如下：
 
 1. 复核 [DEC-INDEX.md](decisions/DEC-INDEX.md) 中仍未决的 DEC-002/004/010/011 及 DEC-RULE-001～009；未决项继续指定 owner、截止日和 sandbox 降级，不填猜测默认值。
 2. 已完成：`BE-101`～`BE-106` 模块、协议、认证、数据、安全观测和 CI 开发基线；保留单进程/内存实现的生产限制。
@@ -607,6 +608,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 6. 已完成 BE-203：WSS gateway 已接入 RoomActor，具备成功写入后 ACK/广播、订阅、私有事件过滤、背压、连接替换和重连宽限；BE-204 已完成内存 snapshot/delta、显式 deadline、presence overlay、PG/Redis adapter 契约、异步默认装配和持久化 deadline claim/lease 基础，`verify:real` 与 `verify:multi-instance` 已在真实本地 PG/Redis 上通过，继续做真实多进程滚动重启、故障演练、备份恢复和长期最终一致性压测。
 7. 已完成 BE-205：REST/BFF 与 WSS 共用 `RoomService`/RoomActor，提供 ETag/If-Match、`Idempotency-Key`、统一错误 envelope 和成员/鉴权边界；当前为内存/fake-staging，不代表生产 PG/Redis 或多实例能力。
 8. QA-201/BE-206 基础延迟、丢包、乱序、重复和重启故障矩阵已通过；CL-201 四客户端 framework-neutral fake 夹具已验证版本/hash/重连收敛，下一步补真实 WSS/设备验收；BE-207 纯文本客服 REST 已完成，CL-204 真实 REST 联调与三端适配待完成。继续记录 DEC-011，SDK/真机未就绪前不得把 G1 标为通过。
+9. 规则主线下一步实现服务端胡牌候选识别、点炮/自摸合法性和一炮多响裁决；在吃碰杠胡优先级与胡型细节未签字处继续 fail-closed。随后实现暗杠、巴杠和吃牌。
 
 如果用户尚未准备好规则或钻石决策，我们仍可完成 I1/I2 的协议、认证、fake rule、同步和客户端 POC；但相关功能会保持 `DRAFT/SANDBOX`，不会暗中采用截图默认值。
 

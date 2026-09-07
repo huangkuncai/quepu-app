@@ -330,6 +330,98 @@ test('an unambiguous peng is private-player projected and resolved by the server
   );
 });
 
+test('a wind peng adds one authoritative flower while an ordinary peng adds none', () => {
+  const room = susongRoom('wind-peng-room');
+  room.dealSusongOpeningRound({ seed: 'f'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  const before = room.currentRound.flowerStates.B;
+  room.applyAction('A', { action: 'discard', args: { tileId: 'north-1' } });
+  room.applyAction('B', 'peng');
+  room.applyAction('C', 'pass');
+  const resolved = room.applyAction('D', 'pass');
+
+  assert.equal(resolved.resolution.meldFlowerUnits, 1);
+  assert.equal(room.currentRound.flowerStates.B.meldFlowers, before.meldFlowers + 1);
+  assert.equal(room.currentRound.flowerStates.B.countedFlowers, before.countedFlowers + 1);
+  assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
+});
+
+test('an exposed kong consumes three private tiles, counts its flower and draws from the tail', () => {
+  const kongSeed = 'b'.padStart(64, '0');
+  const room = susongRoom('exposed-kong-room');
+  room.dealSusongOpeningRound({ seed: kongSeed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  const discardedTileId = 'dots-9-2';
+  const wallBefore = room.currentRound.wall.wallRemaining;
+  const flowerCountBefore = room.currentRound.flowerStates.B.countedFlowers;
+  assert.ok(room.snapshot({ viewerId: 'A' }).round.privateHand.includes(discardedTileId));
+  room.applyAction('A', { action: 'discard', args: { tileId: discardedTileId } });
+
+  assert.deepEqual(room.snapshot({ viewerId: 'B' }).round.availableReactions, [
+    'pass', 'exposed_kong', 'peng'
+  ]);
+  room.applyAction('B', 'exposed_kong');
+  room.applyAction('C', 'pass');
+  const resolved = room.applyAction('D', 'pass');
+
+  assert.equal(resolved.resolution.action, 'exposed_kong');
+  assert.equal(resolved.resolution.playerId, 'B');
+  assert.equal(resolved.resolution.meldFlowerUnits, 1);
+  assert.equal(resolved.resolution.replacementCount, 1);
+  assert.equal(room.currentRound.wall.wallRemaining, wallBefore - 1);
+  assert.equal(room.currentRound.flowerStates.B.countedFlowers, flowerCountBefore + 1);
+  assert.equal(room.currentRound.flowerStates.B.meldFlowers, 1);
+  assert.equal(room.currentRound.meldsByPlayer.B[0].tileIds.length, 4);
+  assert.equal(room.snapshot({ viewerId: 'B' }).round.privateHand.length, 11);
+  assert.equal(room.turn, 'B');
+  assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.deepEqual(room.currentRound.discardsByPlayer.A, []);
+  assert.equal(JSON.stringify(resolved.event).includes('replacementTileId'), false);
+
+  const persisted = room.persistenceSnapshot();
+  assert.deepEqual(Room.fromSnapshot(persisted).persistenceSnapshot(), persisted);
+  const tampered = structuredClone(persisted);
+  delete tampered.snapshotHash;
+  tampered.privateRoundState.turnHistory.at(-1).replacementTileId = 'characters-1-1';
+  assert.throws(
+    () => Room.fromSnapshot(tampered),
+    error => error.code === 'INVALID_ACTION'
+  );
+});
+
+test('an exposed kong replacement flower is resolved continuously from the tail', () => {
+  const room = susongRoom('exposed-kong-flower-room');
+  room.dealSusongOpeningRound({ seed: '1f6'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  const wallBefore = room.currentRound.wall.wallRemaining;
+  const flowerCountBefore = room.currentRound.flowerStates.D.countedFlowers;
+  room.applyAction('A', { action: 'discard', args: { tileId: 'dots-9-3' } });
+  room.applyAction('B', 'pass');
+  room.applyAction('C', 'pass');
+  assert.deepEqual(room.snapshot({ viewerId: 'D' }).round.availableReactions, [
+    'pass', 'exposed_kong', 'peng'
+  ]);
+  const resolved = room.applyAction('D', 'exposed_kong');
+
+  assert.equal(resolved.resolution.flowerDisposition, 'replaced');
+  assert.equal(resolved.resolution.replacementCount, 2);
+  assert.equal(room.currentRound.wall.wallRemaining, wallBefore - 2);
+  assert.equal(room.currentRound.flowerStates.D.meldFlowers, 1);
+  assert.equal(room.currentRound.flowerStates.D.drawnFlowers, 1);
+  assert.equal(room.currentRound.flowerStates.D.countedFlowers, flowerCountBefore + 2);
+  assert.equal(room.snapshot({ viewerId: 'D' }).round.privateHand.length, 11);
+  assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
+});
+
 test('RoomActor atomically checkpoints a resolved peng with its private hand mutation', async () => {
   const store = createMemoryGameStore();
   const room = susongRoom('actor-peng-room');

@@ -2,7 +2,9 @@ import { createHash, randomInt, randomUUID } from 'node:crypto';
 import { AppError } from '../shared/errors.js';
 import {
   createSusongFlowerState,
+  flowerUnitsForMeld,
   recordSusongFlowerDraw,
+  recordSusongMeldFlowers,
   resolveSusongFlowers
 } from './rules/susong.js';
 import {
@@ -14,6 +16,7 @@ import {
   getSusongDiscardReactionCandidates,
   isSusongReplacementFlower,
   publicSusongWallState,
+  susongTileFace,
   verifySusongSeedCommitment
 } from './rules/susong-wall.js';
 
@@ -1185,17 +1188,41 @@ export class Room {
     const pending = this.currentRound?.pendingReaction;
     if (!pending || this.currentRound.turnPhase !== 'reaction' || this.turn !== playerId) return [];
     const actions = ['pass'];
-    const pengPlayers = pending.responderOrder.filter(id =>
-      this._susongReactionCandidates(id).some(candidate => candidate.action === 'peng'));
+    const candidates = this._susongReactionCandidates(playerId);
+    const pengPlayers = pending.responderOrder.filter(id => this._susongReactionCandidates(id)
+      .some(candidate => candidate.action === 'peng'));
     // Until the legacy priority rule is signed, execute only an unambiguous
     // peng claim. Competing claims remain fail-closed instead of guessing.
-    if (pengPlayers.length === 1 && pengPlayers[0] === playerId) actions.push('peng');
+    if (pengPlayers.length === 1 && pengPlayers[0] === playerId) {
+      if (candidates.some(candidate => candidate.action === 'exposed_kong')
+        && this._canResolveSusongExposedKong(playerId)) actions.push('exposed_kong');
+      actions.push('peng');
+    }
     return actions;
   }
 
-  _resolveSusongPeng(pending, playerId) {
+  _canResolveSusongExposedKong(playerId) {
+    const remainingWall = this._privateRoundState?.remainingWall;
+    const flowerState = this.currentRound?.flowerStates?.[playerId];
+    if (!Array.isArray(remainingWall) || !flowerState || remainingWall.length <= 14) return false;
+    let wall = [...remainingWall];
+    try {
+      let draw = drawSusongReplacementTile(wall);
+      wall = [...draw.remainingWall];
+      if (flowerState.status === 'piao' || !isSusongReplacementFlower(draw.tileId)) return true;
+      while (isSusongReplacementFlower(draw.tileId)) {
+        draw = drawSusongReplacementTile(wall);
+        wall = [...draw.remainingWall];
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  _resolveSusongClaim(pending, playerId, action) {
     const candidate = this._susongReactionCandidates(playerId)
-      .find(item => item.action === 'peng');
+      .find(item => item.action === action);
     if (!candidate) throw new AppError('INVALID_ACTION');
     const privateState = clone(this._privateRoundState);
     const hand = privateState.handsByPlayer[playerId];
@@ -1208,33 +1235,86 @@ export class Room {
     if (!Array.isArray(discardPile) || discardPile.at(-1) !== pending.tileId) {
       throw new AppError('INVALID_ACTION');
     }
+    let flowerState = this.currentRound.flowerStates[playerId];
+    let replacementCount = 0;
+    let flowerDisposition = null;
+    let meldFlowerUnits = 0;
+    let resolvedPrivateState = privateState;
+    let replacementTileId = null;
+    const face = susongTileFace(pending.tileId);
+    const isWind = ['east', 'south', 'west', 'north'].includes(face);
+    meldFlowerUnits = flowerUnitsForMeld({
+      kind: action === 'exposed_kong' ? 'exposed_kong' : 'triplet',
+      isWind
+    });
+    if (meldFlowerUnits > 0) {
+      flowerState = recordSusongMeldFlowers(flowerState, meldFlowerUnits);
+    }
+    if (action === 'exposed_kong') {
+      if (!this._canResolveSusongExposedKong(playerId)) throw new AppError('INVALID_ACTION');
+      const draw = drawSusongReplacementTile(privateState.remainingWall);
+      privateState.remainingWall = [...draw.remainingWall];
+      replacementTileId = draw.tileId;
+      hand.push(draw.tileId);
+      replacementCount = 1;
+    }
     const meld = {
-      action: 'peng',
+      action,
       playerId,
       fromPlayerId: pending.discarderId,
       claimedTileId: pending.tileId,
       tileIds: [...candidate.consumeTileIds, pending.tileId]
     };
     appendPrivateTurnOperation(privateState, {
-      action: 'peng',
+      action,
       playerId,
       discarderId: pending.discarderId,
       tileId: pending.tileId,
-      consumeTileIds: [...candidate.consumeTileIds]
+      consumeTileIds: [...candidate.consumeTileIds],
+      ...(replacementTileId ? { replacementTileId } : {})
     });
+    if (replacementTileId && isSusongReplacementFlower(replacementTileId)) {
+      flowerState = recordSusongFlowerDraw(flowerState, 1);
+      const flowerAction = flowerState.status === 'piao' ? 'discard' : 'replace';
+      const resolution = resolvePrivateSusongFlowers({
+        privateState,
+        playerId,
+        action: flowerAction,
+        flowerState
+      });
+      resolvedPrivateState = resolution.privateState;
+      flowerState = resolution.flowerState;
+      if (flowerAction === 'replace') replacementCount += resolution.resolvedCount;
+      flowerDisposition = flowerAction === 'discard' ? 'discarded' : 'replaced';
+    }
     discardPile.pop();
-    this._privateRoundState = privateState;
-    this.currentRound.wall.handCountsByPlayer[playerId] = hand.length;
+    this._privateRoundState = resolvedPrivateState;
+    const finalHand = resolvedPrivateState.handsByPlayer[playerId];
+    this.currentRound.wall.handCountsByPlayer[playerId] = finalHand.length;
+    this.currentRound.wall.wallRemaining = resolvedPrivateState.remainingWall.length;
+    this.currentRound.flowerStates[playerId] = clone(flowerState);
     if (!isRecord(this.currentRound.meldsByPlayer)) {
       this.currentRound.meldsByPlayer = Object.fromEntries([...this.players.keys()].map(id => [id, []]));
     }
     this.currentRound.meldsByPlayer[playerId].push(clone(meld));
     this.currentRound.pendingReaction = null;
-    this.currentRound.turnPhase = 'discard';
-    this.turn = playerId;
-    this.turnPlayerId = playerId;
-    this._setTurnDeadline();
-    return meld;
+    if (action === 'exposed_kong' && flowerDisposition === 'discarded') {
+      this._advanceSusongTurn(playerId);
+    } else {
+      this.currentRound.turnPhase = 'discard';
+      this.turn = playerId;
+      this.turnPlayerId = playerId;
+      this._setTurnDeadline();
+    }
+    return {
+      ...meld,
+      meldFlowerUnits,
+      replacementCount,
+      flowerDisposition,
+      flowerState: clone(flowerState),
+      wallRemaining: this.currentRound.wall.wallRemaining,
+      handCount: finalHand.length
+    };
   }
 
   _respondSusongReaction(playerId, action, command) {
@@ -1254,9 +1334,11 @@ export class Room {
     const complete = pending.respondedPlayerIds.length === pending.responderOrder.length;
     let resolution = null;
     if (complete) {
-      const pengPlayerId = pending.responderOrder.find(id => pending.responsesByPlayer[id] === 'peng');
-      if (pengPlayerId) resolution = this._resolveSusongPeng(pending, pengPlayerId);
-      else {
+      const claimantId = pending.responderOrder.find(id =>
+        ['exposed_kong', 'peng'].includes(pending.responsesByPlayer[id]));
+      if (claimantId) {
+        resolution = this._resolveSusongClaim(pending, claimantId, pending.responsesByPlayer[claimantId]);
+      } else {
         const discarderId = pending.discarderId;
         this.currentRound.pendingReaction = null;
         this._advanceSusongTurn(discarderId);
@@ -1327,7 +1409,7 @@ export class Room {
     if (!this._privateRoundState || !this.currentRound?.wall) throw new AppError('INVALID_ACTION');
     const phase = this.currentRound.turnPhase;
     if (phase === 'reaction') {
-      if (!['pass', 'peng'].includes(action) || (args && Object.keys(args).length > 0)) {
+      if (!['pass', 'peng', 'exposed_kong'].includes(action) || (args && Object.keys(args).length > 0)) {
         throw new AppError('INVALID_ACTION');
       }
       return this._respondSusongReaction(playerId, action, command);
@@ -2266,14 +2348,15 @@ export class Room {
           || pending.responderOrder[pending.respondedPlayerIds.length] !== id) {
           throw new AppError('INVALID_ACTION');
         }
-        if (payload.resolution?.action === 'peng') {
+        if (['peng', 'exposed_kong'].includes(payload.resolution?.action)) {
           const resolution = payload.resolution;
           const claimantId = playerId(resolution.playerId);
           const discarderId = playerId(resolution.fromPlayerId);
           const discardPile = this.currentRound.discardsByPlayer?.[discarderId];
+          const expectedTileCount = resolution.action === 'exposed_kong' ? 4 : 3;
           if (!claimantId || !discarderId || !Array.isArray(discardPile)
             || discardPile.at(-1) !== resolution.claimedTileId
-            || !Array.isArray(resolution.tileIds) || resolution.tileIds.length !== 3
+            || !Array.isArray(resolution.tileIds) || resolution.tileIds.length !== expectedTileCount
             || !Number.isInteger(payload.handCount)) {
             throw new AppError('INVALID_ACTION');
           }
@@ -2281,8 +2364,23 @@ export class Room {
           if (!isRecord(this.currentRound.meldsByPlayer)) {
             this.currentRound.meldsByPlayer = Object.fromEntries([...this.players.keys()].map(key => [key, []]));
           }
-          this.currentRound.meldsByPlayer[claimantId].push(clone(resolution));
+          this.currentRound.meldsByPlayer[claimantId].push({
+            action: resolution.action,
+            playerId: claimantId,
+            fromPlayerId: discarderId,
+            claimedTileId: resolution.claimedTileId,
+            tileIds: clone(resolution.tileIds)
+          });
           this.currentRound.wall.handCountsByPlayer[claimantId] = payload.handCount;
+          if (isRecord(resolution.flowerState)) {
+            this.currentRound.flowerStates[claimantId] = clone(resolution.flowerState);
+          }
+          if (resolution.action === 'exposed_kong') {
+            if (!Number.isInteger(resolution.wallRemaining) || !isRecord(resolution.flowerState)) {
+              throw new AppError('INVALID_ACTION');
+            }
+            this.currentRound.wall.wallRemaining = resolution.wallRemaining;
+          }
         }
         this.currentRound.pendingReaction = clone(payload.pendingReaction ?? null);
         this.turn = payload.nextTurn ?? null;
@@ -2636,8 +2734,11 @@ function normalizePrivateRoundState(input, players, round) {
     return [playerId, clone(values)];
   }));
   const publicMeldTileIds = Object.values(publicMelds).flatMap(melds => melds.flatMap(meld => {
-    if (!isRecord(meld) || meld.action !== 'peng' || !Array.isArray(meld.tileIds)
-      || meld.tileIds.length !== 3) throw new AppError('INVALID_ACTION');
+    const expectedTileCount = meld?.action === 'exposed_kong' ? 4 : 3;
+    if (!isRecord(meld) || !['peng', 'exposed_kong'].includes(meld.action)
+      || !Array.isArray(meld.tileIds) || meld.tileIds.length !== expectedTileCount) {
+      throw new AppError('INVALID_ACTION');
+    }
     return meld.tileIds.map(value => String(value));
   }));
   const allTileIds = [
@@ -2734,21 +2835,22 @@ function normalizePrivateRoundState(input, players, round) {
         }
         replayHands[operation.playerId].splice(handIndex, 1);
         replayDiscards[operation.playerId].push(discarded);
-      } else if (operation.action === 'peng') {
+      } else if (['peng', 'exposed_kong'].includes(operation.action)) {
         const discarded = String(operation.tileId);
         const discarderId = String(operation.discarderId);
+        const consumeCount = operation.action === 'exposed_kong' ? 3 : 2;
         if (!playerIds.includes(discarderId)
           || replayDiscards[discarderId].at(-1) !== discarded
           || !Array.isArray(operation.consumeTileIds)
-          || operation.consumeTileIds.length !== 2) {
-          throw new TypeError('peng history does not match the latest discard');
+          || operation.consumeTileIds.length !== consumeCount) {
+          throw new TypeError('claim history does not match the latest discard');
         }
         const candidate = getSusongDiscardReactionCandidates({
           hand: replayHands[operation.playerId],
           tileId: discarded
-        }).find(item => item.action === 'peng');
+        }).find(item => item.action === operation.action);
         if (!candidate || canonical(candidate.consumeTileIds) !== canonical(operation.consumeTileIds)) {
-          throw new TypeError('peng history consumes unavailable private tiles');
+          throw new TypeError('claim history consumes unavailable private tiles');
         }
         for (const tileId of operation.consumeTileIds) {
           const handIndex = replayHands[operation.playerId].indexOf(tileId);
@@ -2756,8 +2858,16 @@ function normalizePrivateRoundState(input, players, round) {
           replayHands[operation.playerId].splice(handIndex, 1);
         }
         replayDiscards[discarderId].pop();
+        if (operation.action === 'exposed_kong') {
+          const replacementTileId = String(operation.replacementTileId);
+          if (replayWall.at(-1) !== replacementTileId || replayWall.length <= 14) {
+            throw new TypeError('exposed kong history draws outside the candidate tail');
+          }
+          replayWall.pop();
+          replayHands[operation.playerId].push(replacementTileId);
+        }
         replayMelds[operation.playerId].push({
-          action: 'peng',
+          action: operation.action,
           playerId: operation.playerId,
           fromPlayerId: discarderId,
           claimedTileId: discarded,

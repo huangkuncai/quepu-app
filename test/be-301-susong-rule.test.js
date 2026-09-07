@@ -9,6 +9,7 @@ import {
   flowerUnitsForMeld,
   normalizeSusongConfig,
   recordSusongFlowerDraw,
+  recordSusongMeldFlowers,
   resolveSusongFlowers,
   susongRule,
   toLegacy8931Config
@@ -112,6 +113,17 @@ test('kong win and wind meld flower units use the 8931 thresholds', () => {
   assert.equal(flowerUnitsForMeld({ kind: 'exposed_kong', isWind: true }), 2);
   assert.equal(flowerUnitsForMeld({ kind: 'concealed_kong', isWind: true }), 3);
   assert.equal(flowerUnitsForMeld({ kind: 'concealed_kong' }), 2);
+});
+
+test('server records ordinary and wind kong flower units without faking a flower draw', () => {
+  let state = createSusongFlowerState({ piaoMode: 'optional', initialFlowerCount: 3 });
+  state = recordSusongMeldFlowers(state, flowerUnitsForMeld({ kind: 'exposed_kong' }));
+  assert.equal(state.drawnFlowers, 0);
+  assert.equal(state.meldFlowers, 1);
+  assert.equal(state.countedFlowers, 4);
+  state = recordSusongMeldFlowers(state, flowerUnitsForMeld({ kind: 'exposed_kong', isWind: true }));
+  assert.equal(state.meldFlowers, 3);
+  assert.equal(state.countedFlowers, 6);
 });
 
 test('flower award uses second selected score and is cancelled by discard win or draw', () => {

@@ -145,6 +145,20 @@ export function recordSusongFlowerDraw(current, count = 1) {
   });
 }
 
+/** Add flower units earned from a public peng/kong without faking a flower draw. */
+export function recordSusongMeldFlowers(current, units) {
+  const state = normalizeFlowerState(current);
+  const amount = nonNegativeInteger(units, 'units');
+  if (state.status === 'awaiting_piao_choice') {
+    fail('flowerState', 'must resolve the opening piao choice before declaring a meld');
+  }
+  return flowerState({
+    ...state,
+    meldFlowers: state.meldFlowers + amount,
+    countedFlowers: state.countedFlowers + amount
+  });
+}
+
 /** Resolve flower discards/replacements; the server calls this after actions. */
 export function resolveSusongFlowers(current, { discard = 0, replace = 0 } = {}) {
   const state = normalizeFlowerState(current);
@@ -281,6 +295,7 @@ function flowerState({
   status,
   openingFlowers = 0,
   drawnFlowers = 0,
+  meldFlowers = 0,
   countedFlowers = 0,
   pendingFlowerDiscards = 0,
   pendingFlowerReplacements = 0
@@ -290,6 +305,7 @@ function flowerState({
     status,
     openingFlowers,
     drawnFlowers,
+    meldFlowers,
     countedFlowers,
     pendingFlowerDiscards,
     pendingFlowerReplacements
@@ -309,6 +325,7 @@ function normalizeFlowerState(value) {
     status: value.status,
     openingFlowers: nonNegativeInteger(value.openingFlowers ?? 0, 'openingFlowers'),
     drawnFlowers: nonNegativeInteger(value.drawnFlowers ?? 0, 'drawnFlowers'),
+    meldFlowers: nonNegativeInteger(value.meldFlowers ?? 0, 'meldFlowers'),
     countedFlowers: nonNegativeInteger(value.countedFlowers ?? 0, 'countedFlowers'),
     pendingFlowerDiscards: nonNegativeInteger(value.pendingFlowerDiscards ?? 0, 'pendingFlowerDiscards'),
     pendingFlowerReplacements: nonNegativeInteger(value.pendingFlowerReplacements ?? 0, 'pendingFlowerReplacements')
