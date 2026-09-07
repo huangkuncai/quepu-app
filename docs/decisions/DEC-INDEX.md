@@ -84,7 +84,7 @@
 | `npm test` | 168 个 Node 测试通过 | 2026-09-07 | `npm run check` 通过；包含 BE-201～207、BE-301～306 牌墙/连续补花/权威摸出牌/响应窗口/完整吃碰杠胡过/不必胡过圈/标准胡及 APK 所列特殊胡型/点炮自摸/必胡自动结算/14 张流局/牌守恒/私密持久化/玩家脱敏、客服、deadline、多实例收敛、真实 adapter 契约、协议和故障矩阵；`verify:real` 与 `verify:multi-instance` 已覆盖真实本地 PG/Redis，生产滚动重启/故障演练仍待 |
 | 服务端启动 | `src/server.js` 可启动 WebSocket 8787（内存骨架） | 2026-08-28 | 仅开发/演示环境 |
 | 数据和认证 | PostgreSQL migrations、Redis Compose/health、repository contract/MemoryRepository、开发期 session/Auth 和审计接口已建立；正式 PG/Redis/外部 Auth 未接入 | 2026-08-28 | 单进程/内存实现；不得开放真实牌局/真实扣费 |
-| 客户端 | `clients/dart_protocol` 协议/连接核心、扩展命令同步、原生 `dart:io` `IoWebSocketTransport`、四客户端 fake 夹具和 `SupportApi`，以及 `clients/flutter_app` 横屏 Flutter 壳通过本机验证 | 2026-09-07 | `dart analyze`、协议/IO/multi-client/support 脚本、`flutter test`（18/18）；房间桌面、命令 outbox、维护/版本冲突/前台恢复 UI、客服 REST 注入及服务端权威手牌/动作面板已接入；尚无 Android/iOS 真机签名安装包，鸿蒙暂缓 |
+| 客户端 | `clients/dart_protocol` 协议/连接核心、扩展命令同步、原生 `dart:io` `IoWebSocketTransport`、四客户端 fake 夹具和 `SupportApi`，以及 `clients/flutter_app` 横屏 Flutter 壳通过本机验证 | 2026-09-07 | `dart analyze`、协议/IO/multi-client/support 脚本、`flutter test`（18/18）；房间桌面、命令 outbox、维护/版本冲突/前台恢复 UI、客服 REST 注入及服务端权威手牌/动作面板/公开牌桌已接入；尚无 Android/iOS 真机签名安装包，鸿蒙暂缓 |
 | 房间/BE-201～205、BE-206/QA-201 | 通用 Room aggregate、内存 event store/RoomActor/fencing/snapshot/outbox、WSS gateway、重连与显式 deadline 基础、PostgreSQL/Redis adapter 契约与异步装配、presence overlay、durable room inventory、持久化 deadline claim/lease、共享 RoomService/REST/BFF 和 fake-rule 故障矩阵已覆盖状态、幂等、重启恢复、失败回滚、ACK/广播、私有事件过滤、连接替换、snapshot hash、弱网收敛和 stale deadline guard；`verify:real` 已覆盖临时数据库真实迁移/事件/快照恢复/deadline lease/Redis fencing，`verify:multi-instance` 已覆盖两个独立 actor/PG pool/Redis client 的并发写与最终 hash 收敛；业务仍为内存/fake-staging 纵切，生产滚动重启/故障演练未完成 | 2026-09-02 | `test/be-204-multi-instance.test.js`、`scripts/verify-multi-instance.mjs`、`npm run verify:real`；不代表生产房间服务或三端真机安装 |
 | 质量/安全 | lint、typecheck、协议/迁移校验、secret scan、依赖高危审计、Docker Compose 配置校验通过 | 2026-08-28 | ADR-003；控制端点和日志脱敏为开发基线 |
 | Git | 尚无提交；现有文件均需保留 | 2026-08-28 | 当前分支 `codex/be-101-protocol`；后续补充分支/提交策略 |
@@ -126,6 +126,7 @@
 | 2026-09-07 | AI/DEV | 不必胡过圈状态完成：放弃合法点炮/抢杠胡后屏蔽点炮胡，自摸保留；本人实际摸牌或取得出牌权时清除，快照/事件/重启恢复一致 | BE-304、BE-305、BE-307 | `be-303-susong-wall.test.js`、`npm run check`（Node 167/167）；清除边界为 provisional，待旧服样本 |
 | 2026-09-07 | AI/DEV | 全求人、天胡、地胡由服务端牌组/庄位/行牌历史识别并封顶；起手补花不破坏天胡，巴杠补牌自摸计杠开 | BE-304、BE-306、BE-307 | `be-303-susong-wall.test.js`、`npm run check`（Node 168/168）；三西仍 fail-closed |
 | 2026-09-07 | AI/DEV | Flutter 横屏牌桌接入本人手牌、点选出牌和服务端动态动作面板；多候选吃/暗杠/巴杠仅回传候选编号，客户端不提交计分或牌墙事实 | CL-301、CL-202 | `flutter test`（18/18）、Flutter/Dart analyze、Dart 协议核心测试；真实 WSS/设备待验收 |
+| 2026-09-07 | AI/DEV | CL-301 公开牌桌直接渲染服务端弃牌、副露、花数/飘花、行动者、牌墙和 deadline；局数来自快照而非客户端常量 | CL-301 | `flutter test`（18/18）、`dart analyze`；真实 WSS/设备待 CL-201/G1 验收 |
 
 ## 8. 变更记录
 
@@ -164,6 +165,7 @@
 | 0.1.31 | 2026-09-07 | 登记不必胡过圈阻断、本人回合清除及持久化恢复；清除边界版本化为 provisional | AI/DEV |
 | 0.1.32 | 2026-09-07 | 登记全求人、天胡、地胡的权威历史识别及巴杠开花边界修复 | AI/DEV |
 | 0.1.33 | 2026-09-07 | 登记 CL-301 权威手牌、出牌及吃碰杠胡动作面板和候选参数透传 | AI/DEV |
+| 0.1.34 | 2026-09-07 | 登记 CL-301 公开弃牌、副露、花数、牌墙、当前行动者与 deadline 倒计时 | AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 

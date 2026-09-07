@@ -1136,32 +1136,11 @@ class _RoomTable extends StatelessWidget {
                                     ),
                                   ],
                                 ),
-                                child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(
-                                        Icons.grid_view_rounded,
-                                        size: 38,
-                                        color: Color(0x99ffe49a),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      const Text(
-                                        '宿松麻将',
-                                        style: TextStyle(
-                                          fontSize: 21,
-                                          color: Color(0xffffe4a3),
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                      Text(
-                                        '第 1/8 局 · ${_roomStatusLabel(status)}',
-                                        style: const TextStyle(
-                                          color: Color(0xffc6e0da),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                child: _RoundPublicBoard(
+                                  room: room,
+                                  round: round,
+                                  players: players,
+                                  status: status,
                                 ),
                               ),
                             ),
@@ -1353,6 +1332,229 @@ class _RoomTable extends StatelessWidget {
     }
   }
 }
+
+class _RoundPublicBoard extends StatelessWidget {
+  const _RoundPublicBoard({
+    required this.room,
+    required this.round,
+    required this.players,
+    required this.status,
+  });
+
+  final Map<String, dynamic> room;
+  final Map<String, dynamic>? round;
+  final List<Map<String, dynamic>> players;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = round;
+    final wall = _dynamicMap(state?['wall']);
+    final roundNumber = _intValue(
+      state?['roundNumber'] ?? state?['number'] ?? room['roundNumber'],
+    );
+    final totalRounds = _intValue(room['totalRounds']);
+    final phase = state?['turnPhase']?.toString();
+    final turnPlayerId = room['turnPlayerId']?.toString();
+    final discards = _dynamicMap(state?['discardsByPlayer']) ?? const {};
+    final melds = _dynamicMap(state?['meldsByPlayer']) ?? const {};
+    final flowers = _dynamicMap(state?['flowerStates']) ?? const {};
+    final orderedPlayers = [...players]
+      ..sort(
+        (left, right) => (_intValue(left['seat']) ?? 0).compareTo(
+          _intValue(right['seat']) ?? 0,
+        ),
+      );
+
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        children: [
+          const Text(
+            '宿松麻将',
+            style: TextStyle(
+              fontSize: 20,
+              color: Color(0xffffe4a3),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 2,
+            children: [
+              Text(
+                roundNumber == null
+                    ? _roomStatusLabel(status)
+                    : '第 $roundNumber/${totalRounds ?? '—'} 局',
+                style: const TextStyle(color: Color(0xffc6e0da)),
+              ),
+              if (wall?['wallRemaining'] is int)
+                Text(
+                  '剩余 ${wall!['wallRemaining']} 张',
+                  style: const TextStyle(color: Color(0xffc6e0da)),
+                ),
+              if (phase != null)
+                _TurnCountdown(
+                  phase: phase,
+                  deadlineAt: state?['turnDeadlineAt']?.toString(),
+                ),
+            ],
+          ),
+          if (orderedPlayers.isNotEmpty) ...[
+            const SizedBox(height: 7),
+            Expanded(
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                itemCount: orderedPlayers.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 4),
+                itemBuilder: (context, index) {
+                  final player = orderedPlayers[index];
+                  final playerId =
+                      player['id']?.toString() ??
+                      player['playerId']?.toString();
+                  return _RoundPlayerPublicState(
+                    player: player,
+                    isTurn: playerId != null && playerId == turnPlayerId,
+                    discards: _stringValues(discards[playerId]),
+                    melds: melds[playerId] is List
+                        ? List<Object?>.from(melds[playerId] as List)
+                        : const [],
+                    flowerState: _dynamicMap(flowers[playerId]),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RoundPlayerPublicState extends StatelessWidget {
+  const _RoundPlayerPublicState({
+    required this.player,
+    required this.isTurn,
+    required this.discards,
+    required this.melds,
+    required this.flowerState,
+  });
+
+  final Map<String, dynamic> player;
+  final bool isTurn;
+  final List<String> discards;
+  final List<Object?> melds;
+  final Map<String, dynamic>? flowerState;
+
+  @override
+  Widget build(BuildContext context) {
+    final flowerCount = _intValue(flowerState?['countedFlowers']) ?? 0;
+    final piao = flowerState?['status'] == 'piao' ? ' · 飘花' : '';
+    final meldLabels = melds
+        .map(_dynamicMap)
+        .whereType<Map<String, dynamic>>()
+        .map((meld) {
+          final action = _gameActionLabel(meld['action']?.toString() ?? '副露');
+          final tiles = _stringValues(meld['tileIds'])
+              .map(_mahjongFaceLabel)
+              .join('');
+          return '$action$tiles';
+        })
+        .join(' / ');
+    final discardLabels = discards.map(_mahjongFaceLabel).join(' ');
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isTurn ? const Color(0x5569d7ae) : const Color(0x33000000),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(
+          color: isTurn ? const Color(0xffffd369) : const Color(0x337fffff),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${isTurn ? '▶ ' : ''}${_playerName(player)} · 花 $flowerCount$piao',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xffffe4a3),
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
+            ),
+            Text(
+              '副露 ${meldLabels.isEmpty ? '—' : meldLabels}  ·  弃牌 ${discardLabels.isEmpty ? '—' : discardLabels}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xffd4e8e2), fontSize: 10),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TurnCountdown extends StatefulWidget {
+  const _TurnCountdown({required this.phase, required this.deadlineAt});
+
+  final String phase;
+  final String? deadlineAt;
+
+  @override
+  State<_TurnCountdown> createState() => _TurnCountdownState();
+}
+
+class _TurnCountdownState extends State<_TurnCountdown> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTicker();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TurnCountdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.deadlineAt != widget.deadlineAt) _startTicker();
+  }
+
+  void _startTicker() {
+    _timer?.cancel();
+    if (DateTime.tryParse(widget.deadlineAt ?? '') == null) return;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final deadline = DateTime.tryParse(widget.deadlineAt ?? '');
+    final seconds = deadline
+        ?.difference(DateTime.now())
+        .inSeconds
+        .clamp(0, 999);
+    return Text(
+      '${_turnPhaseLabel(widget.phase)}${seconds == null ? '' : ' $seconds 秒'}',
+      style: const TextStyle(color: Color(0xffffd369)),
+    );
+  }
+}
+
+String _turnPhaseLabel(String phase) =>
+    const {'draw': '待摸牌', 'discard': '待出牌', 'reaction': '待响应'}[phase] ?? phase;
 
 class _AuthoritativeActionButtons extends StatelessWidget {
   const _AuthoritativeActionButtons({
@@ -1709,6 +1911,8 @@ String _playerName(Map<String, dynamic> player) {
 int? _positiveInt(Object? value) {
   return value is int && value > 0 ? value : null;
 }
+
+int? _intValue(Object? value) => value is int ? value : null;
 
 String _roomStatusLabel(String status) {
   const labels = {

@@ -143,6 +143,9 @@ void main() {
             'ownerId': 'poc-user',
             'status': 'playing',
             'maxPlayers': 4,
+            'roundNumber': 2,
+            'totalRounds': 8,
+            'turnPlayerId': 'poc-user',
             'players': [
               {
                 'id': 'poc-user',
@@ -153,6 +156,27 @@ void main() {
               },
             ],
             'round': {
+              'roundNumber': 2,
+              'turnPhase': 'discard',
+              'turnDeadlineAt': DateTime.now()
+                  .add(const Duration(seconds: 20))
+                  .toUtc()
+                  .toIso8601String(),
+              'wall': {'wallRemaining': 63},
+              'discardsByPlayer': {
+                'poc-user': ['dots-3-1', 'white_dragon-1'],
+              },
+              'meldsByPlayer': {
+                'poc-user': [
+                  {
+                    'action': 'peng',
+                    'tileIds': ['east-1', 'east-2', 'east-3'],
+                  },
+                ],
+              },
+              'flowerStates': {
+                'poc-user': {'status': 'not_piao', 'countedFlowers': 4},
+              },
               'privateHand': ['characters-1-1', 'bamboo-9-2', 'east-1'],
               'availableActions': ['discard', 'concealed_kong'],
               'kongOptions': {
@@ -170,6 +194,12 @@ void main() {
       expect(find.text('1万'), findsOneWidget);
       expect(find.text('9条'), findsOneWidget);
       expect(find.text('暗杠 东'), findsOneWidget);
+      expect(find.text('第 2/8 局'), findsOneWidget);
+      expect(find.text('剩余 63 张'), findsOneWidget);
+      expect(find.textContaining('待出牌'), findsOneWidget);
+      expect(find.textContaining('演示玩家 · 花 4'), findsOneWidget);
+      expect(find.textContaining('副露 碰东东东'), findsOneWidget);
+      expect(find.textContaining('弃牌 3筒 白'), findsOneWidget);
       await tester.tap(find.text('1万'));
       await tester.pump(const Duration(milliseconds: 30));
       final action = transport.sentMessages.lastWhere(
