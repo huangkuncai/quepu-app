@@ -189,7 +189,7 @@ export function evaluateSusongWin({ flowerState: current, winSource, patterns = 
 
 export const susongRule = deepFreeze({
   id: 'susong_v1',
-  version: '8931-apk-baseline.2',
+  version: '8931-apk-baseline.3',
   legacyGameId: 8931,
   name: '宿松麻将',
   players: 4,

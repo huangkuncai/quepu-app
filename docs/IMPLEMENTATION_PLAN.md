@@ -197,7 +197,7 @@ R-A → R-B 计分/边缘场景签字 → W5-W7 宿松规则裁判
 | DEC-RULE-002 | 吃/碰/杠/补花/抢杠/胡/过，以及多家同时胡优先级 | 动作和状态机规范 | USER + RULE | TODO |
 | DEC-RULE-003 | 首局庄、多家胡、流局、剩余 14 张、杠后牌墙 | 回合/庄轮转表 | USER + RULE | TODO |
 | DEC-RULE-004 | 底分 1～9 是单选、多选还是候选集合；底分第二档 | 配置 schema 和 UI 选择器 | USER + RULE | CONFIRMED（参考 APK：1～9 选 4 个递增档，默认 1/2/3/4） |
-| DEC-RULE-005 | 花奖、花朵、杠花、出增、飘花、三西/三道规则 | 表驱动计分表与飘花状态机 | USER + RULE | IN_PROGRESS（飘花非计分项及五类状态已确认） |
+| DEC-RULE-005 | 花奖、花朵、杠花、出增、飘花、三西/三道规则 | 表驱动计分表与飘花状态机 | USER + RULE | IN_PROGRESS（飘花状态、自摸不升档、双方增值与三西末级翻倍已确认） |
 | DEC-RULE-006 | 无花果及“一察/一素”标准术语、数值和触发 | 术语表/测试样例 | USER + RULE | CONFIRMED（APK 原文术语为“无花果”“一索”） |
 | DEC-RULE-007 | 必胡/不必胡、“过圈”、超时默认动作 | 玩家状态/超时表 | USER + RULE | TODO |
 | DEC-RULE-008 | 小胡/大胡、特殊胡型、≥9、封顶、舍入、零和/系统项 | 结算规范 | USER + RULE | TODO |
@@ -336,11 +336,11 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | ID | 任务 | 依赖 | 主要产出 | 验收 |
 | --- | --- | --- | --- | --- |
 | BE-301 | 牌组、牌 ID、CSPRNG/seed | DEC-RULE-001 | 牌组表、服务端随机、seed hash/算法版本 | 牌数/手牌/补花守恒，未结束牌墙不泄露；IN_PROGRESS（8931 客户端牌类/花牌 ID 已提取，精确牌墙待牌局样本） |
-| BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.2` 配置规范化/冻结/旧字段转换及飘花状态机已实现） |
+| BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.3` 配置、飘花状态机和服务端计分核心已实现） |
 | BE-303 | 发牌、补花、牌墙、庄轮转 | DEC-RULE-002/003 | round state、dealer、wall、deadline | 固定 seed 重现；流局边界正确 |
 | BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝 |
 | BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（服务端飘花状态转换与胡牌资格纯规则已完成，待接入完整牌局状态） |
-| BE-306 | 结算和两级积分账本 | DEC-RULE-004/005/008 | `RoundSettlement`、原因明细、累计战绩、零和/系统项策略 | 服务端重算；幂等；流局和多响样例通过 |
+| BE-306 | 结算和两级积分账本 | DEC-RULE-004/005/008 | `RoundSettlement`、原因明细、累计战绩、零和/系统项策略 | 服务端重算；幂等；流局和多响样例通过；IN_PROGRESS（单赢家自摸计分、审计明细、三西关系翻倍和零和校验已实现） |
 | BE-307 | 回放/确定性验证器 | BE-301~306 | 规则版本 + seed + event replay、snapshot hash | 历史规则重放不变，divergence 告警 |
 | BE-308 | golden/property/fuzz tests | BE-301~307 | 至少 20 个签字 golden cases、属性测试和模糊测试 | 10,000 次回放 0 divergence（阈值最终确认） |
 | CL-301 | 牌桌牌面和动作面板 | BE-302/304 | 手牌、公共牌、花/杠、可行动作、deadline | 只渲染服务端状态，不上传分数/牌墙 |
@@ -625,7 +625,7 @@ DEC-RULE-001 牌组/人数：______
 DEC-RULE-002 动作：______
 DEC-RULE-003 庄/流局/多胡：______
 DEC-RULE-004 底分语义：______
-DEC-RULE-005 出增/花档/三西公式（飘花已确认不是计分项）：______
+DEC-RULE-005 已确认：单笔=`花档分 + 赢家增×增单价 + 付款者增×增单价`，自摸不升档，三西关系最后翻倍；待确认三西额外付款与多响组合：______
 DEC-RULE-006 无花果术语与数值：______
 DEC-RULE-007 必胡/过圈/超时：______
 DEC-RULE-008 胡型/封顶/结算：______

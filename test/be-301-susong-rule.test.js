@@ -142,7 +142,7 @@ test('room creation freezes normalized 8931 config instead of accepting client s
   });
   assert.equal(created.room.maxPlayers, 4);
   assert.equal(created.room.totalRounds, 8);
-  assert.equal(created.room.ruleVersion, '8931-apk-baseline.2');
+  assert.equal(created.room.ruleVersion, '8931-apk-baseline.3');
   assert.deepEqual(created.room.ruleSnapshot.config, {
     rounds: 8,
     scoreTiers: [1, 3, 5, 9],
@@ -150,6 +150,16 @@ test('room creation freezes normalized 8931 config instead of accepting client s
     piao: 'strong',
     forcedHu: true
   });
+  await assert.rejects(
+    service.dispatch({
+      roomId: created.roomId,
+      principal: { userId: 'owner-1', role: 'ADMIN' },
+      type: 'settle_round',
+      payload: { result: { deltaByPlayer: { 'owner-1': 999 } } }
+    }),
+    error => error.code === 'INVALID_ACTION'
+      && error.details[0].message.includes('authored by the server')
+  );
   await assert.rejects(
     service.createRoom({
       principal: { userId: 'owner-1' },

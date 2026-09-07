@@ -385,7 +385,7 @@ class FakeTransport implements ProtocolTransport {
     'id': 'demo-room',
     'clubId': null,
     'rule': 'susong_v1',
-    'ruleVersion': '8931-apk-baseline.2',
+    'ruleVersion': '8931-apk-baseline.3',
     'ruleConfig': {
       'rounds': ruleConfig['rounds'] ?? 4,
       'scoreTiers': ruleConfig['scoreTiers'] ?? [1, 2, 3, 4],

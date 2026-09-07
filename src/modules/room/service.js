@@ -246,6 +246,14 @@ export class RoomService {
       throw new AppError('INVALID_ACTION');
     }
     const actor = await this._actor(roomId);
+    if (normalizedType === 'settle_round' && actor.room.ruleId === susongRule.id) {
+      throw new AppError('INVALID_ACTION', {
+        details: [{
+          path: 'type',
+          message: 'Susong settlement is authored by the server rule engine'
+        }]
+      });
+    }
     const command = {
       protocolVersion: '1.0',
       type: normalizedType,
