@@ -206,6 +206,50 @@ test('server promotes unambiguous pure, mixed and all-triplets special hands', (
   assert.deepEqual(getSusongWinningHand({ hand: triplets }).patterns, ['all_triplets']);
 });
 
+test('Room derives heavenly, earthly and all-from-others patterns from authoritative history', () => {
+  const room = susongRoom('history-pattern-room');
+  room.dealSusongOpeningRound({ seed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  const winningHand = [
+    'characters-1-1', 'characters-2-1', 'characters-3-1',
+    'bamboo-1-1', 'bamboo-2-1', 'bamboo-3-1',
+    'dots-4-1', 'dots-5-1', 'dots-6-1',
+    'east-1', 'east-2', 'east-3', 'north-1', 'north-2'
+  ];
+  room._privateRoundState.handsByPlayer.A = [...winningHand];
+  room.currentRound.flowerStates.A = {
+    ...room.currentRound.flowerStates.A,
+    status: 'not_piao',
+    openingFlowers: 1,
+    countedFlowers: 1
+  };
+  assert.ok(room._susongWinningCandidate('A', 'self_draw').patterns.includes('heavenly_win'));
+
+  room._privateRoundState.handsByPlayer.B = [...winningHand];
+  room.currentRound.flowerStates.B = { ...room.currentRound.flowerStates.A };
+  room._privateRoundState.turnHistory = [
+    { action: 'discard', playerId: 'A' },
+    { action: 'draw', playerId: 'B' }
+  ];
+  assert.ok(room._susongWinningCandidate('B', 'self_draw').patterns.includes('earthly_win'));
+  room._privateRoundState.turnHistory = [{ action: 'added_kong', playerId: 'B' }];
+  assert.equal(room._susongWinningCandidate('B', 'self_draw').gangWinCount, 1);
+
+  room._privateRoundState.handsByPlayer.C = ['south-1'];
+  room.currentRound.flowerStates.C = { ...room.currentRound.flowerStates.A };
+  room.currentRound.meldsByPlayer.C = [
+    ['characters-1-1', 'characters-2-1', 'characters-3-1'],
+    ['bamboo-1-1', 'bamboo-2-1', 'bamboo-3-1'],
+    ['dots-4-1', 'dots-5-1', 'dots-6-1'],
+    ['east-1', 'east-2', 'east-3']
+  ].map(tileIds => ({ action: 'chi', playerId: 'C', fromPlayerId: 'B', tileIds }));
+  room.currentRound.pendingReaction = { kind: 'discard', tileId: 'south-2' };
+  assert.ok(room._susongWinningCandidate('C', 'discard').patterns.includes('all_from_others'));
+});
+
 function susongRoom(id = 'wall-room', piao = 'optional', config = {}) {
   const room = new Room({
     id,

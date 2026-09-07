@@ -1268,9 +1268,11 @@ export class Room {
     const meldCount = melds.length;
     if (!Array.isArray(hand) || !flowerState) return null;
     if (winSource === 'discard' && this.currentRound?.passedHuByPlayer?.[playerId] === true) return null;
-    const lastTurnAction = this._privateRoundState.turnHistory.at(-1)?.action ?? null;
+    const gameplayHistory = this._privateRoundState.turnHistory
+      .filter(operation => operation.kind !== 'flower');
+    const lastTurnAction = gameplayHistory.at(-1)?.action ?? null;
     if (winSource === 'self_draw' && lastTurnAction
-      && !['draw', 'exposed_kong', 'concealed_kong'].includes(lastTurnAction)) return null;
+      && !['draw', 'exposed_kong', 'concealed_kong', 'added_kong'].includes(lastTurnAction)) return null;
     const claimedTileId = winSource === 'discard'
       ? this.currentRound?.pendingReaction?.tileId ?? null
       : null;
@@ -1280,11 +1282,24 @@ export class Room {
     if (winSource === 'discard' && this.currentRound?.pendingReaction?.kind === 'added_kong') {
       patterns.push('robbing_kong');
     }
-    if (winSource === 'self_draw' && this._privateRoundState.turnHistory.length === 0) {
-      patterns.push('heavenly_win');
+    if (melds.length === 4 && melds.every(meld => meld?.action !== 'concealed_kong')) {
+      patterns.push('all_from_others');
+    }
+    if (winSource === 'self_draw') {
+      const dealerId = this._orderedPlayers()
+        .find(player => player.seat === this.currentRound.dealerSeat)?.id;
+      if (gameplayHistory.length === 0 && playerId === dealerId) {
+        patterns.push('heavenly_win');
+      } else if (playerId !== dealerId && lastTurnAction === 'draw') {
+        const priorGameplay = gameplayHistory.slice(0, -1);
+        const firstTurnCycle = priorGameplay.filter(operation => operation.action === 'discard').length < 4
+          && priorGameplay.every(operation => ['draw', 'discard'].includes(operation.action))
+          && !priorGameplay.some(operation => operation.action === 'draw' && operation.playerId === playerId);
+        if (firstTurnCycle) patterns.push('earthly_win');
+      }
     }
     const gangWinCount = winSource === 'self_draw'
-      && ['exposed_kong', 'concealed_kong'].includes(lastTurnAction) ? 1 : 0;
+      && ['exposed_kong', 'concealed_kong', 'added_kong'].includes(lastTurnAction) ? 1 : 0;
     const decision = evaluateSusongWin({ flowerState, winSource, patterns, gangWinCount });
     return decision.allowed ? { playerId, patterns, gangWinCount } : null;
   }

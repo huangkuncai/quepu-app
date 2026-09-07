@@ -130,9 +130,8 @@ export function getSusongTurnKongCandidates({ hand, melds = [] } = {}) {
 
 /**
  * Recognize a server-owned concealed hand. This slice deliberately supports
- * the ordinary four-groups-and-a-pair shape plus seven pairs; other named
- * one-bamboo patterns remain closed until their exact legacy definitions are
- * signed.
+ * the ordinary four-groups-and-a-pair shape plus seven pairs. Patterns that
+ * depend on turn history or public meld ownership are added by the Room.
  */
 export function getSusongWinningHand({
   hand,
