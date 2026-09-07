@@ -54,7 +54,7 @@
 
 | ID | 必须确定的内容 | 当前答案 | 来源 | DRI | 截止 | 状态 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| DEC-RULE-001 | 人数/座位、牌组、风箭花牌数量、总牌数、初始手牌 | 4 人；万/条/筒、风牌、箭牌和红/黑花；精确牌墙数量待旧服牌局样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | 用户 2026-09-07；8931 客户端牌 ID |
+| DEC-RULE-001 | 人数/座位、牌组、风箭花牌数量、总牌数、初始手牌 | 4 人；已编码版本化候选：108 张万/条/筒、16 风、12 箭、8 红/黑花，共 144 张；庄 14、闲 13；精确构成待旧服样本签字 | M+APK | USER + RULE | GR | CONFIRMED（部分） | 用户 2026-09-07；8931 客户端牌 ID；`be-303-susong-wall.test.js` |
 | DEC-RULE-002 | 吃/碰/杠/补花/抢杠/胡/过及多家胡优先级 | 动作集确认；同时可行动作优先级待旧服样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `MsgXYSSMJ.pb`、回放 opcode |
 | DEC-RULE-003 | 首局庄、庄轮转、多家胡、流局、剩余牌墙和杠后牌 | 上局最先胡者坐庄、流局连庄、剩 14 张流局、一炮多响；首局庄和杠后牌方向待样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt` |
 | DEC-RULE-004 | 底分 1～9 的选择方式及第二档映射 | 1～9 必须选择 4 个递增档；默认 1/2/3/4；第二档用于花奖 | M+APK | USER + RULE | GR | CONFIRMED | 创建房配置及规则文本 |
@@ -81,7 +81,7 @@
 | 项目 | 结果 | 日期 | 证据/备注 |
 | --- | --- | --- | --- |
 | 实际工作目录 | `宿松app.migrated-backup`；当前分支 `codex/be-101-protocol`，尚无提交 | 2026-08-28 | 当前工作区检查；DEC-001 已确认目录，分支/提交策略仍需补充 |
-| `npm test` | 108 个 Node 测试通过 | 2026-09-04 | `npm run check` 通过；包含 BE-201～207、客服鉴权/隔离/幂等/审计、BE-204 deadline claim/lease/NOT_DUE、双 actor crash-gap/最终收敛、PostgreSQL/Redis adapter、OpenAPI/AsyncAPI、QA-201 和 BE-206；`npm run verify:real` 与 `npm run verify:multi-instance` 已覆盖真实本地 PG/Redis，生产滚动重启/故障演练仍待 |
+| `npm test` | 136 个 Node 测试通过 | 2026-09-07 | `npm run check` 通过；包含 BE-201～207、BE-301～303 当前规则核心、客服、deadline、多实例收敛、真实 adapter 契约、协议和故障矩阵；`verify:real` 与 `verify:multi-instance` 已覆盖真实本地 PG/Redis，生产滚动重启/故障演练仍待 |
 | 服务端启动 | `src/server.js` 可启动 WebSocket 8787（内存骨架） | 2026-08-28 | 仅开发/演示环境 |
 | 数据和认证 | PostgreSQL migrations、Redis Compose/health、repository contract/MemoryRepository、开发期 session/Auth 和审计接口已建立；正式 PG/Redis/外部 Auth 未接入 | 2026-08-28 | 单进程/内存实现；不得开放真实牌局/真实扣费 |
 | 客户端 | `clients/dart_protocol` 协议/连接核心、扩展命令同步、原生 `dart:io` `IoWebSocketTransport`、四客户端 fake 夹具和 `SupportApi`，以及 `clients/flutter_app` Flutter mock 壳通过本机验证 | 2026-09-04 | `dart analyze`、协议/IO/multi-client/support 脚本、`flutter test`（15/15）、`dart analyze`；房间桌面、命令 outbox、维护/版本冲突/前台恢复 UI、客服 REST 注入已接入；尚无三端真机安装包 |
@@ -113,6 +113,7 @@
 | 2026-09-02 | AI/DEV | BE-204 真实 PG/Redis adapter 与双实例 smoke 通过；双 actor 重复/并发命令、连续事件/outbox、最终 snapshotHash 和 crash-gap replay 纳入回归；CL-203 维护/版本冲突/前台恢复 UI 与 OPS-101 本地环境手册完成 | BE-204、CL-203、OPS-101、I2 | `npm run check`（Node 106/106）、`npm run verify:real`、`npm run verify:multi-instance`、Flutter 13/13、Dart protocol/IO tests；生产滚动重启、三端真机、规则和账本仍待 |
 | 2026-09-04 | AI/DEV | BE-207 纯文本客服 REST 完成（用户隔离、幂等、审计、房间关联；附件/外部渠道关闭）；CL-201 四客户端 framework-neutral fake 夹具验证事件顺序、snapshotHash 与重连收敛 | BE-207、CL-201、I2 | `npm run check`（Node 108/108）、`dart run tool/multi_client_acceptance.dart`；真实 WSS/三端真机、客服持久化仓储仍待 |
 | 2026-09-07 | USER/AI | 用户确认宿松麻将采用参考 APK 的 8931 规则；客户端内置规则文本、创建配置、协议和回放操作码作为证据，旧服务端独有公式继续以 golden case 解除 | DEC-RULE-001～009、BE-301～306 | `SUSONG_8931_RULE_BASELINE.md`、`be-301-susong-rule.test.js` |
+| 2026-09-07 | AI/DEV | BE-301/303 新增版本化 144 张候选牌墙、稳定实体 ID、可审计洗牌、seed commitment、庄 14/闲 13 开局发牌和公共状态脱敏 | BE-301、BE-303、DEC-RULE-001/003 | `be-303-susong-wall.test.js`、`npm run check`（Node 136/136）；牌墙构成/补花方向仍待签字 |
 
 ## 8. 变更记录
 
@@ -138,6 +139,7 @@
 | 0.1.17 | 2026-08-29 | 增加 `pg`/`redis` 运行依赖、`npm run verify:real` 临时数据库 smoke、deadline 边界/装配测试；质量门更新为 Node 104/104；真实 adapter 已验证，生产多实例和三端真机仍待 | AI/DEV |
 | 0.1.18 | 2026-09-02 | 登记真实双实例收敛/crash-gap、CL-203 重连 UI、OPS-101 手册和 Node 106/106、Flutter 13/13；保留生产故障演练、G1、规则/俱乐部/钻石门禁 | AI/DEV |
 | 0.1.20 | 2026-09-04 | 登记 BE-207 客服纯文本 REST、CL-201 四客户端 fake 夹具和共享 Dart `SupportApi`；保留真实 REST/设备联调、客服持久化、G1、规则/俱乐部/钻石门禁 | AI/DEV |
+| 0.1.21 | 2026-09-07 | 登记 BE-301/303 版本化候选牌墙、可审计洗牌、开局发牌和脱敏边界；保留精确牌墙与补花方向规则门禁 | AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 
