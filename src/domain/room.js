@@ -1165,6 +1165,7 @@ export class Room {
       ordered[(discarderIndex + offset + 1) % ordered.length].id);
     this.currentRound.pendingReaction = {
       reactionId: this.idFactory(),
+      kind: 'discard',
       discarderId,
       tileId,
       responderOrder,
@@ -1178,10 +1179,39 @@ export class Room {
     this._setTurnDeadline();
   }
 
+  _openSusongAddedKongReactionWindow(declarerId, candidateIndex) {
+    const candidate = this._susongTurnKongCandidates(declarerId, 'added_kong')[candidateIndex];
+    if (!candidate || !this._canResolveSusongKong(declarerId)) throw new AppError('INVALID_ACTION');
+    const ordered = this._orderedPlayers();
+    const declarerIndex = ordered.findIndex(player => player.id === declarerId);
+    if (declarerIndex < 0) throw new AppError('INVALID_ACTION');
+    const responderOrder = Array.from({ length: ordered.length - 1 }, (_, offset) =>
+      ordered[(declarerIndex + offset + 1) % ordered.length].id);
+    this.currentRound.pendingReaction = {
+      reactionId: this.idFactory(),
+      kind: 'added_kong',
+      declarerId,
+      discarderId: declarerId,
+      tileId: candidate.consumeTileIds[0],
+      meldIndex: candidate.meldIndex,
+      candidateIndex,
+      responderOrder,
+      respondedPlayerIds: [],
+      responsesByPlayer: {},
+      responseChoicesByPlayer: {}
+    };
+    this.currentRound.turnPhase = 'reaction';
+    this.turn = responderOrder[0] ?? null;
+    this.turnPlayerId = this.turn;
+    this._setTurnDeadline();
+    return candidate;
+  }
+
   _susongReactionCandidates(playerId) {
     const pending = this.currentRound?.pendingReaction;
     const hand = this._privateRoundState?.handsByPlayer?.[playerId];
     if (!pending || !Array.isArray(hand)) return [];
+    if (pending.kind === 'added_kong') return [];
     return getSusongDiscardReactionCandidates({
       hand,
       tileId: pending.tileId,
@@ -1193,6 +1223,13 @@ export class Room {
     const pending = this.currentRound?.pendingReaction;
     if (!pending || this.currentRound.turnPhase !== 'reaction' || this.turn !== playerId) return [];
     const actions = ['pass'];
+    if (pending.kind === 'added_kong') {
+      if (this._susongWinningCandidate(playerId, 'discard')) {
+        if (this.ruleSnapshot.config?.forcedHu === true) return ['hu'];
+        actions.push('hu');
+      }
+      return actions;
+    }
     const candidates = this._susongReactionCandidates(playerId);
     if (this._susongWinningCandidate(playerId, 'discard')) {
       if (this.ruleSnapshot.config?.forcedHu === true) return ['hu'];
@@ -1236,6 +1273,9 @@ export class Room {
     const shape = getSusongWinningHand({ hand, claimedTileId, meldCount, melds });
     if (!shape.winning) return null;
     const patterns = [...shape.patterns];
+    if (winSource === 'discard' && this.currentRound?.pendingReaction?.kind === 'added_kong') {
+      patterns.push('robbing_kong');
+    }
     if (winSource === 'self_draw' && this._privateRoundState.turnHistory.length === 0) {
       patterns.push('heavenly_win');
     }
@@ -1408,6 +1448,118 @@ export class Room {
     return this._result(event, { playerId, action: 'concealed_kong', resolution });
   }
 
+  _declareSusongAddedKong(playerId, candidateIndex, command) {
+    const candidate = this._openSusongAddedKongReactionWindow(playerId, candidateIndex);
+    const event = this._append('SUSONG_ADDED_KONG_DECLARED', {
+      matchId: this.matchId,
+      roundId: this.roundId,
+      playerId,
+      face: candidate.face,
+      meldIndex: candidate.meldIndex,
+      pendingReaction: clone(this.currentRound.pendingReaction),
+      nextTurn: this.turn,
+      turnPhase: this.currentRound.turnPhase,
+      turnStartedAt: this.currentRound.turnStartedAt,
+      turnDeadlineAt: this.currentRound.turnDeadlineAt
+    }, command);
+    if (this.ruleSnapshot.config?.forcedHu === true) {
+      const winners = this.currentRound.pendingReaction.responderOrder
+        .map(id => this._susongWinningCandidate(id, 'discard'))
+        .filter(Boolean);
+      if (winners.length > 0) {
+        return this._settleSusongWin({ outcome: 'discard', winners, discarderId: playerId }, command);
+      }
+    }
+    return this._result(event, {
+      playerId,
+      action: 'added_kong',
+      face: candidate.face,
+      meldIndex: candidate.meldIndex,
+      nextTurn: this.turn,
+      turnPhase: this.currentRound.turnPhase
+    });
+  }
+
+  _resolveSusongAddedKong(pending) {
+    const playerId = pending.declarerId;
+    const candidate = this._susongTurnKongCandidates(playerId, 'added_kong')[pending.candidateIndex];
+    if (!candidate || candidate.meldIndex !== pending.meldIndex
+      || candidate.consumeTileIds[0] !== pending.tileId || !this._canResolveSusongKong(playerId)) {
+      throw new AppError('INVALID_ACTION');
+    }
+    const privateState = clone(this._privateRoundState);
+    const hand = privateState.handsByPlayer[playerId];
+    const tileIndex = hand.indexOf(candidate.consumeTileIds[0]);
+    if (tileIndex < 0) throw new AppError('INVALID_ACTION');
+    hand.splice(tileIndex, 1);
+    const previousMeld = this.currentRound.meldsByPlayer?.[playerId]?.[candidate.meldIndex];
+    if (!previousMeld || previousMeld.action !== 'peng') throw new AppError('INVALID_ACTION');
+    const isWind = ['east', 'south', 'west', 'north'].includes(candidate.face);
+    const previousFlowerUnits = flowerUnitsForMeld({ kind: 'triplet', isWind });
+    const totalFlowerUnits = flowerUnitsForMeld({ kind: 'added_kong', isWind });
+    const meldFlowerUnits = totalFlowerUnits - previousFlowerUnits;
+    let flowerState = recordSusongMeldFlowers(
+      this.currentRound.flowerStates[playerId],
+      meldFlowerUnits
+    );
+    const draw = drawSusongReplacementTile(privateState.remainingWall);
+    privateState.remainingWall = [...draw.remainingWall];
+    hand.push(draw.tileId);
+    appendPrivateTurnOperation(privateState, {
+      action: 'added_kong',
+      playerId,
+      meldIndex: candidate.meldIndex,
+      consumeTileIds: [...candidate.consumeTileIds],
+      replacementTileId: draw.tileId
+    });
+    let resolvedPrivateState = privateState;
+    let replacementCount = 1;
+    let flowerDisposition = null;
+    if (isSusongReplacementFlower(draw.tileId)) {
+      flowerState = recordSusongFlowerDraw(flowerState, 1);
+      const flowerAction = flowerState.status === 'piao' ? 'discard' : 'replace';
+      const resolution = resolvePrivateSusongFlowers({
+        privateState,
+        playerId,
+        action: flowerAction,
+        flowerState
+      });
+      resolvedPrivateState = resolution.privateState;
+      flowerState = resolution.flowerState;
+      if (flowerAction === 'replace') replacementCount += resolution.resolvedCount;
+      flowerDisposition = flowerAction === 'discard' ? 'discarded' : 'replaced';
+    }
+    const meld = {
+      ...clone(previousMeld),
+      action: 'added_kong',
+      tileIds: [...previousMeld.tileIds, candidate.consumeTileIds[0]]
+    };
+    this._privateRoundState = resolvedPrivateState;
+    this.currentRound.meldsByPlayer[playerId][candidate.meldIndex] = clone(meld);
+    this.currentRound.flowerStates[playerId] = clone(flowerState);
+    this.currentRound.wall.wallRemaining = resolvedPrivateState.remainingWall.length;
+    this.currentRound.wall.handCountsByPlayer[playerId] = resolvedPrivateState.handsByPlayer[playerId].length;
+    this.currentRound.pendingReaction = null;
+    if (flowerDisposition === 'discarded') this._advanceSusongTurn(playerId);
+    else {
+      this.turn = playerId;
+      this.turnPlayerId = playerId;
+      this.currentRound.turnPhase = 'discard';
+      this._setTurnDeadline();
+    }
+    return {
+      ...meld,
+      meldIndex: candidate.meldIndex,
+      meldFlowerUnits,
+      totalFlowerUnits,
+      replacementCount,
+      flowerDisposition,
+      flowerState: clone(flowerState),
+      wallRemaining: this.currentRound.wall.wallRemaining,
+      handCount: this.currentRound.wall.handCountsByPlayer[playerId]
+    };
+  }
+
   _canResolveSusongFlowerReplacements(remainingWall) {
     if (!Array.isArray(remainingWall)) return false;
     let wall = [...remainingWall];
@@ -1565,7 +1717,9 @@ export class Room {
       const claimantId = pending.responderOrder.find(id =>
         ['exposed_kong', 'peng'].includes(pending.responsesByPlayer[id]))
         ?? pending.responderOrder.find(id => pending.responsesByPlayer[id] === 'chi');
-      if (claimantId) {
+      if (pending.kind === 'added_kong') {
+        resolution = this._resolveSusongAddedKong(pending);
+      } else if (claimantId) {
         resolution = this._resolveSusongClaim(
           pending,
           claimantId,
@@ -1654,6 +1808,13 @@ export class Room {
         throw new AppError('INVALID_ACTION');
       }
       return this._resolveSusongConcealedKong(playerId, args.candidateIndex, command);
+    }
+    if (action === 'added_kong') {
+      if (phase !== 'discard' || !isRecord(args) || Object.keys(args).length !== 1
+        || !Number.isInteger(args.candidateIndex) || args.candidateIndex < 0) {
+        throw new AppError('INVALID_ACTION');
+      }
+      return this._declareSusongAddedKong(playerId, args.candidateIndex, command);
     }
     if (action === 'self_draw') {
       if (phase !== 'discard' || (args && Object.keys(args).length > 0)) throw new AppError('INVALID_ACTION');
@@ -2189,17 +2350,29 @@ export class Room {
     }
     if (result.round && id && id === this.turn && this.currentRound?.turnPhase === 'discard') {
       const concealedKongs = this._susongTurnKongCandidates(id, 'concealed_kong');
+      const addedKongs = this._susongTurnKongCandidates(id, 'added_kong');
+      const canResolveKong = this._canResolveSusongKong(id);
       result.round.availableActions = [
         'discard',
         ...(this._susongWinningCandidate(id, 'self_draw') ? ['self_draw'] : []),
-        ...(concealedKongs.length > 0 && this._canResolveSusongKong(id) ? ['concealed_kong'] : [])
+        ...(concealedKongs.length > 0 && canResolveKong ? ['concealed_kong'] : []),
+        ...(addedKongs.length > 0 && canResolveKong ? ['added_kong'] : [])
       ];
-      if (concealedKongs.length > 0 && this._canResolveSusongKong(id)) {
+      if ((concealedKongs.length > 0 || addedKongs.length > 0) && canResolveKong) {
         result.round.kongOptions = {
-          concealed_kong: concealedKongs.map((candidate, candidateIndex) => ({
-            candidateIndex,
-            face: candidate.face
-          }))
+          ...(concealedKongs.length > 0 ? {
+            concealed_kong: concealedKongs.map((candidate, candidateIndex) => ({
+              candidateIndex,
+              face: candidate.face
+            }))
+          } : {}),
+          ...(addedKongs.length > 0 ? {
+            added_kong: addedKongs.map((candidate, candidateIndex) => ({
+              candidateIndex,
+              face: candidate.face,
+              meldIndex: candidate.meldIndex
+            }))
+          } : {})
         };
       }
     }
@@ -2614,6 +2787,24 @@ export class Room {
         this.currentRound.turnDeadlineAt = payload.turnDeadlineAt || null;
         break;
       }
+      case 'SUSONG_ADDED_KONG_DECLARED': {
+        const id = playerId(payload.playerId);
+        const pending = payload.pendingReaction;
+        if (!id || !isRecord(pending) || pending.kind !== 'added_kong'
+          || pending.declarerId !== id || pending.discarderId !== id
+          || typeof pending.tileId !== 'string' || !Number.isInteger(pending.meldIndex)
+          || !Number.isInteger(pending.candidateIndex) || !Array.isArray(pending.responderOrder)
+          || pending.responderOrder.length !== this.players.size - 1) {
+          throw new AppError('INVALID_ACTION');
+        }
+        this.currentRound.pendingReaction = clone(pending);
+        this.turn = payload.nextTurn;
+        this.turnPlayerId = this.turn;
+        this.currentRound.turnPhase = payload.turnPhase;
+        this.currentRound.turnStartedAt = payload.turnStartedAt || null;
+        this.currentRound.turnDeadlineAt = payload.turnDeadlineAt || null;
+        break;
+      }
       case 'SUSONG_REACTION_PASSED':
       case 'SUSONG_REACTION_CLAIMED': {
         const id = playerId(payload.playerId);
@@ -2622,7 +2813,27 @@ export class Room {
           || pending.responderOrder[pending.respondedPlayerIds.length] !== id) {
           throw new AppError('INVALID_ACTION');
         }
-        if (['chi', 'peng', 'exposed_kong'].includes(payload.resolution?.action)) {
+        if (payload.resolution?.action === 'added_kong') {
+          const resolution = payload.resolution;
+          const declarerId = playerId(resolution.playerId);
+          const meld = declarerId && this.currentRound.meldsByPlayer?.[declarerId]?.[resolution.meldIndex];
+          if (!declarerId || !meld || meld.action !== 'peng'
+            || !Array.isArray(resolution.tileIds) || resolution.tileIds.length !== 4
+            || !Number.isInteger(payload.handCount) || !Number.isInteger(resolution.wallRemaining)
+            || !isRecord(resolution.flowerState)) {
+            throw new AppError('INVALID_ACTION');
+          }
+          this.currentRound.meldsByPlayer[declarerId][resolution.meldIndex] = {
+            action: 'added_kong',
+            playerId: declarerId,
+            fromPlayerId: resolution.fromPlayerId,
+            claimedTileId: resolution.claimedTileId,
+            tileIds: clone(resolution.tileIds)
+          };
+          this.currentRound.wall.handCountsByPlayer[declarerId] = payload.handCount;
+          this.currentRound.wall.wallRemaining = resolution.wallRemaining;
+          this.currentRound.flowerStates[declarerId] = clone(resolution.flowerState);
+        } else if (['chi', 'peng', 'exposed_kong'].includes(payload.resolution?.action)) {
           const resolution = payload.resolution;
           const claimantId = playerId(resolution.playerId);
           const discarderId = playerId(resolution.fromPlayerId);
@@ -3036,8 +3247,8 @@ function normalizePrivateRoundState(input, players, round) {
     return [playerId, clone(values)];
   }));
   const publicMeldTileIds = Object.values(publicMelds).flatMap(melds => melds.flatMap(meld => {
-    const expectedTileCount = ['exposed_kong', 'concealed_kong'].includes(meld?.action) ? 4 : 3;
-    if (!isRecord(meld) || !['chi', 'peng', 'exposed_kong', 'concealed_kong'].includes(meld.action)
+    const expectedTileCount = ['exposed_kong', 'concealed_kong', 'added_kong'].includes(meld?.action) ? 4 : 3;
+    if (!isRecord(meld) || !['chi', 'peng', 'exposed_kong', 'concealed_kong', 'added_kong'].includes(meld.action)
       || !Array.isArray(meld.tileIds) || meld.tileIds.length !== expectedTileCount) {
       throw new AppError('INVALID_ACTION');
     }
@@ -3137,6 +3348,36 @@ function normalizePrivateRoundState(input, players, round) {
         }
         replayHands[operation.playerId].splice(handIndex, 1);
         replayDiscards[operation.playerId].push(discarded);
+      } else if (operation.action === 'added_kong') {
+        if (!Number.isInteger(operation.meldIndex)
+          || !Array.isArray(operation.consumeTileIds) || operation.consumeTileIds.length !== 1) {
+          throw new TypeError('added kong history must identify one peng and private tile');
+        }
+        const candidate = getSusongTurnKongCandidates({
+          hand: replayHands[operation.playerId],
+          melds: replayMelds[operation.playerId]
+        }).find(item => item.action === 'added_kong'
+          && item.meldIndex === operation.meldIndex
+          && canonical(item.consumeTileIds) === canonical(operation.consumeTileIds));
+        const previousMeld = replayMelds[operation.playerId][operation.meldIndex];
+        if (!candidate || !previousMeld || previousMeld.action !== 'peng') {
+          throw new TypeError('added kong history does not match an available peng');
+        }
+        const tileId = operation.consumeTileIds[0];
+        const handIndex = replayHands[operation.playerId].indexOf(tileId);
+        if (handIndex < 0) throw new TypeError('added kong tile is unavailable');
+        replayHands[operation.playerId].splice(handIndex, 1);
+        const replacementTileId = String(operation.replacementTileId);
+        if (replayWall.at(-1) !== replacementTileId || replayWall.length <= 14) {
+          throw new TypeError('added kong history draws outside the candidate tail');
+        }
+        replayWall.pop();
+        replayHands[operation.playerId].push(replacementTileId);
+        replayMelds[operation.playerId][operation.meldIndex] = {
+          ...previousMeld,
+          action: 'added_kong',
+          tileIds: [...previousMeld.tileIds, tileId]
+        };
       } else if (operation.action === 'concealed_kong') {
         if (!Array.isArray(operation.consumeTileIds) || operation.consumeTileIds.length !== 4) {
           throw new TypeError('concealed kong history must consume four private tiles');

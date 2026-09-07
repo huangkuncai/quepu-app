@@ -240,6 +240,27 @@ function passSusongReaction(room, prefix = 'reaction') {
   return responders;
 }
 
+function advanceSusongToAddedKong(room, maxSteps = 300) {
+  for (let step = 0; step < maxSteps && room.status === 'playing'; step += 1) {
+    const playerId = room.turn;
+    const viewer = room.snapshot({ viewerId: playerId });
+    if (viewer.round.availableActions?.includes('added_kong')) return { playerId, viewer };
+    if (room.currentRound.turnPhase === 'reaction') {
+      room.applyAction(playerId, viewer.round.availableReactions.includes('peng') ? 'peng' : 'pass', {
+        commandId: `seek-added-kong-reaction-${step}`
+      });
+    } else if (room.currentRound.turnPhase === 'draw') {
+      room.applyAction(playerId, 'draw', { commandId: `seek-added-kong-draw-${step}` });
+    } else {
+      const tileId = viewer.round.privateHand.find(value => !isSusongReplacementFlower(value));
+      room.applyAction(playerId, { action: 'discard', args: { tileId } }, {
+        commandId: `seek-added-kong-discard-${step}`
+      });
+    }
+  }
+  throw new Error('deterministic fixture did not reach an added kong');
+}
+
 test('Room exposes only the viewer hand while persistence retains all private state', () => {
   const room = susongRoom();
   const dealt = room.dealSusongOpeningRound({ seed, dealerSeat: 2 }, {
@@ -626,6 +647,96 @@ test('RoomActor atomically checkpoints a concealed kong private mutation', async
   });
   await restarted.recover();
   assert.deepEqual(restarted.snapshot({ viewerId: 'A' }), actor.snapshot({ viewerId: 'A' }));
+});
+
+test('an added kong waits for all robbing-kong responses before upgrading and replacing', () => {
+  const room = susongRoom('added-kong-room');
+  room.dealSusongOpeningRound({ seed: '1'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  const { playerId, viewer } = advanceSusongToAddedKong(room);
+  assert.equal(playerId, 'B');
+  assert.deepEqual(viewer.round.kongOptions.added_kong, [{
+    candidateIndex: 0,
+    face: 'characters-9',
+    meldIndex: 1
+  }]);
+  const handCountBefore = viewer.round.privateHand.length;
+  const wallBefore = room.currentRound.wall.wallRemaining;
+  const flowersBefore = room.currentRound.flowerStates.B.meldFlowers;
+  const beforeDeclaration = room.persistenceSnapshot();
+  const declared = room.applyAction('B', { action: 'added_kong', args: { candidateIndex: 0 } });
+
+  assert.equal(declared.event.type, 'SUSONG_ADDED_KONG_DECLARED');
+  assert.equal(room.currentRound.pendingReaction.kind, 'added_kong');
+  assert.equal(room.currentRound.meldsByPlayer.B[1].action, 'peng');
+  assert.equal(room.snapshot({ viewerId: 'B' }).round.privateHand.length, handCountBefore);
+  assert.equal(room.turn, 'C');
+  assert.deepEqual(room.snapshot({ viewerId: 'C' }).round.availableReactions, ['pass']);
+  const recoveredDeclaration = Room.fromSnapshot(beforeDeclaration);
+  recoveredDeclaration.applyPersistedEvent(declared.event);
+  assert.deepEqual(
+    recoveredDeclaration.snapshot({ viewerId: 'C' }),
+    room.snapshot({ viewerId: 'C' })
+  );
+  room.applyAction('C', 'pass');
+  room.applyAction('D', 'pass');
+  const resolved = room.applyAction('A', 'pass');
+
+  assert.equal(resolved.resolution.action, 'added_kong');
+  assert.equal(resolved.resolution.meldFlowerUnits, 1);
+  assert.equal(room.currentRound.meldsByPlayer.B[1].action, 'added_kong');
+  assert.equal(room.currentRound.meldsByPlayer.B[1].tileIds.length, 4);
+  assert.equal(room.currentRound.flowerStates.B.meldFlowers, flowersBefore + 1);
+  assert.equal(room.currentRound.wall.wallRemaining, wallBefore - 1);
+  assert.equal(room.snapshot({ viewerId: 'B' }).round.privateHand.length, handCountBefore);
+  assert.equal(room.currentRound.pendingReaction, null);
+  assert.equal(room.turn, 'B');
+  assert.equal(room.currentRound.turnPhase, 'discard');
+
+  const persisted = room.persistenceSnapshot();
+  assert.deepEqual(Room.fromSnapshot(persisted).persistenceSnapshot(), persisted);
+  const tampered = structuredClone(persisted);
+  delete tampered.snapshotHash;
+  tampered.privateRoundState.turnHistory.at(-1).replacementTileId = 'characters-1-1';
+  assert.throws(() => Room.fromSnapshot(tampered), error => error.code === 'INVALID_ACTION');
+});
+
+test('a legal robbing-kong winner cancels the added kong and charges its declarer', () => {
+  const room = susongRoom('robbing-kong-room');
+  room.dealSusongOpeningRound({ seed: '1'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  advanceSusongToAddedKong(room);
+  room._privateRoundState.handsByPlayer.C = [
+    'characters-1-1', 'characters-2-1', 'characters-3-1',
+    'bamboo-1-1', 'bamboo-2-1', 'bamboo-3-1',
+    'dots-4-1', 'dots-5-1', 'dots-6-1',
+    'east-1', 'east-2', 'east-3', 'characters-9-2'
+  ];
+  room.currentRound.flowerStates.C = {
+    ...room.currentRound.flowerStates.C,
+    status: 'not_piao',
+    openingFlowers: 1,
+    countedFlowers: 1
+  };
+  room.applyAction('B', { action: 'added_kong', args: { candidateIndex: 0 } });
+
+  assert.deepEqual(room.snapshot({ viewerId: 'C' }).round.availableReactions, ['pass', 'hu']);
+  room.applyAction('C', 'hu');
+  room.applyAction('D', 'pass');
+  const result = room.applyAction('A', 'pass');
+
+  assert.equal(result.event.type, 'ROUND_SETTLING');
+  assert.deepEqual(result.settlement.winnerIds, ['C']);
+  assert.equal(result.settlement.discarderId, 'B');
+  assert.equal(result.settlement.wins[0].tier, 'one_bamboo');
+  assert.equal(room.currentRound.meldsByPlayer.B[1].action, 'peng');
+  assert.equal(room._privateRoundState.handsByPlayer.B.includes('characters-9-1'), true);
 });
 
 test('a discard win is recognized and settled entirely from authoritative room state', () => {
