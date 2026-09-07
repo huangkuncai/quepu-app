@@ -79,9 +79,117 @@ export function flowerAwardScore(input = {}, { wonByDiscard = false, draw = fals
   return normalizeSusongConfig(input).scoreTiers[1];
 }
 
+/**
+ * Create the server-owned flower/piao state after the opening hand is dealt.
+ *
+ * `piao` is a flower-handling rule, never a score supplied by a client. In a
+ * strong-piao room an opening hand without flowers is automatically piao. An
+ * opening hand with flowers must make the one permitted choice before play.
+ */
+export function createSusongFlowerState({
+  piaoMode = SUSONG_DEFAULT_CONFIG.piao,
+  initialFlowerCount = 0,
+  choosesPiao
+} = {}) {
+  const mode = normalizePiao(piaoMode);
+  const openingFlowers = nonNegativeInteger(initialFlowerCount, 'initialFlowerCount');
+
+  if (mode === 'strong' && openingFlowers > 0 && typeof choosesPiao !== 'boolean') {
+    return flowerState({
+      mode,
+      status: 'awaiting_piao_choice',
+      openingFlowers,
+      pendingFlowerDiscards: openingFlowers
+    });
+  }
+
+  const isPiao = mode === 'strong' && (openingFlowers === 0 || choosesPiao === true);
+  if (isPiao) {
+    return flowerState({
+      mode,
+      status: 'piao',
+      openingFlowers,
+      pendingFlowerDiscards: openingFlowers
+    });
+  }
+
+  return flowerState({
+    mode,
+    status: 'not_piao',
+    openingFlowers,
+    countedFlowers: openingFlowers,
+    pendingFlowerReplacements: openingFlowers
+  });
+}
+
+/** Record a server-observed flower draw and return the next immutable state. */
+export function recordSusongFlowerDraw(current, count = 1) {
+  const state = normalizeFlowerState(current);
+  const drawn = nonNegativeInteger(count, 'count');
+  if (drawn === 0) return state;
+  if (state.status === 'awaiting_piao_choice') {
+    fail('flowerState', 'must resolve the opening piao choice before drawing');
+  }
+  if (state.status === 'piao') {
+    return flowerState({
+      ...state,
+      drawnFlowers: state.drawnFlowers + drawn,
+      pendingFlowerDiscards: state.pendingFlowerDiscards + drawn
+    });
+  }
+  return flowerState({
+    ...state,
+    drawnFlowers: state.drawnFlowers + drawn,
+    countedFlowers: state.countedFlowers + drawn,
+    pendingFlowerReplacements: state.pendingFlowerReplacements + drawn
+  });
+}
+
+/** Resolve flower discards/replacements; the server calls this after actions. */
+export function resolveSusongFlowers(current, { discard = 0, replace = 0 } = {}) {
+  const state = normalizeFlowerState(current);
+  const discarded = nonNegativeInteger(discard, 'discard');
+  const replaced = nonNegativeInteger(replace, 'replace');
+  if (discarded > state.pendingFlowerDiscards) fail('discard', 'exceeds pending flower discards');
+  if (replaced > state.pendingFlowerReplacements) fail('replace', 'exceeds pending flower replacements');
+  return flowerState({
+    ...state,
+    pendingFlowerDiscards: state.pendingFlowerDiscards - discarded,
+    pendingFlowerReplacements: state.pendingFlowerReplacements - replaced
+  });
+}
+
+/**
+ * Decide win eligibility and the flower tier from authoritative round state.
+ * A piao/no-flower hand cannot win from a discard; self-draw is the cap tier.
+ */
+export function evaluateSusongWin({ flowerState: current, winSource, patterns = [], gangWinCount = 0 } = {}) {
+  const state = normalizeFlowerState(current);
+  if (!['discard', 'self_draw'].includes(winSource)) {
+    fail('winSource', 'must be discard or self_draw');
+  }
+  if (state.status === 'awaiting_piao_choice') {
+    return winDecision(false, null, 'PIAO_CHOICE_REQUIRED', state);
+  }
+  if (state.pendingFlowerDiscards > 0) {
+    return winDecision(false, null, 'FLOWER_DISCARD_REQUIRED', state);
+  }
+  if (state.pendingFlowerReplacements > 0) {
+    return winDecision(false, null, 'FLOWER_REPLACEMENT_REQUIRED', state);
+  }
+  const noFlower = state.status === 'piao' || state.countedFlowers === 0;
+  if (noFlower && winSource !== 'self_draw') {
+    return winDecision(false, null, 'NO_FLOWER_SELF_DRAW_ONLY', state);
+  }
+  const tier = noFlower
+    ? 'one_bamboo'
+    : classifySusongHu({ flowerCount: state.countedFlowers, patterns, gangWinCount });
+  return winDecision(true, tier, null, state, { cappedByNoFlowerSelfDraw: noFlower });
+}
+
 export const susongRule = deepFreeze({
   id: 'susong_v1',
-  version: '8931-apk-baseline.1',
+  version: '8931-apk-baseline.2',
   legacyGameId: 8931,
   name: '宿松麻将',
   players: 4,
@@ -114,6 +222,15 @@ export const susongRule = deepFreeze({
     drawAtRemainingTiles: 14,
     drawScores: false,
     sanxiMultiplier: 2
+  },
+  piaoFlow: {
+    meaning: 'flower_handling_mode',
+    strongOpeningNoFlower: 'automatic_piao',
+    strongOpeningWithFlower: 'choose_piao_or_not_piao',
+    piaoFlowerAction: 'discard',
+    nonPiaoFlowerAction: 'replace',
+    noFlowerWin: 'self_draw_only',
+    noFlowerSelfDrawTier: 'one_bamboo'
   },
   source: 'reference-apk:assets/res/common/8931_rule.txt'
 });
@@ -151,6 +268,62 @@ function integer(value, field) {
   const result = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
   if (!Number.isInteger(result)) fail(field, 'must be an integer');
   return result;
+}
+
+function nonNegativeInteger(value, field) {
+  const result = integer(value, field);
+  if (result < 0) fail(field, 'must be zero or greater');
+  return result;
+}
+
+function flowerState({
+  mode,
+  status,
+  openingFlowers = 0,
+  drawnFlowers = 0,
+  countedFlowers = 0,
+  pendingFlowerDiscards = 0,
+  pendingFlowerReplacements = 0
+}) {
+  return deepFreeze({
+    mode,
+    status,
+    openingFlowers,
+    drawnFlowers,
+    countedFlowers,
+    pendingFlowerDiscards,
+    pendingFlowerReplacements
+  });
+}
+
+function normalizeFlowerState(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    fail('flowerState', 'must be an object');
+  }
+  if (!PIAO_MODES.includes(value.mode)) fail('flowerState.mode', 'is invalid');
+  if (!['awaiting_piao_choice', 'piao', 'not_piao'].includes(value.status)) {
+    fail('flowerState.status', 'is invalid');
+  }
+  return flowerState({
+    mode: value.mode,
+    status: value.status,
+    openingFlowers: nonNegativeInteger(value.openingFlowers ?? 0, 'openingFlowers'),
+    drawnFlowers: nonNegativeInteger(value.drawnFlowers ?? 0, 'drawnFlowers'),
+    countedFlowers: nonNegativeInteger(value.countedFlowers ?? 0, 'countedFlowers'),
+    pendingFlowerDiscards: nonNegativeInteger(value.pendingFlowerDiscards ?? 0, 'pendingFlowerDiscards'),
+    pendingFlowerReplacements: nonNegativeInteger(value.pendingFlowerReplacements ?? 0, 'pendingFlowerReplacements')
+  });
+}
+
+function winDecision(allowed, tier, reason, state, extra = {}) {
+  return deepFreeze({
+    allowed,
+    tier,
+    reason,
+    flowerCount: state.countedFlowers,
+    piao: state.status === 'piao',
+    ...extra
+  });
 }
 
 function fail(field, message) {

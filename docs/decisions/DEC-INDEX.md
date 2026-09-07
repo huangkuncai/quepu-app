@@ -58,7 +58,7 @@
 | DEC-RULE-002 | 吃/碰/杠/补花/抢杠/胡/过及多家胡优先级 | 动作集确认；同时可行动作优先级待旧服样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `MsgXYSSMJ.pb`、回放 opcode |
 | DEC-RULE-003 | 首局庄、庄轮转、多家胡、流局、剩余牌墙和杠后牌 | 上局最先胡者坐庄、流局连庄、剩 14 张流局、一炮多响；首局庄和杠后牌方向待样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt` |
 | DEC-RULE-004 | 底分 1～9 的选择方式及第二档映射 | 1～9 必须选择 4 个递增档；默认 1/2/3/4；第二档用于花奖 | M+APK | USER + RULE | GR | CONFIRMED | 创建房配置及规则文本 |
-| DEC-RULE-005 | 花奖、杠花、出增、强飘、三西/三道的叠加公式 | 花奖/杠花边界确认；增、飘、三西组合叠加顺序待旧服结算样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt`、协议字段 |
+| DEC-RULE-005 | 花奖、杠花、出增、飘花、三西/三道规则 | 飘不是计分项：服务端按强飘/不强飘维护无花果和花处理状态；增、花档、三西数值公式仍待结算样本 | M+APK+USER | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt`、用户 2026-09-07 确认 |
 | DEC-RULE-006 | 无花果、“一察/一素”等术语、数值和触发 | APK 原文术语为“无花果”“一索”；无花果归一索且只能自摸 | M+APK | USER + RULE | GR | CONFIRMED | `8931_rule.txt` |
 | DEC-RULE-007 | 必胡/不必胡、“过圈”和超时默认动作 | 必胡自动胡；不必胡可放弃但必须过圈；超时动作待旧服样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | 创建房配置及规则文本 |
 | DEC-RULE-008 | 小胡/大胡、特殊胡型、≥9、封顶、舍入、零和 | 花数档、九类一索和杠开档确认；多条件叠加/封顶待旧服结算样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt` |
@@ -71,7 +71,7 @@
 | BLOCKER-ID | 影响 REQ/RULE/任务 | 缺失决策或证据 | Owner | 截止 | 临时降级 | 解除证据 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | BLOCKER-G0-001 | BE-103 生产接入、CL-102～103、发布合规 | DEC-002 登录和年龄/地区/实名边界 | USER + LEGAL | G0 | fake auth；禁止生产房间 | 已确认 Auth 策略和验收样例 | OPEN |
-| BLOCKER-G0-002 | R-*、BE-301～306 | 已确认采用 8931；旧服务端独有的叠加公式、牌墙细节和优先级仍缺结算/回放样本 | USER + RULE | GR | 已验证部分使用 `8931-apk-baseline.1`；缺失部分禁止生产结算 | 旧 App 牌局样本、计分表、≥20 golden cases | OPEN（范围缩小） |
+| BLOCKER-G0-002 | R-*、BE-301～306 | 已确认采用 8931；旧服务端独有的叠加公式、牌墙细节和优先级仍缺结算/回放样本 | USER + RULE | GR | 已验证部分使用 `8931-apk-baseline.2`；缺失部分禁止生产结算 | 旧 App 牌局样本、计分表、≥20 golden cases | OPEN（范围缩小） |
 | BLOCKER-G0-003 | BE-401～405、Club/Floor | DEC-003～006 俱乐部/楼层/访问权限 | USER/PM | G0 | 只读 mock 数据 | RBAC 与 ruleSnapshot schema 已确认 | OPEN |
 | BLOCKER-G0-004 | BE-501～504 | DEC-008～009 钻石归属和扣费策略 | USER + OPS | G0 | ledger sandbox；不扣真实钻石 | reserve/consume/release/reverse 流程签字 | OPEN |
 | BLOCKER-G0-005 | CL-102～103、OPS-301～304、G1 | Android/iOS 设备、SDK/API/签名清单（鸿蒙已暂缓） | USER + CL | G0/G1 | Dart 原生 transport 与 Flutter/FakeTransport POC 可本机验证；不生成可安装包 | Android+iOS 真机矩阵和签名条件 | OPEN |

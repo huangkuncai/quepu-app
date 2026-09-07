@@ -3,9 +3,13 @@ import test from 'node:test';
 import {
   SUSONG_DEFAULT_CONFIG,
   classifySusongHu,
+  createSusongFlowerState,
+  evaluateSusongWin,
   flowerAwardScore,
   flowerUnitsForMeld,
   normalizeSusongConfig,
+  recordSusongFlowerDraw,
+  resolveSusongFlowers,
   susongRule,
   toLegacy8931Config
 } from '../src/domain/rules/susong.js';
@@ -18,6 +22,66 @@ test('8931 room options normalize to an immutable semantic snapshot', () => {
   assert.equal(Object.isFrozen(config), true);
   assert.equal(Object.isFrozen(config.scoreTiers), true);
   assert.deepEqual(toLegacy8931Config(config), { times: 16, branch: '2469', zun: 5, piao: 2, hu: 1, maxPlayerNum: 4 });
+});
+
+test('strong piao with no opening flower discards later flowers and stays no-flower', () => {
+  let state = createSusongFlowerState({ piaoMode: 'strong', initialFlowerCount: 0 });
+  assert.equal(state.status, 'piao');
+  state = recordSusongFlowerDraw(state);
+  assert.equal(state.pendingFlowerDiscards, 1);
+  assert.equal(state.countedFlowers, 0);
+  assert.equal(evaluateSusongWin({ flowerState: state, winSource: 'self_draw' }).reason, 'FLOWER_DISCARD_REQUIRED');
+  state = resolveSusongFlowers(state, { discard: 1 });
+  assert.deepEqual(evaluateSusongWin({ flowerState: state, winSource: 'discard' }), {
+    allowed: false,
+    tier: null,
+    reason: 'NO_FLOWER_SELF_DRAW_ONLY',
+    flowerCount: 0,
+    piao: true
+  });
+  assert.equal(evaluateSusongWin({ flowerState: state, winSource: 'self_draw' }).tier, 'one_bamboo');
+});
+
+test('strong piao with opening flowers requires a choice and discards all flowers when chosen', () => {
+  const waiting = createSusongFlowerState({ piaoMode: 'strong', initialFlowerCount: 2 });
+  assert.equal(waiting.status, 'awaiting_piao_choice');
+  assert.equal(evaluateSusongWin({ flowerState: waiting, winSource: 'self_draw' }).reason, 'PIAO_CHOICE_REQUIRED');
+  let state = createSusongFlowerState({ piaoMode: 'strong', initialFlowerCount: 2, choosesPiao: true });
+  assert.equal(state.pendingFlowerDiscards, 2);
+  state = resolveSusongFlowers(state, { discard: 2 });
+  state = recordSusongFlowerDraw(state, 1);
+  assert.equal(state.pendingFlowerDiscards, 1);
+  assert.equal(state.countedFlowers, 0);
+});
+
+test('strong piao player may decline piao and win by the counted flower tier', () => {
+  let state = createSusongFlowerState({ piaoMode: 'strong', initialFlowerCount: 5, choosesPiao: false });
+  assert.equal(state.status, 'not_piao');
+  assert.equal(evaluateSusongWin({ flowerState: state, winSource: 'discard' }).reason, 'FLOWER_REPLACEMENT_REQUIRED');
+  state = resolveSusongFlowers(state, { replace: 5 });
+  const decision = evaluateSusongWin({ flowerState: state, winSource: 'discard' });
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.tier, 'big');
+});
+
+test('optional piao room replaces opening flowers immediately', () => {
+  let state = createSusongFlowerState({ piaoMode: 'optional', initialFlowerCount: 3 });
+  assert.equal(state.status, 'not_piao');
+  assert.equal(state.pendingFlowerReplacements, 3);
+  state = resolveSusongFlowers(state, { replace: 3 });
+  assert.equal(evaluateSusongWin({ flowerState: state, winSource: 'discard' }).tier, 'small');
+});
+
+test('optional room opening no-flower hand gains discard-win eligibility after drawing a flower', () => {
+  let state = createSusongFlowerState({ piaoMode: 'optional', initialFlowerCount: 0 });
+  assert.equal(evaluateSusongWin({ flowerState: state, winSource: 'discard' }).reason, 'NO_FLOWER_SELF_DRAW_ONLY');
+  assert.equal(evaluateSusongWin({ flowerState: state, winSource: 'self_draw' }).tier, 'one_bamboo');
+  state = recordSusongFlowerDraw(state);
+  assert.equal(evaluateSusongWin({ flowerState: state, winSource: 'discard' }).reason, 'FLOWER_REPLACEMENT_REQUIRED');
+  state = resolveSusongFlowers(state, { replace: 1 });
+  const decision = evaluateSusongWin({ flowerState: state, winSource: 'discard' });
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.tier, 'small');
 });
 
 test('8931 room options reject values the reference client cannot create', () => {
@@ -78,7 +142,7 @@ test('room creation freezes normalized 8931 config instead of accepting client s
   });
   assert.equal(created.room.maxPlayers, 4);
   assert.equal(created.room.totalRounds, 8);
-  assert.equal(created.room.ruleVersion, '8931-apk-baseline.1');
+  assert.equal(created.room.ruleVersion, '8931-apk-baseline.2');
   assert.deepEqual(created.room.ruleSnapshot.config, {
     rounds: 8,
     scoreTiers: [1, 3, 5, 9],
