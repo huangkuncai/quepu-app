@@ -34,6 +34,7 @@ const BUSINESS_COMMANDS = new Set([
   'join_room',
   'leave_room',
   'ready',
+  'increase_zeng',
   'start_round',
   'begin_playing',
   'action',

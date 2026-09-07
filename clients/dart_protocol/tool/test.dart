@@ -23,6 +23,7 @@ void main() {
   for (final type in [
     'leave_room',
     'ready',
+    'increase_zeng',
     'begin_playing',
     'settle_round',
     'next_round',

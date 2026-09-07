@@ -68,6 +68,7 @@ const commandTypes = <String>{
   'join_room',
   'leave_room',
   'ready',
+  'increase_zeng',
   'start_round',
   'begin_playing',
   'action',

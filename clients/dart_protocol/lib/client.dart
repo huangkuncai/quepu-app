@@ -426,6 +426,13 @@ class ClientSessionController {
   Future<String> beginPlaying(String roomId) =>
       sendCommand('begin_playing', {}, roomId: roomId);
 
+  Future<String> increaseZeng(String roomId) => sendCommand(
+        'increase_zeng',
+        const {},
+        roomId: roomId,
+        roomVersion: _room.roomVersion < 0 ? null : _room.roomVersion,
+      );
+
   Future<String> action(String roomId, String action) => sendCommand(
         'action',
         {'action': action},
@@ -717,6 +724,7 @@ class ClientSessionController {
     'join_room',
     'leave_room',
     'ready',
+    'increase_zeng',
     'start_round',
     'begin_playing',
     'action',

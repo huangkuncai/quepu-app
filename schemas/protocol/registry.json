@@ -11,6 +11,7 @@
     "join_room": "join-room-payload.schema.json",
     "leave_room": "leave-room-payload.schema.json",
     "ready": "ready-room-payload.schema.json",
+    "increase_zeng": "increase-zeng-payload.schema.json",
     "begin_playing": "begin-playing-payload.schema.json",
     "action": "action-payload.schema.json",
     "settle_round": "settle-room-payload.schema.json",

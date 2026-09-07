@@ -167,6 +167,42 @@ test('SYSTEM-authored settlement applies reconciled scores exactly once', () => 
   assert.deepEqual(recovered.snapshot().scores, room.snapshot().scores);
 });
 
+test('Susong zeng is server-owned, monotonic, idempotent and replayable', () => {
+  const room = makeRoom({
+    ruleSnapshot: {
+      gameType: 'mahjong',
+      ruleId: 'susong_v1',
+      ruleVersion: '8931-apk-baseline.3',
+      config: { zeng: 2 }
+    }
+  });
+  fillRoom(room);
+  const before = room.snapshot();
+  const first = room.increaseZeng('p1', { actorId: 'p1', commandId: 'p1-zeng-1' });
+  assert.equal(first.current, 1);
+  const replay = room.increaseZeng('p1', { actorId: 'p1', commandId: 'p1-zeng-1' });
+  assert.deepEqual(replay, first);
+  assert.equal(room.snapshot().zengByPlayer.p1, 1);
+  assert.throws(
+    () => room.increaseZeng('p1', { actorId: 'p2' }),
+    error => error.code === 'FORBIDDEN'
+  );
+  const recovered = Room.fromSnapshot(before);
+  recovered.applyPersistedEvent(first.event);
+  assert.deepEqual(recovered.snapshot().zengByPlayer, room.snapshot().zengByPlayer);
+
+  const disabled = makeRoom({
+    ruleSnapshot: {
+      gameType: 'mahjong',
+      ruleId: 'susong_v1',
+      ruleVersion: '8931-apk-baseline.3',
+      config: { zeng: 0 }
+    }
+  });
+  fillRoom(disabled);
+  assert.throws(() => disabled.increaseZeng('p1'), error => error.code === 'INVALID_ACTION');
+});
+
 test('history window asks for a full sync when the requested version is too old', () => {
   const room = makeRoom({ historyLimit: 2 });
   room.join({ id: 'p1' });

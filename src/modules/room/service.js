@@ -9,6 +9,7 @@ const ROOM_COMMAND_TYPES = new Set([
   'join_room',
   'leave_room',
   'ready',
+  'increase_zeng',
   'start_round',
   'begin_playing',
   'action',
@@ -303,7 +304,8 @@ export class RoomService {
     const settlement = scoreSusongRound({
       ...clone(facts),
       config: actor.room.ruleSnapshot.config,
-      playerIds: players
+      playerIds: players,
+      zengByPlayer: Object.fromEntries(actor.room.zengByPlayer)
     });
     const command = {
       protocolVersion: '1.0',

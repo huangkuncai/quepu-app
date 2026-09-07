@@ -105,6 +105,7 @@ class FaultInjector {
     this.plan = plan;
     this.originalSend = null;
     this.pending = new Set();
+    this.held = [];
     this.deliveries = [];
   }
 
@@ -126,6 +127,10 @@ class FaultInjector {
       const baseDelay = Number.isFinite(rule.delayMs) ? rule.delayMs : 0;
       for (let copy = 0; copy < copies; copy += 1) {
         const deliveryDelay = Math.max(0, baseDelay + copy);
+        if (rule.hold === true) {
+          this.held.push({ socket, message, roomVersion, copy, deliveryDelay });
+          continue;
+        }
         const timer = setTimeout(() => {
           this.pending.delete(timer);
           this.deliveries.push({ roomVersion, kind: 'delivered', copy, delayMs: deliveryDelay });
@@ -140,10 +145,21 @@ class FaultInjector {
   }
 
   async flush() {
-    if (this.pending.size === 0) return;
-    // The plans are intentionally small and bounded. Polling the pending set
-    // keeps this helper deterministic without exposing timer handles to tests.
-    await waitUntil(() => this.pending.size === 0, 1000);
+    if (this.pending.size > 0) {
+      // The plans are intentionally small and bounded. Polling the pending set
+      // keeps this helper deterministic without exposing timer handles to tests.
+      await waitUntil(() => this.pending.size === 0, 1000);
+    }
+    for (const held of this.held.splice(0)) {
+      this.deliveries.push({
+        roomVersion: held.roomVersion,
+        kind: 'delivered',
+        copy: held.copy,
+        delayMs: held.deliveryDelay,
+        held: true
+      });
+      this.originalSend.call(this.gateway, held.socket, held.message);
+    }
     // `ws.send` completes synchronously at the server boundary, while the
     // peer's `message` callback is delivered on a later libuv turn.
     await delay(10);
@@ -153,6 +169,7 @@ class FaultInjector {
     if (!this.originalSend) return;
     for (const timer of this.pending) clearTimeout(timer);
     this.pending.clear();
+    this.held = [];
     this.gateway.send = this.originalSend;
     this.originalSend = null;
   }
@@ -243,7 +260,7 @@ test('QA-201 fault matrix converges after delayed, dropped, reordered and duplic
       targetPlayerId: 'qa-player-4',
       plan: {
         // v7 and v8 arrive before the delayed v5; v6 is lost entirely.
-        5: { delayMs: 60 },
+        5: { hold: true },
         6: { drop: true },
         7: { delayMs: 5, duplicate: true },
         8: { delayMs: 15 }

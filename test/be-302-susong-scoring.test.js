@@ -155,6 +155,11 @@ test('internal RoomService settlement scores and persists through SYSTEM authori
     }
   });
   for (const playerId of players) room.join({ id: playerId });
+  for (const [playerId, count] of Object.entries({ A: 2, B: 3, C: 1, D: 5 })) {
+    for (let index = 0; index < count; index += 1) {
+      room.increaseZeng(playerId, { actorId: playerId, commandId: `${playerId}-zeng-${index}` });
+    }
+  }
   for (const playerId of players) room.setReady(playerId);
   room.start({ actorId: 'A' });
   room.beginPlaying({ actorId: 'A' });
@@ -179,7 +184,8 @@ test('internal RoomService settlement scores and persists through SYSTEM authori
       outcome: 'self_draw',
       winnerId: 'A',
       flowerState: flowerState(4),
-      zengByPlayer: { A: 2, B: 3, C: 1, D: 5 }
+      // This forged input is ignored; settlement reads the Room map above.
+      zengByPlayer: { A: 999, B: 999, C: 999, D: 999 }
     }
   });
   assert.equal(result.snapshot.round.settlement.scoreAuthority, 'server');

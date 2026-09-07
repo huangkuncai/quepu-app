@@ -41,6 +41,14 @@ export const ROOM_ACCESS_POLICY = Object.freeze({
 const JOINABLE_STATES = new Set([ROOM_STATUS.WAITING]);
 const READY_STATES = new Set([ROOM_STATUS.WAITING, ROOM_STATUS.READY]);
 const STARTABLE_STATES = new Set([ROOM_STATUS.WAITING, ROOM_STATUS.READY]);
+const ZENG_STATES = new Set([
+  ROOM_STATUS.WAITING,
+  ROOM_STATUS.READY,
+  ROOM_STATUS.DEALING,
+  ROOM_STATUS.PLAYING,
+  ROOM_STATUS.SETTLING,
+  ROOM_STATUS.NEXT_ROUND
+]);
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -335,6 +343,7 @@ export class Room {
     this.players = new Map();
     this.seats = Array.from({ length: this.maxPlayers }, () => null);
     this.scores = new Map();
+    this.zengByPlayer = new Map();
     this.turn = null;
     this.turnPlayerId = null;
     this.currentRound = null;
@@ -542,6 +551,7 @@ export class Room {
       this.players.set(playerId, record);
       this.seats[seat] = playerId;
       this.scores.set(playerId, 0);
+      this.zengByPlayer.set(playerId, 0);
       const event = this._append('PLAYER_JOINED', {
         player: this._publicPlayer(record),
         ownerId: this.ownerId,
@@ -593,6 +603,7 @@ export class Room {
       this.players.delete(id);
       this.seats[player.seat] = null;
       this.scores.delete(id);
+      this.zengByPlayer.delete(id);
       if (id === this.ownerId) {
         this.ownerId = successor;
       }
@@ -636,6 +647,36 @@ export class Room {
 
   markReady(playerId, ready = true, options = {}) {
     return this.setReady(playerId, ready, options);
+  }
+
+  increaseZeng(playerId, options = {}) {
+    if (isRecord(playerId)) {
+      options = { ...playerId, ...normalizeOptions(options) };
+      playerId = options.playerId ?? options.userId ?? options.actorId;
+    }
+    const opts = normalizeOptions(options);
+    const id = normalizeId(playerId, 'playerId');
+    return this._withCommand(opts, { op: 'increase_zeng', playerId: id }, command => {
+      if (!ZENG_STATES.has(this.status)) throw new AppError('ROUND_FINISHED');
+      if (this.ruleId !== 'susong_v1') throw new AppError('INVALID_ACTION');
+      if ((this.ruleSnapshot.config?.zeng ?? 0) === 0) throw new AppError('INVALID_ACTION');
+      if (!this.players.has(id)) throw new AppError('PLAYER_NOT_FOUND');
+      const actorId = command.actorId ?? id;
+      if (actorId !== id && command.actorRole !== 'SYSTEM') throw new AppError('FORBIDDEN');
+      const previous = this.zengByPlayer.get(id) || 0;
+      if (!Number.isSafeInteger(previous) || previous < 0 || previous === Number.MAX_SAFE_INTEGER) {
+        throw new AppError('INVALID_ACTION');
+      }
+      const current = previous + 1;
+      this.zengByPlayer.set(id, current);
+      const event = this._append('PLAYER_ZENG_INCREASED', {
+        playerId: id,
+        previous,
+        current,
+        unit: this.ruleSnapshot.config.zeng
+      }, command);
+      return this._result(event, { playerId: id, previous, current });
+    });
   }
 
   _newRound(number, status, options = {}) {
@@ -1139,7 +1180,8 @@ export class Room {
         ? { seat, player: null }
         : { seat, player: players.find(player => player.id === playerId) || null }),
       players,
-      scores: Object.fromEntries(this.scores)
+      scores: Object.fromEntries(this.scores),
+      zengByPlayer: Object.fromEntries(this.zengByPlayer)
     };
     return {
       ...base,
@@ -1268,6 +1310,12 @@ export class Room {
     }
     this.scores = new Map(Object.entries(isRecord(snapshot.scores) ? snapshot.scores : {}));
     for (const player of this.players.values()) if (!this.scores.has(player.id)) this.scores.set(player.id, 0);
+    this.zengByPlayer = new Map(Object.entries(isRecord(snapshot.zengByPlayer) ? snapshot.zengByPlayer : {}));
+    for (const player of this.players.values()) {
+      const value = this.zengByPlayer.get(player.id) ?? 0;
+      if (!Number.isSafeInteger(value) || value < 0) throw new AppError('INVALID_ACTION');
+      this.zengByPlayer.set(player.id, value);
+    }
 
     this.currentRound = snapshot.round ? clone(snapshot.round) : null;
     this.round = this.currentRound;
@@ -1328,6 +1376,7 @@ export class Room {
         });
         this.seats[seat] = id;
         if (!this.scores.has(id)) this.scores.set(id, 0);
+        if (!this.zengByPlayer.has(id)) this.zengByPlayer.set(id, 0);
         if (payload.ownerId !== undefined) this.ownerId = payload.ownerId === null ? null : playerId(payload.ownerId);
         break;
       }
@@ -1338,6 +1387,7 @@ export class Room {
           this.players.delete(id);
           this.seats[player.seat] = null;
           this.scores.delete(id);
+          this.zengByPlayer.delete(id);
         }
         if (payload.ownerId !== undefined) this.ownerId = payload.ownerId === null ? null : playerId(payload.ownerId);
         if (this.status === ROOM_STATUS.READY) this._setStatus(ROOM_STATUS.WAITING);
@@ -1350,6 +1400,16 @@ export class Room {
         if (payload.status && Object.values(ROOM_STATUS).includes(payload.status)) this._setStatus(payload.status);
         else if (this._allReady()) this._setStatus(ROOM_STATUS.READY);
         else if (this.status === ROOM_STATUS.READY) this._setStatus(ROOM_STATUS.WAITING);
+        break;
+      }
+      case 'PLAYER_ZENG_INCREASED': {
+        const id = playerId(payload.playerId);
+        if (!id || !this.players.has(id)) throw new AppError('INVALID_ACTION');
+        const previous = this.zengByPlayer.get(id) || 0;
+        if (payload.previous !== previous || payload.current !== previous + 1) {
+          throw new AppError('VERSION_CONFLICT');
+        }
+        this.zengByPlayer.set(id, payload.current);
         break;
       }
       case 'ROUND_STARTED': {
@@ -1539,6 +1599,9 @@ export class Room {
       case 'ready_room':
       case 'room.ready':
         return this.setReady(payload.playerId ?? context.actorId, payload.ready ?? true, { ...payload, ...options });
+      case 'increase_zeng':
+      case 'room.increase_zeng':
+        return this.increaseZeng(payload.playerId ?? context.actorId, { ...payload, ...options });
       case 'start':
       case 'start_round':
       case 'room.start':
