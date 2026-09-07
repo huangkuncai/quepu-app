@@ -718,6 +718,7 @@ export class Room {
       discardsByPlayer: null,
       meldsByPlayer: null,
       pendingReaction: null,
+      passedHuByPlayer: null,
       flowerStates: null,
       settlement: null,
       startedAt: null,
@@ -1131,6 +1132,7 @@ export class Room {
       this.currentRound.turnPhase = 'discard';
       this.currentRound.discardsByPlayer = Object.fromEntries([...this.players.keys()].map(playerId => [playerId, []]));
       this.currentRound.meldsByPlayer = Object.fromEntries([...this.players.keys()].map(playerId => [playerId, []]));
+      this.currentRound.passedHuByPlayer = Object.fromEntries([...this.players.keys()].map(playerId => [playerId, false]));
       this._setTurnDeadline();
       const event = this._append('ROUND_PLAYING', {
         matchId: this.matchId,
@@ -1141,6 +1143,7 @@ export class Room {
         turnPhase: this.currentRound.turnPhase,
         discardsByPlayer: clone(this.currentRound.discardsByPlayer),
         meldsByPlayer: clone(this.currentRound.meldsByPlayer),
+        passedHuByPlayer: clone(this.currentRound.passedHuByPlayer),
         turnStartedAt: this.currentRound.turnStartedAt,
         turnDeadlineAt: this.currentRound.turnDeadlineAt
       }, command);
@@ -1264,6 +1267,7 @@ export class Room {
     const melds = this.currentRound?.meldsByPlayer?.[playerId] ?? [];
     const meldCount = melds.length;
     if (!Array.isArray(hand) || !flowerState) return null;
+    if (winSource === 'discard' && this.currentRound?.passedHuByPlayer?.[playerId] === true) return null;
     const lastTurnAction = this._privateRoundState.turnHistory.at(-1)?.action ?? null;
     if (winSource === 'self_draw' && lastTurnAction
       && !['draw', 'exposed_kong', 'concealed_kong'].includes(lastTurnAction)) return null;
@@ -1416,6 +1420,7 @@ export class Room {
     };
     this._privateRoundState = resolvedPrivateState;
     this.currentRound.meldsByPlayer[playerId].push(clone(meld));
+    if (isRecord(this.currentRound.passedHuByPlayer)) this.currentRound.passedHuByPlayer[playerId] = false;
     this.currentRound.flowerStates[playerId] = clone(flowerState);
     this.currentRound.wall.wallRemaining = resolvedPrivateState.remainingWall.length;
     this.currentRound.wall.handCountsByPlayer[playerId] = resolvedPrivateState.handsByPlayer[playerId].length;
@@ -1442,6 +1447,7 @@ export class Room {
       resolution,
       nextTurn: this.turn,
       turnPhase: this.currentRound.turnPhase,
+      passedHuByPlayer: clone(this.currentRound.passedHuByPlayer),
       turnStartedAt: this.currentRound.turnStartedAt,
       turnDeadlineAt: this.currentRound.turnDeadlineAt
     }, command);
@@ -1536,6 +1542,7 @@ export class Room {
     };
     this._privateRoundState = resolvedPrivateState;
     this.currentRound.meldsByPlayer[playerId][candidate.meldIndex] = clone(meld);
+    if (isRecord(this.currentRound.passedHuByPlayer)) this.currentRound.passedHuByPlayer[playerId] = false;
     this.currentRound.flowerStates[playerId] = clone(flowerState);
     this.currentRound.wall.wallRemaining = resolvedPrivateState.remainingWall.length;
     this.currentRound.wall.handCountsByPlayer[playerId] = resolvedPrivateState.handsByPlayer[playerId].length;
@@ -1654,6 +1661,7 @@ export class Room {
       this.currentRound.meldsByPlayer = Object.fromEntries([...this.players.keys()].map(id => [id, []]));
     }
     this.currentRound.meldsByPlayer[playerId].push(clone(meld));
+    if (isRecord(this.currentRound.passedHuByPlayer)) this.currentRound.passedHuByPlayer[playerId] = false;
     this.currentRound.pendingReaction = null;
     if (action === 'exposed_kong' && flowerDisposition === 'discarded') {
       this._advanceSusongTurn(playerId);
@@ -1680,7 +1688,8 @@ export class Room {
       || pending.responderOrder[pending.respondedPlayerIds.length] !== playerId) {
       throw new AppError('INVALID_ACTION');
     }
-    if (!this._susongAvailableReactionActions(playerId).includes(action)) {
+    const availableActions = this._susongAvailableReactionActions(playerId);
+    if (!availableActions.includes(action)) {
       throw new AppError('INVALID_ACTION', {
         details: [{ path: 'action', message: 'reaction is not available from the authoritative hand state' }]
       });
@@ -1700,6 +1709,10 @@ export class Room {
     if (!isRecord(pending.responseChoicesByPlayer)) pending.responseChoicesByPlayer = {};
     pending.respondedPlayerIds.push(playerId);
     pending.responsesByPlayer[playerId] = action;
+    if (action === 'pass' && availableActions.includes('hu')
+      && isRecord(this.currentRound.passedHuByPlayer)) {
+      this.currentRound.passedHuByPlayer[playerId] = true;
+    }
     if (candidateIndex !== null) pending.responseChoicesByPlayer[playerId] = candidateIndex;
     const complete = pending.respondedPlayerIds.length === pending.responderOrder.length;
     let resolution = null;
@@ -1746,6 +1759,7 @@ export class Room {
       resolution: clone(resolution),
       handCount: resolution ? this.currentRound.wall.handCountsByPlayer[resolution.playerId] : null,
       pendingReaction: clone(this.currentRound.pendingReaction),
+      passedHuByPlayer: clone(this.currentRound.passedHuByPlayer),
       nextTurn: this.turn,
       turnPhase: this.currentRound.turnPhase,
       turnStartedAt: this.currentRound.turnStartedAt,
@@ -1832,6 +1846,7 @@ export class Room {
 
     if (action === 'draw') {
       if (args && Object.keys(args).length > 0) throw new AppError('INVALID_ACTION');
+      if (isRecord(this.currentRound.passedHuByPlayer)) this.currentRound.passedHuByPlayer[playerId] = false;
       if (privateState.remainingWall.length <= 14) return this._settleSusongWallDraw(command);
       let draw;
       try {
@@ -1896,6 +1911,7 @@ export class Room {
         flowerDisposition,
         resolvedCount,
         flowerState: clone(flowerState),
+        passedHuByPlayer: clone(this.currentRound.passedHuByPlayer),
         nextTurn: this.turn,
         turnPhase: this.currentRound.turnPhase,
         turnStartedAt: this.currentRound.turnStartedAt,
@@ -2645,6 +2661,7 @@ export class Room {
           discardsByPlayer: null,
           meldsByPlayer: null,
           pendingReaction: null,
+          passedHuByPlayer: null,
           flowerStates: null,
           settlement: null,
           startedAt: payload.status === ROOM_STATUS.PLAYING ? (event.occurredAt || event.at || null) : null,
@@ -2687,6 +2704,9 @@ export class Room {
         }
         if (isRecord(payload.meldsByPlayer)) {
           this.currentRound.meldsByPlayer = clone(payload.meldsByPlayer);
+        }
+        if (isRecord(payload.passedHuByPlayer)) {
+          this.currentRound.passedHuByPlayer = clone(payload.passedHuByPlayer);
         }
         break;
       case 'SUSONG_FLOWERS_INITIALIZED': {
@@ -2763,6 +2783,9 @@ export class Room {
         this.currentRound.wall.handCountsByPlayer[id] = payload.handCount;
         this.currentRound.wall.wallRemaining = payload.wallRemaining;
         if (isRecord(payload.flowerState)) this.currentRound.flowerStates[id] = clone(payload.flowerState);
+        if (isRecord(payload.passedHuByPlayer)) {
+          this.currentRound.passedHuByPlayer = clone(payload.passedHuByPlayer);
+        }
         this.turn = payload.nextTurn ?? id;
         this.turnPlayerId = this.turn;
         this.currentRound.turnPhase = payload.turnPhase;
@@ -2780,6 +2803,9 @@ export class Room {
         }
         this.currentRound.discardsByPlayer[id].push(payload.tileId);
         this.currentRound.pendingReaction = clone(payload.pendingReaction ?? null);
+        if (isRecord(payload.passedHuByPlayer)) {
+          this.currentRound.passedHuByPlayer = clone(payload.passedHuByPlayer);
+        }
         this.turn = payload.nextTurn;
         this.turnPlayerId = this.turn;
         this.currentRound.turnPhase = payload.turnPhase;
@@ -2869,6 +2895,9 @@ export class Room {
           }
         }
         this.currentRound.pendingReaction = clone(payload.pendingReaction ?? null);
+        if (isRecord(payload.passedHuByPlayer)) {
+          this.currentRound.passedHuByPlayer = clone(payload.passedHuByPlayer);
+        }
         this.turn = payload.nextTurn ?? null;
         this.turnPlayerId = this.turn;
         this.currentRound.turnPhase = payload.turnPhase;
@@ -2896,6 +2925,9 @@ export class Room {
         this.currentRound.wall.handCountsByPlayer[id] = resolution.handCount;
         this.currentRound.wall.wallRemaining = resolution.wallRemaining;
         this.currentRound.flowerStates[id] = clone(resolution.flowerState);
+        if (isRecord(payload.passedHuByPlayer)) {
+          this.currentRound.passedHuByPlayer = clone(payload.passedHuByPlayer);
+        }
         this.turn = payload.nextTurn ?? null;
         this.turnPlayerId = this.turn;
         this.currentRound.turnPhase = payload.turnPhase;
@@ -2959,6 +2991,7 @@ export class Room {
           discardsByPlayer: null,
           meldsByPlayer: null,
           pendingReaction: null,
+          passedHuByPlayer: null,
           flowerStates: null,
           settlement: null,
           startedAt: null,

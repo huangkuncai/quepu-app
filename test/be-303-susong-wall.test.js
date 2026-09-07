@@ -766,6 +766,45 @@ test('a discard win is recognized and settled entirely from authoritative room s
   assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
 });
 
+test('passing a legal discard win blocks further discard wins until the player turn comes around', () => {
+  const room = susongRoom('pass-hu-circle-room');
+  room.dealSusongOpeningRound({ seed: 'e68'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  room.applyAction('A', { action: 'discard', args: { tileId: 'dots-6-3' } });
+  room.applyAction('B', 'pass');
+  room.applyAction('C', 'pass');
+  assert.deepEqual(room.snapshot({ viewerId: 'D' }).round.availableReactions, ['pass', 'hu']);
+  room.applyAction('D', 'pass');
+
+  assert.equal(room.currentRound.passedHuByPlayer.D, true);
+  assert.deepEqual(
+    Room.fromSnapshot(room.persistenceSnapshot()).currentRound.passedHuByPlayer,
+    room.currentRound.passedHuByPlayer
+  );
+  for (let step = 0; step < 40; step += 1) {
+    if (room.turn === 'D' && room.currentRound.turnPhase === 'draw') break;
+    const playerId = room.turn;
+    const viewer = room.snapshot({ viewerId: playerId });
+    if (room.currentRound.turnPhase === 'reaction') {
+      room.applyAction(playerId, 'pass');
+    } else if (room.currentRound.turnPhase === 'draw') {
+      room.applyAction(playerId, 'draw');
+    } else {
+      const tileId = viewer.round.privateHand.find(value => !isSusongReplacementFlower(value));
+      room.applyAction(playerId, { action: 'discard', args: { tileId } });
+    }
+  }
+  assert.equal(room.turn, 'D');
+  assert.equal(room.currentRound.turnPhase, 'draw');
+  assert.equal(room.currentRound.passedHuByPlayer.D, true);
+  room.applyAction('D', 'draw');
+  assert.equal(room.currentRound.passedHuByPlayer.D, false);
+  assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
+});
+
 test('forced-hu rooms settle every eligible discard winner without waiting for client input', () => {
   const room = susongRoom('forced-discard-win-room', 'optional', { forcedHu: true });
   room.dealSusongOpeningRound({ seed: 'e68'.padStart(64, '0'), dealerSeat: 0 }, {
