@@ -58,6 +58,48 @@ export function isSusongReplacementFlower(tileId) {
     || id.startsWith('black_flower-');
 }
 
+/** Return the logical face shared by the physical copies of one tile. */
+export function susongTileFace(tileId) {
+  const id = String(tileId ?? '');
+  const tile = buildSusongTileSet().find(candidate => candidate.id === id);
+  if (!tile) throw new TypeError('tileId must identify a Susong tile');
+  if (tile.category === 'suited') return `${tile.suit}-${tile.rank}`;
+  return tile.value;
+}
+
+/**
+ * Compute discard reactions from server-owned hand data. The returned
+ * physical IDs are private engine input and must not be broadcast directly.
+ * Priority/arbitration is intentionally handled by the room state machine.
+ */
+export function getSusongDiscardReactionCandidates({ hand, tileId, isNextPlayer = false } = {}) {
+  if (!Array.isArray(hand)) throw new TypeError('hand must be an array');
+  if (isSusongReplacementFlower(tileId)) return deepFreeze([]);
+  const discardedFace = susongTileFace(tileId);
+  const matching = hand.filter(candidate => susongTileFace(candidate) === discardedFace);
+  const candidates = [];
+  if (matching.length >= 3) {
+    candidates.push({ action: 'exposed_kong', consumeTileIds: matching.slice(0, 3) });
+  }
+  if (matching.length >= 2) {
+    candidates.push({ action: 'peng', consumeTileIds: matching.slice(0, 2) });
+  }
+  if (isNextPlayer && /^(characters|bamboo|dots)-[1-9]$/.test(discardedFace)) {
+    const [suit, rankText] = discardedFace.split('-');
+    const rank = Number(rankText);
+    for (let start = Math.max(1, rank - 2); start <= Math.min(7, rank); start += 1) {
+      const sequence = [start, start + 1, start + 2].map(value => `${suit}-${value}`);
+      const requiredFaces = sequence.filter(face => face !== discardedFace);
+      const consumeTileIds = requiredFaces.map(face =>
+        hand.find(candidate => susongTileFace(candidate) === face));
+      if (consumeTileIds.every(Boolean)) {
+        candidates.push({ action: 'chi', sequence, consumeTileIds });
+      }
+    }
+  }
+  return deepFreeze(candidates);
+}
+
 /**
  * Shuffle a fresh wall. The seed is private round state; only its commitment
  * may be sent to clients until the round is finished.

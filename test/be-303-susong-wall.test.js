@@ -7,6 +7,7 @@ import {
   dealSusongOpeningHands,
   drawSusongLiveTile,
   drawSusongReplacementTile,
+  getSusongDiscardReactionCandidates,
   isSusongReplacementFlower,
   publicSusongWallState,
   verifySusongSeedCommitment
@@ -100,6 +101,31 @@ test('normal turn draw consumes the live-wall head and respects the 14-tile rese
   );
 });
 
+test('server-owned hands generate peng, exposed-kong and next-seat chi candidates', () => {
+  const hand = [
+    'characters-5-1', 'characters-5-2', 'characters-5-3',
+    'characters-3-1', 'characters-4-1', 'characters-6-1', 'characters-7-1'
+  ];
+  const nextSeat = getSusongDiscardReactionCandidates({
+    hand,
+    tileId: 'characters-5-4',
+    isNextPlayer: true
+  });
+  assert.deepEqual(nextSeat.map(candidate => candidate.action), [
+    'exposed_kong', 'peng', 'chi', 'chi', 'chi'
+  ]);
+  assert.deepEqual(nextSeat.filter(candidate => candidate.action === 'chi').map(candidate => candidate.sequence), [
+    ['characters-3', 'characters-4', 'characters-5'],
+    ['characters-4', 'characters-5', 'characters-6'],
+    ['characters-5', 'characters-6', 'characters-7']
+  ]);
+  assert.deepEqual(
+    getSusongDiscardReactionCandidates({ hand, tileId: 'characters-5-4' }).map(candidate => candidate.action),
+    ['exposed_kong', 'peng']
+  );
+  assert.deepEqual(getSusongDiscardReactionCandidates({ hand, tileId: 'red_dragon-1' }), []);
+});
+
 function susongRoom(id = 'wall-room', piao = 'optional') {
   const room = new Room({
     id,
@@ -121,6 +147,16 @@ function susongRoom(id = 'wall-room', piao = 'optional') {
   for (const playerId of players) room.setReady(playerId);
   room.start({ actorId: 'A' });
   return room;
+}
+
+function passSusongReaction(room, prefix = 'reaction') {
+  const responders = [];
+  while (room.currentRound.turnPhase === 'reaction') {
+    const playerId = room.turn;
+    responders.push(playerId);
+    room.applyAction(playerId, 'pass', { commandId: `${prefix}-${responders.length}-${playerId}` });
+  }
+  return responders;
 }
 
 test('Room exposes only the viewer hand while persistence retains all private state', () => {
@@ -205,6 +241,19 @@ test('Susong turns enforce server-owned draw, hand ownership and public discards
   assert.equal(room.snapshot({ viewerId: 'C' }).round.privateHand.length, 13);
   assert.deepEqual(room.currentRound.discardsByPlayer.C, [dealerDiscard]);
   assert.equal(room.turn, 'D');
+  assert.equal(room.currentRound.turnPhase, 'reaction');
+  assert.deepEqual(room.snapshot({ viewerId: 'D' }).round.availableReactions, ['pass']);
+  assert.equal('availableReactions' in room.snapshot({ viewerId: 'A' }).round, false);
+  assert.throws(
+    () => room.applyAction('A', 'pass', { commandId: 'out-of-order-pass' }),
+    error => error.code === 'NOT_YOUR_TURN'
+  );
+  const firstPass = room.applyAction('D', 'pass', { commandId: 'dealer-reaction-D' });
+  const versionAfterPass = room.version;
+  assert.deepEqual(room.applyAction('D', 'pass', { commandId: 'dealer-reaction-D' }), firstPass);
+  assert.equal(room.version, versionAfterPass);
+  assert.deepEqual(passSusongReaction(room, 'dealer-reaction-rest'), ['A', 'B']);
+  assert.equal(room.turn, 'D');
   assert.equal(room.currentRound.turnPhase, 'draw');
   assert.throws(
     () => room.applyAction('D', { action: 'draw', args: { tileId: 'forged' } }, { commandId: 'forged-draw' }),
@@ -227,7 +276,7 @@ test('Susong turns enforce server-owned draw, hand ownership and public discards
   const dDiscard = dHand.find(tileId => !tileId.includes('flower') && !tileId.includes('dragon'));
   room.applyAction('D', { action: 'discard', args: { tileId: dDiscard } }, { commandId: 'D-discard' });
   assert.equal(room.turn, 'A');
-  assert.equal(room.currentRound.turnPhase, 'draw');
+  assert.equal(room.currentRound.turnPhase, 'reaction');
   const persisted = room.persistenceSnapshot();
   assert.deepEqual(Room.fromSnapshot(persisted).persistenceSnapshot(), persisted);
   assert.equal(JSON.stringify(room.snapshot()).includes('turnHistory'), false);
@@ -243,6 +292,7 @@ test('non-piao live flower is replaced server-side without exposing either priva
   room.beginPlaying({ actorId: 'A' });
   const aDiscard = room.snapshot({ viewerId: 'A' }).round.privateHand.find(tileId => !isSusongReplacementFlower(tileId));
   room.applyAction('A', { action: 'discard', args: { tileId: aDiscard } });
+  passSusongReaction(room, 'replace-reaction');
   const wallBefore = room.currentRound.wall.wallRemaining;
   const result = room.applyAction('B', 'draw');
   assert.equal(result.flowerDisposition, 'replaced');
@@ -272,6 +322,7 @@ test('strong-piao live flower is discarded server-side and advances the turn', (
   room.beginPlaying({ actorId: 'A' });
   const aDiscard = room.snapshot({ viewerId: 'A' }).round.privateHand.find(tileId => !isSusongReplacementFlower(tileId));
   room.applyAction('A', { action: 'discard', args: { tileId: aDiscard } });
+  passSusongReaction(room, 'piao-reaction');
   const wallBefore = room.currentRound.wall.wallRemaining;
   const result = room.applyAction('B', 'draw');
   assert.equal(result.flowerDisposition, 'discarded');
@@ -292,7 +343,9 @@ test('Susong live wall settles as a zero-score draw at the reserved 14-tile boun
   let result;
   for (let step = 0; step < 300 && room.status === 'playing'; step += 1) {
     const playerId = room.turn;
-    if (room.currentRound.turnPhase === 'draw') {
+    if (room.currentRound.turnPhase === 'reaction') {
+      result = room.applyAction(playerId, 'pass', { commandId: `reserve-pass-${step}` });
+    } else if (room.currentRound.turnPhase === 'draw') {
       result = room.applyAction(playerId, 'draw', { commandId: `reserve-draw-${step}` });
     } else {
       const tileId = room.snapshot({ viewerId: playerId }).round.privateHand
@@ -346,6 +399,30 @@ test('RoomActor checkpoints private hands after every authoritative turn mutatio
 
   await actor.dispatch({
     type: 'action',
+    commandId: 'actor-turn-pass-B',
+    payload: { playerId: 'B', action: 'pass' }
+  }, { actorId: 'B' });
+  const afterPass = new RoomActor({
+    roomId: room.id,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'turn-actor-after-pass',
+    snapshotEvery: 100
+  });
+  await afterPass.recover();
+  assert.equal(afterPass.snapshot().round.turnPhase, 'reaction');
+  assert.equal(afterPass.snapshot().turn, 'C');
+  assert.deepEqual(afterPass.snapshot().round.pendingReaction.respondedPlayerIds, ['B']);
+  for (const playerId of ['C', 'D']) {
+    await afterPass.dispatch({
+      type: 'action',
+      commandId: `actor-turn-pass-${playerId}`,
+      payload: { playerId, action: 'pass' }
+    }, { actorId: playerId });
+  }
+
+  await afterPass.dispatch({
+    type: 'action',
     commandId: 'actor-turn-draw',
     payload: { playerId: 'B', action: 'draw' }
   }, { actorId: 'B' });
@@ -360,7 +437,7 @@ test('RoomActor checkpoints private hands after every authoritative turn mutatio
     snapshotEvery: 100
   });
   await restarted.recover();
-  assert.deepEqual(restarted.snapshot({ viewerId: 'B' }), actor.snapshot({ viewerId: 'B' }));
+  assert.deepEqual(restarted.snapshot({ viewerId: 'B' }), afterPass.snapshot({ viewerId: 'B' }));
 });
 
 test('RoomActor forces an atomic private checkpoint even with sparse snapshots', async () => {

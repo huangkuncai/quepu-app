@@ -708,6 +708,7 @@ export class Room {
       wall: null,
       turnPhase: null,
       discardsByPlayer: null,
+      pendingReaction: null,
       flowerStates: null,
       settlement: null,
       startedAt: null,
@@ -1145,6 +1146,64 @@ export class Room {
     this._setTurnDeadline();
   }
 
+  _openSusongReactionWindow(discarderId, tileId) {
+    const ordered = this._orderedPlayers();
+    const discarderIndex = ordered.findIndex(player => player.id === discarderId);
+    if (discarderIndex < 0) throw new AppError('INVALID_ACTION');
+    const responderOrder = Array.from({ length: ordered.length - 1 }, (_, offset) =>
+      ordered[(discarderIndex + offset + 1) % ordered.length].id);
+    this.currentRound.pendingReaction = {
+      reactionId: this.idFactory(),
+      discarderId,
+      tileId,
+      responderOrder,
+      respondedPlayerIds: []
+    };
+    this.currentRound.turnPhase = 'reaction';
+    this.turn = responderOrder[0] ?? null;
+    this.turnPlayerId = this.turn;
+    this._setTurnDeadline();
+  }
+
+  _passSusongReaction(playerId, command) {
+    const pending = this.currentRound?.pendingReaction;
+    if (!pending || this.currentRound.turnPhase !== 'reaction'
+      || pending.responderOrder[pending.respondedPlayerIds.length] !== playerId) {
+      throw new AppError('INVALID_ACTION');
+    }
+    pending.respondedPlayerIds.push(playerId);
+    const complete = pending.respondedPlayerIds.length === pending.responderOrder.length;
+    if (complete) {
+      const discarderId = pending.discarderId;
+      this.currentRound.pendingReaction = null;
+      this._advanceSusongTurn(discarderId);
+    } else {
+      this.turn = pending.responderOrder[pending.respondedPlayerIds.length];
+      this.turnPlayerId = this.turn;
+      this._setTurnDeadline();
+    }
+    const event = this._append('SUSONG_REACTION_PASSED', {
+      matchId: this.matchId,
+      roundId: this.roundId,
+      playerId,
+      reactionId: pending.reactionId,
+      complete,
+      pendingReaction: clone(this.currentRound.pendingReaction),
+      nextTurn: this.turn,
+      turnPhase: this.currentRound.turnPhase,
+      turnStartedAt: this.currentRound.turnStartedAt,
+      turnDeadlineAt: this.currentRound.turnDeadlineAt
+    }, command);
+    return this._result(event, {
+      playerId,
+      action: 'pass',
+      reactionId: pending.reactionId,
+      complete,
+      nextTurn: this.turn,
+      turnPhase: this.currentRound.turnPhase
+    });
+  }
+
   _settleSusongWallDraw(command) {
     const players = this._orderedPlayers().map(player => player.id);
     const settlement = {
@@ -1161,6 +1220,7 @@ export class Room {
     this.currentRound.settlement = clone(settlement);
     this.currentRound.endedAt = iso(this.clock);
     this.currentRound.turnPhase = null;
+    this.currentRound.pendingReaction = null;
     this.currentRound.turnStartedAt = null;
     this.currentRound.turnDeadlineAt = null;
     this.turn = null;
@@ -1177,8 +1237,12 @@ export class Room {
 
   _applySusongTurnAction(playerId, action, args, command) {
     if (!this._privateRoundState || !this.currentRound?.wall) throw new AppError('INVALID_ACTION');
-    if (!['draw', 'discard'].includes(action)) throw new AppError('INVALID_ACTION');
     const phase = this.currentRound.turnPhase;
+    if (phase === 'reaction') {
+      if (action !== 'pass' || (args && Object.keys(args).length > 0)) throw new AppError('INVALID_ACTION');
+      return this._passSusongReaction(playerId, command);
+    }
+    if (!['draw', 'discard'].includes(action)) throw new AppError('INVALID_ACTION');
     if (action !== phase) throw new AppError('INVALID_ACTION', {
       details: [{ path: 'round.turnPhase', message: `expected ${phase}` }]
     });
@@ -1279,7 +1343,7 @@ export class Room {
     this._privateRoundState = privateState;
     this.currentRound.discardsByPlayer[playerId].push(tileId);
     this.currentRound.wall.handCountsByPlayer[playerId] = hand.length;
-    this._advanceSusongTurn(playerId);
+    this._openSusongReactionWindow(playerId, tileId);
     const event = this._append('SUSONG_TILE_DISCARDED', {
       matchId: this.matchId,
       roundId: this.roundId,
@@ -1287,6 +1351,7 @@ export class Room {
       tileId,
       handCount: hand.length,
       wallRemaining: this.currentRound.wall.wallRemaining,
+      pendingReaction: clone(this.currentRound.pendingReaction),
       nextTurn: this.turn,
       turnPhase: this.currentRound.turnPhase,
       turnStartedAt: this.currentRound.turnStartedAt,
@@ -1388,10 +1453,14 @@ export class Room {
       }
       this._setStatus(ROOM_STATUS.SETTLING);
       this.currentRound.status = ROOM_STATUS.SETTLING;
-      this.currentRound.settlement = clone(result);
-      this.currentRound.endedAt = iso(this.clock);
-      this.currentRound.turnStartedAt = null;
-      this.currentRound.turnDeadlineAt = null;
+    this.currentRound.settlement = clone(result);
+    this.currentRound.endedAt = iso(this.clock);
+    this.currentRound.turnPhase = null;
+    this.currentRound.pendingReaction = null;
+    this.currentRound.turnStartedAt = null;
+    this.currentRound.turnDeadlineAt = null;
+    this.turn = null;
+    this.turnPlayerId = null;
       const event = this._append('ROUND_SETTLING', {
         matchId: this.matchId,
         roundId: this.roundId,
@@ -1685,6 +1754,9 @@ export class Room {
       ? clone(this._privateRoundState.handsByPlayer[id])
       : null;
     if (privateHand) result.round.privateHand = privateHand;
+    if (result.round && id && id === this.turn && this.currentRound?.turnPhase === 'reaction') {
+      result.round.availableReactions = ['pass'];
+    }
     return result;
   }
 
@@ -1952,6 +2024,7 @@ export class Room {
           wall: null,
           turnPhase: null,
           discardsByPlayer: null,
+          pendingReaction: null,
           flowerStates: null,
           settlement: null,
           startedAt: payload.status === ROOM_STATUS.PLAYING ? (event.occurredAt || event.at || null) : null,
@@ -2083,7 +2156,23 @@ export class Room {
           this.currentRound.discardsByPlayer = Object.fromEntries([...this.players.keys()].map(key => [key, []]));
         }
         this.currentRound.discardsByPlayer[id].push(payload.tileId);
+        this.currentRound.pendingReaction = clone(payload.pendingReaction ?? null);
         this.turn = payload.nextTurn;
+        this.turnPlayerId = this.turn;
+        this.currentRound.turnPhase = payload.turnPhase;
+        this.currentRound.turnStartedAt = payload.turnStartedAt || null;
+        this.currentRound.turnDeadlineAt = payload.turnDeadlineAt || null;
+        break;
+      }
+      case 'SUSONG_REACTION_PASSED': {
+        const id = playerId(payload.playerId);
+        const pending = this.currentRound?.pendingReaction;
+        if (!id || !pending || pending.reactionId !== payload.reactionId
+          || pending.responderOrder[pending.respondedPlayerIds.length] !== id) {
+          throw new AppError('INVALID_ACTION');
+        }
+        this.currentRound.pendingReaction = clone(payload.pendingReaction ?? null);
+        this.turn = payload.nextTurn ?? null;
         this.turnPlayerId = this.turn;
         this.currentRound.turnPhase = payload.turnPhase;
         this.currentRound.turnStartedAt = payload.turnStartedAt || null;
@@ -2106,6 +2195,7 @@ export class Room {
           this.currentRound.settlement = clone(payload.settlement ?? null);
           this.currentRound.endedAt = this.currentRound.endedAt || event.occurredAt || event.at || null;
           this.currentRound.turnPhase = null;
+          this.currentRound.pendingReaction = null;
           this.currentRound.turnStartedAt = null;
           this.currentRound.turnDeadlineAt = null;
         }
@@ -2143,6 +2233,7 @@ export class Room {
           wall: null,
           turnPhase: null,
           discardsByPlayer: null,
+          pendingReaction: null,
           flowerStates: null,
           settlement: null,
           startedAt: null,
