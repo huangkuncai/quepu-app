@@ -379,6 +379,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     final pages = [
       LobbyTab(client: widget.client, snapshot: widget.snapshot),
       ClubTab(snapshot: widget.snapshot),
@@ -391,15 +392,17 @@ class _HomePageState extends State<HomePage> {
         child: SafeArea(
           child: Column(
             children: [
-              _LobbyTopBar(
-                snapshot: widget.snapshot,
-                onLogout: widget.client.logout,
-              ),
+              if (!keyboardVisible)
+                _LobbyTopBar(
+                  snapshot: widget.snapshot,
+                  onLogout: widget.client.logout,
+                ),
               Expanded(child: pages[_index]),
-              _GameNavigation(
-                index: _index,
-                onChanged: (value) => setState(() => _index = value),
-              ),
+              if (!keyboardVisible)
+                _GameNavigation(
+                  index: _index,
+                  onChanged: (value) => setState(() => _index = value),
+                ),
             ],
           ),
         ),
@@ -2883,7 +2886,6 @@ class SupportTab extends StatefulWidget {
 
 class _SupportTabState extends State<SupportTab> {
   final _controller = TextEditingController();
-  bool _sent = false;
   bool _submitting = false;
 
   @override
@@ -2905,8 +2907,9 @@ class _SupportTabState extends State<SupportTab> {
         );
       }
       if (mounted) {
-        setState(() => _sent = true);
         _controller.clear();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('工单已提交')));
       }
     } catch (_) {
       if (mounted) {
@@ -2920,51 +2923,57 @@ class _SupportTabState extends State<SupportTab> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Padding(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(keyboardVisible ? 4 : 14),
       child: Row(
         children: [
-          const Expanded(
-            flex: 4,
-            child: Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: EdgeInsets.all(22),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.support_agent,
-                      size: 46,
-                      color: Color(0xffffd369),
+          if (!keyboardVisible) ...[
+            const Expanded(
+              flex: 4,
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: EdgeInsets.all(22),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.support_agent,
+                          size: 46,
+                          color: Color(0xffffd369),
+                        ),
+                        SizedBox(height: 14),
+                        Text(
+                          '联系客服',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          '提交问题时请写明房号、发生时间和具体操作。正式环境会自动关联账号与客户端版本。',
+                          style: TextStyle(color: Color(0xffc0d6cf)),
+                        ),
+                        SizedBox(height: 20),
+                        Text('P0 支持方式：应用内文字工单', style: TextStyle(fontSize: 12)),
+                      ],
                     ),
-                    SizedBox(height: 14),
-                    Text(
-                      '联系客服',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      '提交问题时请写明房号、发生时间和具体操作。正式环境会自动关联账号与客户端版本。',
-                      style: TextStyle(color: Color(0xffc0d6cf)),
-                    ),
-                    Spacer(),
-                    Text('P0 支持方式：应用内文字工单', style: TextStyle(fontSize: 12)),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 14),
+            const SizedBox(width: 14),
+          ],
           Expanded(
-            flex: 6,
+            flex: keyboardVisible ? 1 : 6,
             child: Card(
               margin: EdgeInsets.zero,
               child: Padding(
-                padding: const EdgeInsets.all(18),
+                padding: EdgeInsets.all(keyboardVisible ? 6 : 18),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -2974,6 +2983,14 @@ class _SupportTabState extends State<SupportTab> {
                         maxLines: null,
                         expands: true,
                         maxLength: 500,
+                        buildCounter: keyboardVisible
+                            ? (
+                                context, {
+                                required currentLength,
+                                required isFocused,
+                                required maxLength,
+                              }) => const SizedBox.shrink()
+                            : null,
                         style: const TextStyle(color: Color(0xff173d35)),
                         decoration: const InputDecoration(
                           labelText: '请描述遇到的问题',
@@ -2982,26 +2999,17 @@ class _SupportTabState extends State<SupportTab> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: keyboardVisible ? 2 : 8),
                     FilledButton.icon(
                       onPressed: _submit,
+                      style: keyboardVisible
+                          ? FilledButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                            )
+                          : null,
                       icon: const Icon(Icons.send),
                       label: Text(_submitting ? '提交中' : '提交工单'),
                     ),
-                    if (_sent)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.check_circle_outline,
-                              color: Color(0xff8ee09e),
-                            ),
-                            SizedBox(width: 8),
-                            Text('工单已提交'),
-                          ],
-                        ),
-                      ),
                   ],
                 ),
               ),

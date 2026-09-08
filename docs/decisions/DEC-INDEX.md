@@ -154,6 +154,7 @@
 | 2026-09-08 | USER/AI/DEV | 正式采用现有 144 张牌组；确认无花果放冲使每个合法赢家逐一按一索，强飘/不强飘无花均适用，无花果赢家仍不能接炮；规则升至 `.6` 并关闭规则阻塞 | DEC-RULE-001/008、BE-301/306/308 | `be-302-susong-scoring.test.js`、`be-303-susong-wall.test.js`、23 个 golden；Node 227/227 |
 | 2026-09-08 | AI/DEV | CL-201 真实 Node WSS 四客户端验收通过；Flutter 大厅支持输入房号加入，并修复审计 history replay 与新控制器 roomId 恢复边界 | CL-201、CL-203 | `npm run verify:client-real`；Flutter 26/26；仍属 loopback development 证据 |
 | 2026-09-08 | AI/DEV | CL-204 接通 Flutter 运行时 REST 配置与实时会话鉴权；令牌仅由 adapter 逐请求注入，真实夹具创建并查询本人工单 | CL-204、BE-207 | `npm run verify:client-real`；Flutter 30/30；仍为 loopback memory/stub-auth |
+| 2026-09-08 | AI/DEV | Android Emulator 完成 WSS 登录与客服 REST 提交；横屏输入法模式隐藏非必要导航、压缩表单并以 SnackBar 呈现结果，消除设备实测溢出 | CL-204、G1 前置 | Flutter 30/30、debug APK；仅 Emulator/dev HTTP |
 
 ## 8. 变更记录
 
@@ -221,6 +222,7 @@
 | 0.1.60 | 2026-09-08 | 登记 144 张正式牌组与无花果放冲逐赢家一索，关闭 BLOCKER-G0-002 | USER/AI/DEV |
 | 0.1.61 | 2026-09-08 | 登记真实 Node WSS 四客户端同步、私牌隔离、替换重连及 Flutter 房号加入验收 | AI/DEV |
 | 0.1.62 | 2026-09-08 | 登记 Flutter 真实客服 REST 配置、同会话鉴权和创建/查询工单验收 | AI/DEV |
+| 0.1.63 | 2026-09-08 | 登记 Android Emulator 客服 REST 提交与横屏输入法溢出修复 | AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 
