@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createSusongFlowerState, resolveSusongFlowers } from '../src/domain/rules/susong.js';
-import { scoreSusongRound, scoreSusongWin } from '../src/domain/rules/susong-scoring.js';
+import {
+  scoreSusongRound,
+  scoreSusongWin,
+  SUSONG_SCORE_ORDER_VERSION
+} from '../src/domain/rules/susong-scoring.js';
 import { Room } from '../src/domain/room.js';
 import { RoomService } from '../src/modules/room/service.js';
 
@@ -39,11 +43,59 @@ test('A self-draw with four flowers stays small and settles each zeng relation',
   assert.deepEqual(settlement.deltaByPlayer, { A: 45, B: -15, C: -11, D: -19 });
   assert.equal(Object.values(settlement.deltaByPlayer).reduce((sum, value) => sum + value, 0), 0);
   assert.deepEqual(settlement.transfers[0].trace, [
-    { stage: 'flower_tier', value: 5 },
     { stage: 'winner_zeng', count: 2, unit: 2, value: 4 },
     { stage: 'payer_zeng', count: 3, unit: 2, value: 6 },
+    { stage: 'piao', status: 'not_piao', cappedByNoFlowerSelfDraw: false, value: 0 },
+    { stage: 'flower_tier', tier: 'small', value: 5, subtotal: 15 },
     { stage: 'sanxi', multiplier: 1, value: 15 }
   ]);
+  assert.equal(settlement.scoreOrderVersion, SUSONG_SCORE_ORDER_VERSION);
+  assert.equal(settlement.transfers[0].scoreOrderVersion, SUSONG_SCORE_ORDER_VERSION);
+});
+
+test('signed flower boundaries stay 1-4 small, 5-9 big and 10+ double-big', () => {
+  const cases = [
+    [1, 'small', 5],
+    [4, 'small', 5],
+    [5, 'big', 6],
+    [9, 'big', 6],
+    [10, 'double_big', 7],
+    [18, 'double_big', 7]
+  ];
+  for (const [flowers, tier, amount] of cases) {
+    const settlement = scoreSusongWin({
+      config,
+      playerIds: players,
+      winnerId: 'A',
+      winSource: 'self_draw',
+      flowerState: flowerState(flowers),
+      zengByPlayer: { A: 0, B: 0, C: 0, D: 0 }
+    });
+    assert.equal(settlement.settledTier, tier, `${flowers} flowers`);
+    assert.deepEqual(
+      settlement.transfers.map(item => item.amount),
+      [amount, amount, amount],
+      `${flowers} flowers`
+    );
+    assert.equal(settlement.selfDrawPromoted, false);
+  }
+});
+
+test('audit trace follows zeng then piao then flower tier then sanxi', () => {
+  const settlement = scoreSusongWin({
+    config,
+    playerIds: players,
+    winnerId: 'A',
+    winSource: 'self_draw',
+    flowerState: flowerState(4),
+    zengByPlayer: { A: 2, B: 3, C: 1, D: 5 },
+    sanxiPairs: [['A', 'B']]
+  });
+  assert.deepEqual(
+    settlement.transfers[0].trace.map(item => item.stage),
+    ['winner_zeng', 'payer_zeng', 'piao', 'flower_tier', 'sanxi']
+  );
+  assert.equal(settlement.transfers[0].trace.at(-1).value, 30);
 });
 
 test('the original 6-point base example is correct when A has five flowers', () => {
@@ -111,6 +163,7 @@ test('discard win charges only the discarder', () => {
     zengByPlayer: { A: 2, B: 3, C: 1, D: 5 }
   });
   assert.deepEqual(settlement.winnerIds, ['A']);
+  assert.equal(settlement.scoreOrderVersion, SUSONG_SCORE_ORDER_VERSION);
   assert.deepEqual(settlement.transfers.map(item => [item.from, item.to, item.amount]), [['D', 'A', 19]]);
   assert.deepEqual(settlement.deltaByPlayer, { A: 19, B: 0, C: 0, D: -19 });
 });
@@ -137,6 +190,7 @@ test('one discard can pay two or three independently classified winners', () => 
 test('draw at the wall boundary is an auditable zero settlement', () => {
   const settlement = scoreSusongRound({ config, playerIds: players, outcome: 'draw' });
   assert.deepEqual(settlement.winnerIds, []);
+  assert.equal(settlement.scoreOrderVersion, SUSONG_SCORE_ORDER_VERSION);
   assert.deepEqual(settlement.transfers, []);
   assert.deepEqual(settlement.deltaByPlayer, { A: 0, B: 0, C: 0, D: 0 });
 });

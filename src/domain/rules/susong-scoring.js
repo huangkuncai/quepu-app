@@ -10,6 +10,8 @@ const TIER_INDEX = Object.freeze({
   one_bamboo: 3
 });
 
+export const SUSONG_SCORE_ORDER_VERSION = 'zeng-piao-flower-sanxi-v1';
+
 /**
  * Produce an immutable, zero-sum settlement from server-owned round facts.
  *
@@ -58,10 +60,17 @@ export function scoreSusongWin({
       to: winner,
       amount: beforeSanxi * sanxiMultiplier,
       tier,
+      scoreOrderVersion: SUSONG_SCORE_ORDER_VERSION,
       trace: [
-        { stage: 'flower_tier', value: baseScore },
         { stage: 'winner_zeng', count: zeng[winner], unit: config.zeng, value: winnerZengScore },
         { stage: 'payer_zeng', count: zeng[payerId], unit: config.zeng, value: payerZengScore },
+        {
+          stage: 'piao',
+          status: decision.piao ? 'piao' : 'not_piao',
+          cappedByNoFlowerSelfDraw: decision.cappedByNoFlowerSelfDraw,
+          value: 0
+        },
+        { stage: 'flower_tier', tier, value: baseScore, subtotal: beforeSanxi },
         { stage: 'sanxi', multiplier: sanxiMultiplier, value: beforeSanxi * sanxiMultiplier }
       ]
     });
@@ -81,6 +90,7 @@ export function scoreSusongWin({
     winnerId: winner,
     winSource,
     flowerCount: decision.flowerCount,
+    scoreOrderVersion: SUSONG_SCORE_ORDER_VERSION,
     classifiedTier: decision.tier,
     settledTier: tier,
     selfDrawPromoted: false,
@@ -97,6 +107,7 @@ export function scoreSusongRound(input = {}) {
   if (outcome === 'draw') {
     return deepFreeze({
       scoreAuthority: 'server',
+      scoreOrderVersion: SUSONG_SCORE_ORDER_VERSION,
       outcome: 'draw',
       winnerIds: [],
       discarderId: null,
@@ -147,6 +158,7 @@ export function scoreSusongRound(input = {}) {
   }
   return deepFreeze({
     scoreAuthority: 'server',
+    scoreOrderVersion: SUSONG_SCORE_ORDER_VERSION,
     outcome,
     winnerIds,
     discarderId,

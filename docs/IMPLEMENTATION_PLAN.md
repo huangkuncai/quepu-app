@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-07（CL-201 Android Emulator 真实开发 WSS 登录与紧凑横屏，Node 168/168、Flutter 22/22）
+> 最近更新：2026-09-08（BE-306 增→飘→花档→三西权威结算迹线与边界 golden cases，Node 170/170、Flutter 22/22）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -604,6 +604,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.37 | 2026-09-07 | 完成 CL-301 公开牌桌状态：按座位展示服务端弃牌、副露、花数/飘花状态、当前行动玩家、牌墙剩余数和回合 deadline 倒计时；局数不再硬编码 | `flutter test`（18/18）、`dart analyze`通过；真实 WSS/Android/iOS 设备验收仍归 CL-201/G1 |
 | 0.1.38 | 2026-09-07 | Flutter 默认保留离线 FakeTransport，增加经 `SUSONG_WSS_URL`/`SUSONG_ENV` dart-define 选择的 Android/iOS 原生 WSS 运行时；登录页显示后端环境，URL fail-closed 校验，Android release 联网权限与 debug-only 明文 WS 边界已配置 | `flutter test`（21/21）、`dart analyze`、`flutter build apk --debug`通过；真实服务四客户端与真机仍待验收 |
 | 0.1.39 | 2026-09-07 | 将配置版 debug APK 安装至 Android API 37 `Medium_Phone` Emulator，验证横屏启动、`ws://10.0.2.2:8787` 开发服务登录和在线大厅；真尺寸发现的大厅操作卡片/空状态底部溢出已做紧凑布局修复并新增 2400×1080 回归 | `flutter test`（22/22）、Android 重新构建/安装/登录和截图通过；仅为 Emulator/dev WS 证据，不替代真机/WSS |
+| 0.1.40 | 2026-09-08 | 将用户确认的服务端结算叠加顺序版本化为 `zeng-piao-flower-sanxi-v1`；每笔转账迹线依次记录赢家/付款家增分、飘花资格、花档小计与三西翻倍，局结算也携带版本；新增 1/4、5/9、10/18 花边界与自摸不升档 golden cases | `npm run check`（Node 170/170）；三西关系生成及多响组合仍等待签字，继续 fail-closed |
 
 ## 16. 我们下一次具体做什么
 
