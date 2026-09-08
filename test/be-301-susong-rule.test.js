@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   SUSONG_DEFAULT_CONFIG,
+  SUSONG_RULE_VERSION,
   SUSONG_SCORE_ORDER_VERSION,
   classifySusongHu,
   createSusongFlowerState,
@@ -127,10 +128,11 @@ test('server records ordinary and wind kong flower units without faking a flower
   assert.equal(state.countedFlowers, 6);
 });
 
-test('flower award uses second selected score and is cancelled by discard win or draw', () => {
+test('flower awards stack at the second selected score and cancel for holder discard or draw', () => {
   const config = { scoreTiers: [2, 4, 6, 8] };
   assert.equal(flowerAwardScore(config), 4);
-  assert.equal(flowerAwardScore(config, { wonByDiscard: true }), 0);
+  assert.equal(flowerAwardScore(config, { awardCount: 3 }), 12);
+  assert.equal(flowerAwardScore(config, { awardHolderDiscarded: true }), 0);
   assert.equal(flowerAwardScore(config, { draw: true }), 0);
   assert.equal(susongRule.settlement.drawAtRemainingTiles, 14);
   assert.equal(susongRule.settlement.multipleDiscardWinners, true);
@@ -161,7 +163,7 @@ test('room creation freezes normalized 8931 config instead of accepting client s
   });
   assert.equal(created.room.maxPlayers, 4);
   assert.equal(created.room.totalRounds, 8);
-  assert.equal(created.room.ruleVersion, '8931-apk-baseline.3');
+  assert.equal(created.room.ruleVersion, SUSONG_RULE_VERSION);
   assert.equal(
     created.room.ruleSnapshot.scoreOrderVersion,
     SUSONG_SCORE_ORDER_VERSION

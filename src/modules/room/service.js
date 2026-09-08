@@ -7,6 +7,7 @@ import {
   susongRule
 } from '../../domain/rules/susong.js';
 import {
+  deriveSusongFlowerAwardCounts,
   deriveSusongSanxiPairs,
   scoreSusongRound
 } from '../../domain/rules/susong-scoring.js';
@@ -393,6 +394,10 @@ export class RoomService {
       config: actor.room.ruleSnapshot.config,
       playerIds: players,
       zengByPlayer: Object.fromEntries(actor.room.zengByPlayer),
+      flowerAwardCountByPlayer: deriveSusongFlowerAwardCounts({
+        playerIds: players,
+        replacementHistory: actor.room._privateRoundState?.replacementHistory ?? []
+      }),
       // Sanxi always comes from server-owned meld history, never from facts
       // supplied by a caller of this internal entry point.
       sanxiPairs: deriveSusongSanxiPairs({

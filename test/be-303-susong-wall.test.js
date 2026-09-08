@@ -535,6 +535,7 @@ test('an unambiguous peng is private-player projected and resolved by the server
   assert.equal(claimed.event.type, 'SUSONG_REACTION_CLAIMED');
   assert.equal(room.turn, 'D');
   assert.equal(room.currentRound.turnPhase, 'reaction');
+  room.currentRound.passedHuByPlayer.C = true;
 
   const resolved = room.applyAction('D', 'pass');
   assert.equal(resolved.resolution.action, 'peng');
@@ -542,6 +543,7 @@ test('an unambiguous peng is private-player projected and resolved by the server
   assert.equal(room.turn, 'C');
   assert.equal(room.currentRound.turnPhase, 'discard');
   assert.equal(room.currentRound.pendingReaction, null);
+  assert.equal(room.currentRound.passedHuByPlayer.C, true);
   assert.deepEqual(room.currentRound.discardsByPlayer.A, []);
   assert.equal(room.currentRound.meldsByPlayer.C.length, 1);
   assert.equal(room.currentRound.meldsByPlayer.C[0].tileIds.length, 3);
@@ -705,6 +707,7 @@ test('a concealed kong is selected by server index, counts two flowers and repla
     () => room.applyAction('A', { action: 'concealed_kong', args: { candidateIndex: 1 } }),
     error => error.code === 'INVALID_ACTION'
   );
+  room.currentRound.passedHuByPlayer.A = true;
   const result = room.applyAction('A', {
     action: 'concealed_kong',
     args: { candidateIndex: 0 }
@@ -720,6 +723,7 @@ test('a concealed kong is selected by server index, counts two flowers and repla
   assert.equal(room.snapshot({ viewerId: 'A' }).round.privateHand.length, 11);
   assert.equal(room.turn, 'A');
   assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.equal(room.currentRound.passedHuByPlayer.A, true);
   assert.equal(JSON.stringify(result.event).includes('replacementTileId'), false);
 
   const persisted = room.persistenceSnapshot();
@@ -810,6 +814,7 @@ test('an added kong waits for all robbing-kong responses before upgrading and re
   );
   room.applyAction('C', 'pass');
   room.applyAction('D', 'pass');
+  room.currentRound.passedHuByPlayer.B = true;
   const resolved = room.applyAction('A', 'pass');
 
   assert.equal(resolved.resolution.action, 'added_kong');
@@ -822,6 +827,7 @@ test('an added kong waits for all robbing-kong responses before upgrading and re
   assert.equal(room.currentRound.pendingReaction, null);
   assert.equal(room.turn, 'B');
   assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.equal(room.currentRound.passedHuByPlayer.B, true);
 
   const persisted = room.persistenceSnapshot();
   assert.deepEqual(Room.fromSnapshot(persisted).persistenceSnapshot(), persisted);

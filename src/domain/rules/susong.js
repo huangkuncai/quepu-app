@@ -4,6 +4,7 @@ const ZENG_OPTIONS = Object.freeze([0, 1, 2, 3, 5]);
 const PIAO_MODES = Object.freeze(['strong', 'optional']);
 
 export const SUSONG_SCORE_ORDER_VERSION = 'zeng-piao-flower-sanxi-v1';
+export const SUSONG_RULE_VERSION = '8931-apk-baseline.4';
 
 export const SUSONG_SPECIAL_HU = Object.freeze([
   'seven_pairs', 'no_flower', 'pure_one_suit', 'mixed_one_suit', 'all_triplets',
@@ -76,9 +77,14 @@ export function flowerUnitsForMeld({ kind, isWind = false } = {}) {
   fail('kind', 'must be triplet, exposed_kong, added_kong or concealed_kong');
 }
 
-export function flowerAwardScore(input = {}, { wonByDiscard = false, draw = false } = {}) {
-  if (wonByDiscard || draw) return 0;
-  return normalizeSusongConfig(input).scoreTiers[1];
+export function flowerAwardScore(input = {}, {
+  awardCount = 1,
+  awardHolderDiscarded = false,
+  draw = false
+} = {}) {
+  const count = nonNegativeInteger(awardCount, 'awardCount');
+  if (awardHolderDiscarded || draw) return 0;
+  return normalizeSusongConfig(input).scoreTiers[1] * count;
 }
 
 /**
@@ -205,7 +211,7 @@ export function evaluateSusongWin({ flowerState: current, winSource, patterns = 
 
 export const susongRule = deepFreeze({
   id: 'susong_v1',
-  version: '8931-apk-baseline.3',
+  version: SUSONG_RULE_VERSION,
   legacyGameId: 8931,
   name: '宿松麻将',
   players: 4,

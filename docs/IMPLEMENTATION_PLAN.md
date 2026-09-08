@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-08（规则纵切审计完成；三西与 20 个计分 golden 已落地，剩余六类边界待外部证据；Node 205/205、Flutter 24/24）
+> 最近更新：2026-09-08（规则基线升至 `.4`；随机首庄、头摸尾补、摸牌解过圈、等待式超时、花奖和多重三西已落地；Node 214/214、Flutter 24/24）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -195,11 +195,11 @@ R-A → R-B 计分/边缘场景签字 → W5-W7 宿松规则裁判
 | --- | --- | --- | --- | --- |
 | DEC-RULE-001 | 人数/座位、牌组构成、风/箭/花牌数量、总牌数、初始手牌 | 牌组规范和牌 ID 表 | USER + RULE | TODO |
 | DEC-RULE-002 | 吃/碰/杠/补花/抢杠/胡/过，以及多家同时胡优先级 | 动作和状态机规范 | USER + RULE | TODO |
-| DEC-RULE-003 | 首局庄、多家胡、流局、剩余 14 张、杠后牌墙 | 回合/庄轮转表 | USER + RULE | TODO |
+| DEC-RULE-003 | 首局庄、多家胡、流局、剩余 14 张、杠后牌墙 | 回合/庄轮转表 | USER + RULE | IN_PROGRESS（随机首庄、头摸尾补、多响、流局连庄已确认；牌组/保留区精确口径待补） |
 | DEC-RULE-004 | 底分 1～9 是单选、多选还是候选集合；底分第二档 | 配置 schema 和 UI 选择器 | USER + RULE | CONFIRMED（参考 APK：1～9 选 4 个递增档，默认 1/2/3/4） |
-| DEC-RULE-005 | 花奖、花朵、杠花、出增、飘花、三西/三道规则 | 表驱动计分表与飘花状态机 | USER + RULE | IN_PROGRESS（三西形成、三类付款及一炮双响解除已确认；多关系样本待补） |
+| DEC-RULE-005 | 花奖、花朵、杠花、出增、飘花、三西/三道规则 | 表驱动计分表与飘花状态机 | USER + RULE | IN_PROGRESS（花奖叠加/取消、三西形成/付款/解除及多关系独立结算已确认；四对子花牌分组待最终核对） |
 | DEC-RULE-006 | 无花果及“一察/一素”标准术语、数值和触发 | 术语表/测试样例 | USER + RULE | CONFIRMED（APK 原文术语为“无花果”“一索”） |
-| DEC-RULE-007 | 必胡/不必胡、“过圈”、超时默认动作 | 玩家状态/超时表 | USER + RULE | TODO |
+| DEC-RULE-007 | 必胡/不必胡、“过圈”、超时默认动作 | 玩家状态/超时表 | USER + RULE | CONFIRMED（过圈仅在本人摸牌后解除；倒计时归零后继续等待，无自动动作） |
 | DEC-RULE-008 | 小胡/大胡、特殊胡型、≥9、封顶、舍入、零和/系统项 | 结算规范 | USER + RULE | TODO |
 | DEC-RULE-009 | 4/8/16 局、出增中途加减、房周期边界 | 房间配置和回合策略 | USER + RULE | CONFIRMED（4/8/16 局；房周期内增可加不可减） |
 
@@ -336,13 +336,13 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | ID | 任务 | 依赖 | 主要产出 | 验收 |
 | --- | --- | --- | --- | --- |
 | BE-301 | 牌组、牌 ID、CSPRNG/seed | DEC-RULE-001 | 牌组表、服务端随机、seed hash/算法版本 | 牌数/手牌/补花守恒，未结束牌墙不泄露；IN_PROGRESS（`susong-144-candidate-v1` 已实现稳定牌 ID、无模偏可复现洗牌、seed commitment 和脱敏公共视图；精确构成待旧服牌局样本签字） |
-| BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.3` 配置、飘花状态机、服务端计分核心和不可由客户端覆盖的 `scoreOrderVersion` 快照已实现） |
+| BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.4` 配置、飘花/花奖状态机、服务端计分核心和不可由客户端覆盖的 `scoreOrderVersion` 快照已实现） |
 | BE-303 | 发牌、补花、牌墙、庄轮转 | DEC-RULE-002/003 | round state、dealer、wall、deadline | 固定 seed 重现；流局边界正确；IN_PROGRESS（候选开局、连续补花、正常摸出牌、保留 14 张流局及“首个赢家坐庄/流局连庄”已接入 Room/RoomActor/RoomService；起手花全部解决后服务端幂等自动开打，跨局庄位写入事件并防覆盖，私牌及操作历史可按 seed 重放，玩家仅见本人手牌；首局庄与补牌方向待样本） |
 | BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝；IN_PROGRESS（完整动作与主要胡型已实现；三西由服务端吃碰牌组累计，当前优先级为胡 > 碰/明杠 > 吃；待旧服优先级样本） |
-| BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（增、起手飘花选择、摸花、打/补花、碰风 1 花、普通/风牌明杠、暗杠及巴杠增量花数、杠后尾部连续补牌和可持久化过圈状态均已接入；过圈按 `turn-return-v1-provisional` 在本人实际摸牌或取得出牌权时解除，待旧服样本确认边界） |
-| BE-306 | 结算和两级积分账本 | DEC-RULE-004/005/008 | `RoundSettlement`、原因明细、累计战绩、零和/系统项策略 | 服务端重算；幂等；流局和多响样例通过；IN_PROGRESS（已实现三西自摸额外份、关系内点炮双份、第三方点炮连带份及一炮双响解除；关系与分数均由服务端审计） |
+| BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（增、飘花、摸花、头摸尾补、碰杠花数和持久化过圈均已接入；过圈仅在本人实际摸牌后解除，超时不代操作） |
+| BE-306 | 结算和两级积分账本 | DEC-RULE-004/005/008 | `RoundSettlement`、原因明细、累计战绩、零和/系统项策略 | 服务端重算；幂等；流局和多响样例通过；IN_PROGRESS（花奖独立转账、三西三类付款、一炮双响解除和多关系独立结算均由服务端审计） |
 | BE-307 | 回放/确定性验证器 | BE-301~306 | 规则版本 + seed + event replay、snapshot hash | IN_PROGRESS（seed/私牌/牌墙重放、结算迹线防篡改和持久房间批量双恢复 divergence 报告已接入；待调度化全量历史扫描） |
-| BE-308 | golden/property/fuzz tests | BE-301~307 | 至少 20 个签字 golden cases、属性测试和模糊测试 | IN_PROGRESS（20 个机器可执行计分 golden 与 10,000 组属性回放已通过；待规则负责人整包验收及剩余未决边界样本） |
+| BE-308 | golden/property/fuzz tests | BE-301~307 | 至少 20 个签字 golden cases、属性测试和模糊测试 | IN_PROGRESS（22 个机器可执行计分 golden 与 10,000 组属性回放已通过；待规则负责人整包验收及剩余未决边界样本） |
 | CL-301 | 牌桌牌面和动作面板 | BE-302/304 | 手牌、公共牌、花/杠、可行动作、deadline | DONE（只渲染服务端状态，不上传分数/牌墙；本人手牌、点选出牌、起手飘/不飘/打花、吃碰杠胡候选、公共弃牌/副露/花数/牌墙和 deadline 已按权威快照接入） |
 | CL-302 | 单局/整场结算页 | BE-306 | 每人 delta、原因、累计、规则版本 | IN_PROGRESS（单局页已只读渲染服务端结果与增→飘→花→三西迹线；结算后房主可按当前 roomVersion 触发服务端下一局，其他成员只等待；整场汇总待 BE-501） |
 | QA-301 | 规则验收包 | DEC-RULE 全部 | 牌局输入、事件、预期分数和截图/日志 | 规则负责人签字，未签项不进 production flag |
@@ -533,7 +533,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | I1 | IN_PROGRESS | BE-101～BE-106 已完成（开发/单进程基线）；CL-101 已完成；CL-102 Flutter POC 与 CL-103 framework-neutral 核心/原生 transport 已完成本机验证；OPS-101 开发环境手册已完成；ArkUI/平台生命周期和真实设备仍待 | G2 预审 |
 | G1 | IN_PROGRESS | Android/iOS 工具链预检已通过，Android debug APK 已构建；Android/iOS 真机矩阵和发布签名仍待，鸿蒙暂缓 | Android/iOS 真机与签名验收 |
 | I2 | IN_PROGRESS | BE-201～BE-205 已完成（业务纵切仍为内存/fake-staging）；BE-204 PG/Redis adapter、presence overlay、异步启动装配、snapshot/delta、重连、显式 deadline 和 durable claim/lease 已完成，`verify:real` 与 `verify:multi-instance` 本地真实容器 smoke 通过，生产滚动重启/故障演练仍待；BE-207 纯文本客服 REST 已完成；CL-201 Flutter 房间桌面、四客户端 fake 验收夹具、CL-202 命令 outbox、CL-203 重连 UI 本机 POC 已完成；真实 WSS/设备验收和 CL-204 REST 联调待 | G3 实时纵切 |
-| 宿松规则 | BLOCKED | 巴杠/抢杠胡、过圈候选、三西权威结算和 20 个计分 golden 已编码；APK 只消费服务端下发结果，无法唯一恢复剩余规则 | 按 [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md) 提供首局庄、牌墙方向、过圈/超时、花奖封顶及多三西样本 |
+| 宿松规则 | IN_PROGRESS | `.4` 已实现随机首庄、头摸尾补、摸牌解过圈、等待式超时、花奖权威结算、多重三西和 22 个 golden | 按 [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md) 补齐精确牌组/保留区、完整动作冲突和四对子花牌分组 |
 | Club/Floor | BLOCKED | 依赖 DEC-003～006 | G2 + schema |
 | Diamond | BLOCKED | 依赖 DEC-008～009 | 计费决策会 |
 | History/Support | IN_PROGRESS | BE-207 纯文本工单 REST 已完成并通过 2 个集成用例；CL-204 共享 Dart SupportApi 与 Flutter 注入已完成，真实 REST/三端联调待 | G3 |
@@ -619,6 +619,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.52 | 2026-09-08 | 完成三西服务端纵切：单方累计吃碰同一对手 3 次建立双方关系；自摸额外份、关系内点炮双份、第三方点炮连带份，以及关系双方被同一炮同时胡时解除；结算/恢复按权威牌组审计，客户端只读展示解除原因 | `npm run check`（Node 184/184）；Flutter 24/24、`dart analyze` |
 | 0.1.53 | 2026-09-08 | 新增 20 个独立 JSON 计分 golden cases，覆盖花档、无花果、增分、多响和三西核心；每例校验档位、逐笔付款、四家 delta、解除关系及服务端审计 | `be-308-susong-golden.test.js`（21/21）；`npm run check`（Node 205/205） |
 | 0.1.54 | 2026-09-08 | 完成规则纵切收尾审计：逐项核验巴杠/抢杠胡、过圈、三西与 golden 证据；复核 APK 规则文本、protobuf 和客户端 Lua 字段，确认剩余六类边界必须由旧服样本或规则负责人决定 | [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md)；未决项保持 provisional/fail-closed |
+| 0.1.55 | 2026-09-08 | 规则版本升至 `8931-apk-baseline.4`：确认随机首庄、牌墙头摸/尾补、仅本人摸牌解除过圈、倒计时归零继续等待；实现独立花奖转账、重叠组合、点炮/流局取消和多重三西逐关系结算 | `npm run check`（Node 214/214）；Flutter 24/24 |
 
 ## 16. 我们下一次具体做什么
 
@@ -632,7 +633,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 6. 已完成 BE-203：WSS gateway 已接入 RoomActor，具备成功写入后 ACK/广播、订阅、私有事件过滤、背压、连接替换和重连宽限；BE-204 已完成内存 snapshot/delta、显式 deadline、presence overlay、PG/Redis adapter 契约、异步默认装配和持久化 deadline claim/lease 基础，`verify:real` 与 `verify:multi-instance` 已在真实本地 PG/Redis 上通过，继续做真实多进程滚动重启、故障演练、备份恢复和长期最终一致性压测。
 7. 已完成 BE-205：REST/BFF 与 WSS 共用 `RoomService`/RoomActor，提供 ETag/If-Match、`Idempotency-Key`、统一错误 envelope 和成员/鉴权边界；当前为内存/fake-staging，不代表生产 PG/Redis 或多实例能力。
 8. QA-201/BE-206 基础延迟、丢包、乱序、重复和重启故障矩阵已通过；CL-201 四客户端 framework-neutral fake 夹具已验证版本/hash/重连收敛，下一步补真实 WSS/设备验收；BE-207 纯文本客服 REST 已完成，CL-204 真实 REST 联调与三端适配待完成。继续记录 DEC-011，SDK/真机未就绪前不得把 G1 标为通过。
-9. 已完成主要胡型、完整吃碰杠胡过、三西服务端纵切和 20 个机器可执行 golden cases；规则纵切现停在 [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md) 的六类外部证据，未确认部分继续 fail-closed。
+9. 已完成主要胡型、完整吃碰杠胡过、花奖、多重三西和 22 个机器可执行 golden cases；规则纵切剩余项见 [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md)，未确认部分继续 fail-closed。
 
 如果用户尚未准备好规则或钻石决策，我们仍可完成 I1/I2 的协议、认证、fake rule、同步和客户端 POC；但相关功能会保持 `DRAFT/SANDBOX`，不会暗中采用截图默认值。
 
@@ -657,9 +658,9 @@ DEC-RULE-001 牌组/人数：______
 DEC-RULE-002 动作：______
 DEC-RULE-003 庄/流局/多胡：______
 DEC-RULE-004 底分语义：______
-DEC-RULE-005 已确认：单笔=`花档分 + 赢家增×增单价 + 付款者增×增单价`，自摸不升档；三西额外一份，相关双方同炮双响则解除关系。待提供多三西关系旧服样本：______
+DEC-RULE-005 已确认：单笔=`花档分 + 赢家增×增单价 + 付款者增×增单价`，自摸不升档；花奖独立按第二档累加；每条三西独立额外一份，相关双方同炮双响则解除关系。
 DEC-RULE-006 无花果术语与数值：______
-DEC-RULE-007 必胡/过圈/超时：______
+DEC-RULE-007 必胡/过圈/超时：过圈仅在本人摸牌后解除；倒计时到 0 后继续等待，不自动操作。
 DEC-RULE-008 胡型/封顶/结算：______
 DEC-RULE-009 局数/中途加增：______
 ```

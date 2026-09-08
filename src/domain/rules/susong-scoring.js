@@ -3,6 +3,7 @@ import {
   normalizeSusongConfig,
   SUSONG_SCORE_ORDER_VERSION
 } from './susong.js';
+import { susongTileFace } from './susong-wall.js';
 
 const TIER_INDEX = Object.freeze({
   small: 0,
@@ -12,6 +13,56 @@ const TIER_INDEX = Object.freeze({
 });
 
 export { SUSONG_SCORE_ORDER_VERSION } from './susong.js';
+
+const FLOWER_AWARD_FACES = Object.freeze([
+  'red_dragon', 'green_dragon', 'white_dragon', 'red_flower', 'black_flower'
+]);
+
+/** Count overlapping flower-award patterns from server-owned physical tiles. */
+export function countSusongFlowerAwards({ tileIds = [] } = {}) {
+  if (!Array.isArray(tileIds)) throw new TypeError('tileIds must be an array');
+  const counts = Object.fromEntries(FLOWER_AWARD_FACES.map(face => [face, 0]));
+  for (const tileId of tileIds) {
+    const face = susongTileFace(tileId);
+    if (Object.hasOwn(counts, face)) counts[face] += 1;
+  }
+  const dragonQuadCount = ['red_dragon', 'green_dragon', 'white_dragon']
+    .reduce((sum, face) => sum + Math.floor(counts[face] / 4), 0);
+  const threeDragonTripletCount = Math.min(
+    ...['red_dragon', 'green_dragon', 'white_dragon']
+      .map(face => Math.floor(counts[face] / 3))
+  );
+  const pairUnits = FLOWER_AWARD_FACES
+    .reduce((sum, face) => sum + Math.floor(counts[face] / 2), 0);
+  const fourPairCount = Math.floor(pairUnits / 4);
+  return deepFreeze({
+    count: dragonQuadCount + threeDragonTripletCount + fourPairCount,
+    dragonQuadCount,
+    threeDragonTripletCount,
+    fourPairCount,
+    pairUnits,
+    faceCounts: counts
+  });
+}
+
+/** Derive per-player awards only from laid-out replacement flowers. */
+export function deriveSusongFlowerAwardCounts({ playerIds, replacementHistory = [] } = {}) {
+  const players = normalizePlayers(playerIds);
+  if (!Array.isArray(replacementHistory)) throw new TypeError('replacementHistory must be an array');
+  const tileIdsByPlayer = Object.fromEntries(players.map(playerId => [playerId, []]));
+  for (const operation of replacementHistory) {
+    if (operation?.action !== 'replace') continue;
+    const playerId = member(operation.playerId, players, 'replacementHistory.playerId');
+    if (!Array.isArray(operation.removedTileIds)) {
+      throw new TypeError('replacementHistory.removedTileIds must be an array');
+    }
+    tileIdsByPlayer[playerId].push(...operation.removedTileIds);
+  }
+  return deepFreeze(Object.fromEntries(players.map(playerId => [
+    playerId,
+    countSusongFlowerAwards({ tileIds: tileIdsByPlayer[playerId] }).count
+  ])));
+}
 
 /**
  * Derive symmetric Sanxi relations from authoritative public meld history.
@@ -106,6 +157,7 @@ export function scoreSusongWin({
     const sanxiShare = relations.has(pairKey(winner, payerId)) ? 1 : 0;
     const sanxiMultiplier = regularShare + sanxiShare;
     return deepFreeze({
+      kind: 'win',
       from: payerId,
       to: winner,
       amount: beforeSanxi * sanxiMultiplier,
@@ -175,6 +227,7 @@ export function scoreSusongRound(input = {}) {
       discarderId: null,
       sanxiPairs: configuredSanxiPairs,
       releasedSanxiPairs: [],
+      flowerAwardCountByPlayer: Object.fromEntries(players.map(playerId => [playerId, 0])),
       wins: [],
       transfers: [],
       deltaByPlayer: Object.fromEntries(players.map(playerId => [playerId, 0]))
@@ -218,7 +271,36 @@ export function scoreSusongRound(input = {}) {
     gangWinCount: winner.gangWinCount ?? 0,
     sanxiPairs: appliedSanxiPairs
   }));
-  const transfers = wins.flatMap(win => win.transfers);
+  const flowerAwardCountByPlayer = normalizeFlowerAwardCounts(
+    input.flowerAwardCountByPlayer,
+    players
+  );
+  if (config.zeng > 0) {
+    const roundZeng = normalizeZeng(input.zengByPlayer, players);
+    for (const playerId of players) {
+      if (roundZeng[playerId] === 0) flowerAwardCountByPlayer[playerId] = 0;
+    }
+  }
+  if (discarderId) flowerAwardCountByPlayer[discarderId] = 0;
+  const flowerAwardUnit = config.scoreTiers[1];
+  const flowerAwardTransfers = players.flatMap(holderId => {
+    const count = flowerAwardCountByPlayer[holderId];
+    if (count === 0) return [];
+    return players.filter(playerId => playerId !== holderId).map(payerId => deepFreeze({
+      kind: 'flower_award',
+      from: payerId,
+      to: holderId,
+      amount: count * flowerAwardUnit,
+      scoreOrderVersion: SUSONG_SCORE_ORDER_VERSION,
+      trace: [{
+        stage: 'flower_award',
+        count,
+        unit: flowerAwardUnit,
+        value: count * flowerAwardUnit
+      }]
+    }));
+  });
+  const transfers = [...wins.flatMap(win => win.transfers), ...flowerAwardTransfers];
   const deltaByPlayer = Object.fromEntries(players.map(playerId => [playerId, 0]));
   for (const transfer of transfers) {
     deltaByPlayer[transfer.from] -= transfer.amount;
@@ -235,6 +317,7 @@ export function scoreSusongRound(input = {}) {
     discarderId,
     sanxiPairs: appliedSanxiPairs,
     releasedSanxiPairs,
+    flowerAwardCountByPlayer,
     wins: wins.map(win => ({
       winnerId: win.winnerId,
       flowerCount: win.flowerCount,
@@ -320,6 +403,31 @@ export function validateSusongSettlementAudit({
     || !pair.every(playerId => winnerIds.includes(playerId)))) {
     throw new TypeError('released Sanxi relations must connect co-winners of one discard');
   }
+  const flowerAwardCountByPlayer = normalizeFlowerAwardCounts(
+    settlement.flowerAwardCountByPlayer,
+    players
+  );
+  if (config.zeng > 0
+    && players.some(playerId => zeng[playerId] === 0 && flowerAwardCountByPlayer[playerId] !== 0)) {
+    throw new TypeError('a player without zeng cannot receive a flower award');
+  }
+  if (settlement.outcome === 'draw'
+    && Object.values(flowerAwardCountByPlayer).some(count => count !== 0)) {
+    throw new TypeError('draw settlement must cancel flower awards');
+  }
+  if (settlement.outcome === 'discard'
+    && flowerAwardCountByPlayer[settlement.discarderId] !== 0) {
+    throw new TypeError('discarder flower awards must be cancelled');
+  }
+  const expectedFlowerRelations = new Set();
+  if (settlement.outcome !== 'draw') {
+    for (const holderId of players) {
+      if (flowerAwardCountByPlayer[holderId] === 0) continue;
+      for (const payerId of players) {
+        if (payerId !== holderId) expectedFlowerRelations.add(`${payerId}\u0000${holderId}`);
+      }
+    }
+  }
   const expectedRelations = new Set();
   if (hasSanxiMetadata && settlement.outcome !== 'draw') {
     for (const winnerId of winnerIds) {
@@ -340,25 +448,46 @@ export function validateSusongSettlementAudit({
     }
   } else if (settlement.outcome === 'self_draw') {
     if (winnerIds.length !== 1 || settlement.discarderId !== null
-      || settlement.transfers.length !== (hasSanxiMetadata ? expectedRelations.size : players.length - 1)) {
+      || settlement.transfers.length !== (hasSanxiMetadata ? expectedRelations.size : players.length - 1)
+        + expectedFlowerRelations.size) {
       throw new TypeError('self-draw settlement shape is invalid');
     }
   } else {
     const discarderId = member(settlement.discarderId, players, 'discarderId');
     if (winnerIds.length < 1 || winnerIds.length > 3 || winnerIds.includes(discarderId)
-      || settlement.transfers.length !== (hasSanxiMetadata ? expectedRelations.size : winnerIds.length)) {
+      || settlement.transfers.length !== (hasSanxiMetadata ? expectedRelations.size : winnerIds.length)
+        + expectedFlowerRelations.size) {
       throw new TypeError('discard settlement shape is invalid');
     }
   }
 
   const reconstructed = Object.fromEntries(players.map(playerId => [playerId, 0]));
   const relationKeys = new Set();
+  const flowerRelationKeys = new Set();
   for (const [index, transfer] of settlement.transfers.entries()) {
     const payerId = member(transfer?.from, players, 'transfer.from');
     const winnerId = member(transfer?.to, players, 'transfer.to');
-    const tier = tierByWinner.get(winnerId);
     const relationKey = `${payerId}\u0000${winnerId}`;
-    if (!tier || payerId === winnerId || relationKeys.has(relationKey)
+    if (transfer?.kind === 'flower_award') {
+      const count = flowerAwardCountByPlayer[winnerId];
+      const unit = config.scoreTiers[1];
+      const trace = transfer.trace;
+      if (payerId === winnerId || count < 1 || !expectedFlowerRelations.has(relationKey)
+        || flowerRelationKeys.has(relationKey)
+        || transfer.scoreOrderVersion !== SUSONG_SCORE_ORDER_VERSION
+        || !Array.isArray(trace) || trace.length !== 1 || trace[0]?.stage !== 'flower_award'
+        || trace[0].count !== count || trace[0].unit !== unit
+        || trace[0].value !== count * unit || transfer.amount !== count * unit) {
+        throw new TypeError(`settlement.transfers.${index} flower award is invalid`);
+      }
+      flowerRelationKeys.add(relationKey);
+      reconstructed[payerId] -= transfer.amount;
+      reconstructed[winnerId] += transfer.amount;
+      continue;
+    }
+    const tier = tierByWinner.get(winnerId);
+    if ((transfer?.kind !== undefined && transfer.kind !== 'win')
+      || !tier || payerId === winnerId || relationKeys.has(relationKey)
       || transfer.tier !== tier
       || transfer.scoreOrderVersion !== SUSONG_SCORE_ORDER_VERSION) {
       throw new TypeError(`settlement.transfers.${index} relation is invalid`);
@@ -413,6 +542,10 @@ export function validateSusongSettlementAudit({
     && (relationKeys.size !== expectedRelations.size
       || [...expectedRelations].some(key => !relationKeys.has(key)))) {
     throw new TypeError('settlement transfers do not match Sanxi payment relations');
+  }
+  if (flowerRelationKeys.size !== expectedFlowerRelations.size
+    || [...expectedFlowerRelations].some(key => !flowerRelationKeys.has(key))) {
+    throw new TypeError('settlement transfers do not match flower award relations');
   }
   if (!settlement.deltaByPlayer || typeof settlement.deltaByPlayer !== 'object'
     || Array.isArray(settlement.deltaByPlayer)
@@ -472,6 +605,24 @@ function normalizeZeng(value, players) {
     const count = value[playerId];
     if (!Number.isInteger(count) || count < 0) {
       throw new TypeError(`zengByPlayer.${playerId} must be a non-negative integer`);
+    }
+    result[playerId] = count;
+  }
+  return result;
+}
+
+function normalizeFlowerAwardCounts(value, players) {
+  if (value === undefined || value === null) {
+    return Object.fromEntries(players.map(playerId => [playerId, 0]));
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('flowerAwardCountByPlayer must be an object');
+  }
+  const result = {};
+  for (const playerId of players) {
+    const count = value[playerId] ?? 0;
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new TypeError(`flowerAwardCountByPlayer.${playerId} must be a non-negative integer`);
     }
     result[playerId] = count;
   }

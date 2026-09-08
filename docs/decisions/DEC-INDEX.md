@@ -58,9 +58,9 @@
 | DEC-RULE-002 | 吃/碰/杠/补花/抢杠/胡/过及多家胡优先级 | 动作集确认；同时可行动作优先级待旧服样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `MsgXYSSMJ.pb`、回放 opcode |
 | DEC-RULE-003 | 首局庄、庄轮转、多家胡、流局、剩余牌墙和杠后牌 | 上局最先胡者坐庄、流局连庄、剩 14 张流局、一炮多响；首局庄和杠后牌方向待样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt` |
 | DEC-RULE-004 | 底分 1～9 的选择方式及第二档映射 | 1～9 必须选择 4 个递增档；默认 1/2/3/4；第二档用于花奖 | M+APK | USER + RULE | GR | CONFIRMED | 创建房配置及规则文本 |
-| DEC-RULE-005 | 花奖、杠花、出增、飘花、三西/三道规则 | 单方累计吃碰同一对手 3 次建立双方关系；三西额外一份；关系双方同炮双响则解除 | M+APK+USER | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt`、用户 2026-09-07～08 计分及三西样例 |
+| DEC-RULE-005 | 花奖、杠花、出增、飘花、三西/三道规则 | 花奖独立按第二档叠加；单方累计吃碰 3 次建立关系；每条三西独立额外一份；关系双方同炮双响解除 | M+APK+USER | USER + RULE | GR | CONFIRMED（四对子花牌分组待核） | `8931_rule.txt`、用户 2026-09-07～08 计分及三西样例 |
 | DEC-RULE-006 | 无花果、“一察/一素”等术语、数值和触发 | APK 原文术语为“无花果”“一索”；无花果归一索且只能自摸 | M+APK | USER + RULE | GR | CONFIRMED | `8931_rule.txt` |
-| DEC-RULE-007 | 必胡/不必胡、“过圈”和超时默认动作 | 必胡自动胡；不必胡可放弃但必须过圈；超时动作待旧服样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | 创建房配置及规则文本 |
+| DEC-RULE-007 | 必胡/不必胡、“过圈”和超时默认动作 | 必胡自动胡；过圈仅在本人摸牌后解除；倒计时归零继续等待且不代操作 | M+APK+USER | USER + RULE | GR | CONFIRMED | 创建房配置、规则文本、用户 2026-09-08 确认 |
 | DEC-RULE-008 | 小胡/大胡、特殊胡型、≥9、封顶、舍入、零和 | 花数档、九类一索和杠开档确认；多条件叠加/封顶待旧服结算样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt` |
 | DEC-RULE-009 | 4/8/16 局、出增中途调整和房周期边界 | 4/8/16 局；默认 4；房周期内增可加不可减 | M+APK | USER + RULE | GR | CONFIRMED | 创建房配置及规则文本 |
 
@@ -71,7 +71,7 @@
 | BLOCKER-ID | 影响 REQ/RULE/任务 | 缺失决策或证据 | Owner | 截止 | 临时降级 | 解除证据 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | BLOCKER-G0-001 | BE-103 生产接入、CL-102～103、发布合规 | DEC-002 登录和年龄/地区/实名边界 | USER + LEGAL | G0 | fake auth；禁止生产房间 | 已确认 Auth 策略和验收样例 | OPEN |
-| BLOCKER-G0-002 | R-*、BE-301～306 | 已确认采用 8931；三西核心与双方同炮解除已确认，多关系、牌墙细节、花奖封顶和优先级仍缺样本 | USER + RULE | GR | 已验证部分使用 `8931-apk-baseline.3`；缺失部分禁止生产结算 | 旧 App 牌局样本、计分表、≥20 golden cases | OPEN（范围缩小） |
+| BLOCKER-G0-002 | R-*、BE-301～306 | `.4` 已确认花奖、多重三西、首庄、取牌、过圈和超时；精确牌组、完整动作冲突、四对子花牌分组仍缺证据 | USER + RULE | GR | 已验证部分使用 `8931-apk-baseline.4`；缺失部分禁止生产结算 | 旧 App 牌局样本或规则负责人书面确认 | OPEN（范围缩小） |
 | BLOCKER-G0-003 | BE-401～405、Club/Floor | DEC-003～006 俱乐部/楼层/访问权限 | USER/PM | G0 | 只读 mock 数据 | RBAC 与 ruleSnapshot schema 已确认 | OPEN |
 | BLOCKER-G0-004 | BE-501～504 | DEC-008～009 钻石归属和扣费策略 | USER + OPS | G0 | ledger sandbox；不扣真实钻石 | reserve/consume/release/reverse 流程签字 | OPEN |
 | BLOCKER-G0-005 | CL-102～103、OPS-301～304、G1 | Android/iOS 设备、SDK/API/签名清单（鸿蒙已暂缓） | USER + CL | G0/G1 | Dart 原生 transport 与 Flutter/FakeTransport POC 可本机验证；不生成可安装包 | Android+iOS 真机矩阵和签名条件 | OPEN |
@@ -144,6 +144,7 @@
 | 2026-09-08 | USER/AI/DEV | 单方累计吃碰同一对手 3 次建立双方三西；自摸/关系内点炮/第三方点炮分别按额外一份结算；关系双方被同一炮同时胡时解除且不互付 | DEC-RULE-005、BE-304、BE-306、BE-308 | `be-302-susong-scoring.test.js`、`npm run check`（Node 184/184）；Flutter 24/24 |
 | 2026-09-08 | AI/DEV | 将已确认花档、增分、多响和三西规则整理为 20 个独立 JSON golden cases，逐例重算付款、四家 delta、关系解除和审计迹线 | BE-308、QA-301 | `be-308-susong-golden.test.js`（21/21）；待规则负责人整包验收 |
 | 2026-09-08 | AI/DEV | 复核 APK 规则文本、protobuf 与客户端 Lua 字段：旧客户端只消费庄位、倒计时、剩余牌、三西等服务端结果，不能证明取牌方向、过圈解除、超时动作等内部裁决 | DEC-RULE-001/002/003/007/008、QA-301 | [规则验收清单](../rules/SUSONG_RULE_ACCEPTANCE.md)；六类外部证据待 USER + RULE |
+| 2026-09-08 | USER/AI/DEV | 确认随机首庄、牌墙头摸/补花杠后尾补、本人摸牌解除过圈、倒计时归零继续等待；确认花奖独立叠加且三西不含花奖、多条三西逐关系结算 | DEC-RULE-003/005/007、BE-303/305/306/308 | `npm run check`（Node 214/214）；规则版本 `8931-apk-baseline.4` |
 
 ## 8. 变更记录
 
@@ -200,6 +201,7 @@
 | 0.1.49 | 2026-09-08 | 登记三西形成、三类付款、一炮双响解除、权威恢复审计和客户端只读提示 | USER/AI/DEV |
 | 0.1.50 | 2026-09-08 | 登记 20 个机器可执行宿松计分 golden cases 与验收状态 | AI/DEV |
 | 0.1.51 | 2026-09-08 | 登记规则纵切完成审计、APK 证据边界及剩余六类外部确认项 | AI/DEV |
+| 0.1.52 | 2026-09-08 | 登记 `.4` 行牌边界、独立花奖与多重三西服务端纵切 | USER/AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 

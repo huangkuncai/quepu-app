@@ -6,9 +6,11 @@ import {
   flowerUnitsForMeld,
   recordSusongFlowerDraw,
   recordSusongMeldFlowers,
-  resolveSusongFlowers
+  resolveSusongFlowers,
+  SUSONG_RULE_VERSION
 } from './rules/susong.js';
 import {
+  deriveSusongFlowerAwardCounts,
   deriveSusongSanxiPairs,
   scoreSusongRound,
   validateSusongSettlementAudit
@@ -219,7 +221,7 @@ function normalizeDeadlinePolicy(policy) {
     });
   }
   const normalized = {
-    enabled: policy.enabled === true && actionDeadlineMs !== null && timeoutAction !== null,
+    enabled: policy.enabled === true && actionDeadlineMs !== null,
     actionDeadlineMs,
     timeoutAction: timeoutAction === null
       ? null
@@ -342,11 +344,19 @@ export class Room {
     if (snapshot.gameType === undefined) snapshot.gameType = gameType;
     if (snapshot.ruleId === undefined) snapshot.ruleId = ruleId || fallbackRuleVersion;
     if (snapshot.ruleVersion === undefined) snapshot.ruleVersion = fallbackRuleVersion;
-    const configuredDeadlinePolicy = deadlinePolicy
+    let configuredDeadlinePolicy = deadlinePolicy
       ?? snapshot.deadlinePolicy
       ?? snapshot.config?.deadlinePolicy;
+    if (snapshot.ruleId === 'susong_v1' && snapshot.ruleVersion === SUSONG_RULE_VERSION
+      && configuredDeadlinePolicy !== undefined) {
+      configuredDeadlinePolicy = {
+        ...configuredDeadlinePolicy,
+        timeoutAction: null,
+        defaultAction: null
+      };
+    }
     this.deadlinePolicy = normalizeDeadlinePolicy(configuredDeadlinePolicy);
-    if (snapshot.deadlinePolicy === undefined && configuredDeadlinePolicy !== undefined) {
+    if (configuredDeadlinePolicy !== undefined) {
       snapshot.deadlinePolicy = clone(this.deadlinePolicy);
     }
     this.ruleSnapshot = deepFreeze(snapshot);
@@ -1338,6 +1348,10 @@ export class Room {
 
   _settleSusongWin({ outcome, winners, discarderId = null }, command) {
     const playerIds = this._orderedPlayers().map(player => player.id);
+    const flowerAwardCountByPlayer = deriveSusongFlowerAwardCounts({
+      playerIds,
+      replacementHistory: this._privateRoundState?.replacementHistory ?? []
+    });
     let settlement;
     try {
       settlement = scoreSusongRound({
@@ -1352,6 +1366,7 @@ export class Room {
           gangWinCount: winner.gangWinCount
         })),
         zengByPlayer: Object.fromEntries(this.zengByPlayer),
+        flowerAwardCountByPlayer,
         sanxiPairs: deriveSusongSanxiPairs({
           playerIds,
           meldsByPlayer: this.currentRound.meldsByPlayer
@@ -1468,7 +1483,6 @@ export class Room {
     };
     this._privateRoundState = resolvedPrivateState;
     this.currentRound.meldsByPlayer[playerId].push(clone(meld));
-    if (isRecord(this.currentRound.passedHuByPlayer)) this.currentRound.passedHuByPlayer[playerId] = false;
     this.currentRound.flowerStates[playerId] = clone(flowerState);
     this.currentRound.wall.wallRemaining = resolvedPrivateState.remainingWall.length;
     this.currentRound.wall.handCountsByPlayer[playerId] = resolvedPrivateState.handsByPlayer[playerId].length;
@@ -1590,7 +1604,6 @@ export class Room {
     };
     this._privateRoundState = resolvedPrivateState;
     this.currentRound.meldsByPlayer[playerId][candidate.meldIndex] = clone(meld);
-    if (isRecord(this.currentRound.passedHuByPlayer)) this.currentRound.passedHuByPlayer[playerId] = false;
     this.currentRound.flowerStates[playerId] = clone(flowerState);
     this.currentRound.wall.wallRemaining = resolvedPrivateState.remainingWall.length;
     this.currentRound.wall.handCountsByPlayer[playerId] = resolvedPrivateState.handsByPlayer[playerId].length;
@@ -1709,7 +1722,6 @@ export class Room {
       this.currentRound.meldsByPlayer = Object.fromEntries([...this.players.keys()].map(id => [id, []]));
     }
     this.currentRound.meldsByPlayer[playerId].push(clone(meld));
-    if (isRecord(this.currentRound.passedHuByPlayer)) this.currentRound.passedHuByPlayer[playerId] = false;
     this.currentRound.pendingReaction = null;
     if (action === 'exposed_kong' && flowerDisposition === 'discarded') {
       this._advanceSusongTurn(playerId);
@@ -3623,7 +3635,8 @@ function normalizePrivateRoundState(input, players, round) {
       || expectedDeal.wallVersion !== input.wallVersion
       || expectedDeal.shuffleAlgorithm !== input.shuffleAlgorithm
       || expectedDeal.dealAlgorithm !== input.dealAlgorithm
-      || expectedDeal.replacementDrawPolicy !== input.replacementDrawPolicy) {
+      || ![expectedDeal.replacementDrawPolicy, 'tail-v1-provisional']
+        .includes(input.replacementDrawPolicy)) {
       throw new TypeError('deal replay mismatch');
     }
   } catch (cause) {

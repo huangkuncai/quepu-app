@@ -11,6 +11,7 @@ import { createRealtimeServer } from '../src/server.js';
 import { AuthService } from '../src/modules/auth/index.js';
 import { createCommand } from '../src/protocol/index.js';
 import { loadConfig } from '../src/config/index.js';
+import { SUSONG_RULE_VERSION } from '../src/domain/rules/susong.js';
 
 function waitForMessage(ws, predicate = () => true, timeoutMs = 2000) {
   return new Promise((resolve, reject) => {
@@ -127,6 +128,40 @@ test('Room persists an explicit turn deadline and restores it from snapshot', ()
   assert.equal(timedOut.event.payload.timedOut, true);
   assert.equal(timedOut.event.payload.deadlineAt, new Date(now).toISOString());
   assert.equal(restored.turn, 'p2');
+});
+
+test('current Susong rooms show a countdown but never synthesize a timeout action', () => {
+  let now = 1_700_000_000_000;
+  const room = new Room({
+    id: 'susong-wait-forever-room',
+    maxPlayers: 2,
+    ownerId: 'p1',
+    clock: () => now,
+    ruleSnapshot: {
+      gameType: 'mahjong',
+      ruleId: 'susong_v1',
+      ruleVersion: SUSONG_RULE_VERSION,
+      config: {}
+    },
+    deadlinePolicy: {
+      enabled: true,
+      actionDeadlineMs: 100,
+      timeoutAction: 'pass'
+    }
+  });
+  room.join({ id: 'p1' });
+  room.join({ id: 'p2' });
+  room.start({ actorId: 'p1', autoAdvance: true, bypassReady: true });
+
+  assert.equal(room.deadlinePolicy.enabled, true);
+  assert.equal(room.deadlinePolicy.timeoutAction, null);
+  assert.equal(room.currentRound.turnDeadlineAt, new Date(now + 100).toISOString());
+  const scheduler = new DeadlineScheduler({ dispatch: async () => undefined, clock: () => now });
+  assert.equal(scheduler.refresh(room), null);
+  now += 1000;
+  assert.equal(room.turn, 'p1');
+  assert.equal(room.version, 3);
+  scheduler.close();
 });
 
 test('DeadlineScheduler dispatches a persisted RoomActor timeout and arms the next turn', async () => {

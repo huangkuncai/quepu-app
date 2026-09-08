@@ -406,11 +406,13 @@ test('internal RoomService settlement scores and persists through SYSTEM authori
       // Both client-like scoring claims are ignored in favor of Room state.
       flowerState: flowerState(10),
       // This forged input is ignored; settlement reads the Room map above.
-      zengByPlayer: { A: 999, B: 999, C: 999, D: 999 }
+      zengByPlayer: { A: 999, B: 999, C: 999, D: 999 },
+      flowerAwardCountByPlayer: { A: 999, B: 999, C: 999, D: 999 }
     }
   });
   assert.equal(result.snapshot.round.settlement.scoreAuthority, 'server');
   assert.deepEqual(result.snapshot.round.sanxiPairs, [['A', 'B']]);
+  assert.deepEqual(result.snapshot.round.settlement.flowerAwardCountByPlayer, { A: 0, B: 0, C: 0, D: 0 });
   assert.deepEqual(result.snapshot.scores, { A: 60, B: -30, C: -11, D: -19 });
 });
 

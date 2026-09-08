@@ -3,10 +3,10 @@ import { createHash, randomBytes } from 'node:crypto';
 export const SUSONG_WALL_VERSION = 'susong-144-candidate-v1';
 export const SUSONG_SHUFFLE_ALGORITHM = 'sha256-counter-fisher-yates-v1';
 export const SUSONG_DEAL_ALGORITHM = 'dealer-clockwise-4x3-1x1-extra-v1';
-// The reference client proves that flower replacement exists, but not which
-// end of the authoritative wall the legacy server used. Keep that choice
-// versioned and provisional until server captures or signed rules confirm it.
-export const SUSONG_REPLACEMENT_DRAW_POLICY = 'tail-v1-provisional';
+// Confirmed rule: ordinary draws consume the head; flower and kong replacement
+// draws consume the tail. The legacy name remains accepted when replaying old
+// snapshots because both versions used the same deterministic algorithm.
+export const SUSONG_REPLACEMENT_DRAW_POLICY = 'head-live-tail-replacement-v1';
 
 const SUITS = Object.freeze(['characters', 'bamboo', 'dots']);
 const WINDS = Object.freeze(['east', 'south', 'west', 'north']);
