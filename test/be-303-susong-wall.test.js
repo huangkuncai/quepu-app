@@ -630,6 +630,82 @@ test('only the next player receives server-indexed chi choices and can resolve o
   assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
 });
 
+test('authoritative reaction priority is hu over peng over chi regardless of response order', () => {
+  const createPriorityRoom = ({ id, dCanWin }) => {
+    const room = susongRoom(id);
+    room.dealSusongOpeningRound({ seed: '3'.padStart(64, '0'), dealerSeat: 0 }, {
+      actorId: 'system:susong-rule-engine',
+      actorRole: 'SYSTEM'
+    });
+    room.beginPlaying({ actorId: 'A' });
+    room._privateRoundState.handsByPlayer = {
+      A: [
+        'characters-3-1', 'characters-4-1', 'characters-5-1', 'characters-6-1',
+        'characters-7-1', 'characters-8-1', 'characters-9-1',
+        'bamboo-1-1', 'bamboo-2-1', 'bamboo-3-1', 'bamboo-4-1',
+        'bamboo-5-1', 'bamboo-6-1', 'bamboo-7-1'
+      ],
+      B: [
+        'characters-1-1', 'characters-2-1',
+        'bamboo-1-2', 'bamboo-2-2', 'bamboo-3-2', 'bamboo-4-2', 'bamboo-5-2',
+        'bamboo-6-2', 'bamboo-7-2', 'bamboo-8-2', 'bamboo-9-2', 'dots-1-1', 'dots-2-1'
+      ],
+      C: [
+        'characters-3-2', 'characters-3-3',
+        'dots-1-2', 'dots-2-2', 'dots-3-2', 'dots-4-2', 'dots-5-2',
+        'dots-6-2', 'dots-7-2', 'dots-8-2', 'dots-9-2', 'south-1', 'south-2'
+      ],
+      D: dCanWin ? [
+        'characters-1-4', 'characters-2-4',
+        'bamboo-1-4', 'bamboo-2-4', 'bamboo-3-4',
+        'dots-4-4', 'dots-5-4', 'dots-6-4',
+        'east-1', 'east-2', 'east-3', 'north-1', 'north-2'
+      ] : [
+        'characters-1-2', 'characters-1-3', 'characters-1-4',
+        'bamboo-1-3', 'bamboo-2-3', 'bamboo-4-3',
+        'dots-1-3', 'dots-2-3', 'dots-4-3',
+        'east-4', 'south-3', 'west-1', 'north-3'
+      ]
+    };
+    room.currentRound.wall.handCountsByPlayer = Object.fromEntries(
+      Object.entries(room._privateRoundState.handsByPlayer).map(([playerId, hand]) => [playerId, hand.length])
+    );
+    for (const playerId of ['A', 'B', 'C', 'D']) {
+      room.currentRound.flowerStates[playerId] = {
+        ...room.currentRound.flowerStates[playerId],
+        status: 'not_piao',
+        openingFlowers: 1,
+        countedFlowers: 1
+      };
+    }
+    room.applyAction('A', { action: 'discard', args: { tileId: 'characters-3-1' } });
+    return room;
+  };
+
+  const huRoom = createPriorityRoom({ id: 'hu-peng-chi-priority-room', dCanWin: true });
+  assert.equal(huRoom.snapshot({ viewerId: 'B' }).round.availableReactions.includes('chi'), true);
+  huRoom.applyAction('B', { action: 'chi', args: { candidateIndex: 0 } });
+  assert.equal(huRoom.snapshot({ viewerId: 'C' }).round.availableReactions.includes('peng'), true);
+  huRoom.applyAction('C', 'peng');
+  assert.equal(huRoom.snapshot({ viewerId: 'D' }).round.availableReactions.includes('hu'), true);
+  const huResult = huRoom.applyAction('D', 'hu');
+  assert.equal(huResult.event.type, 'ROUND_SETTLING');
+  assert.deepEqual(huResult.settlement.winnerIds, ['D']);
+  assert.deepEqual(huRoom.currentRound.meldsByPlayer.B, []);
+  assert.deepEqual(huRoom.currentRound.meldsByPlayer.C, []);
+
+  const pengRoom = createPriorityRoom({ id: 'peng-chi-priority-room', dCanWin: false });
+  pengRoom.applyAction('B', { action: 'chi', args: { candidateIndex: 0 } });
+  pengRoom.applyAction('C', 'peng');
+  const pengResult = pengRoom.applyAction('D', 'pass');
+  assert.equal(pengResult.resolution.action, 'peng');
+  assert.equal(pengResult.resolution.playerId, 'C');
+  assert.deepEqual(pengRoom.currentRound.meldsByPlayer.B, []);
+  assert.equal(pengRoom.currentRound.meldsByPlayer.C.at(-1).action, 'peng');
+  assert.equal(pengRoom.turn, 'C');
+  assert.equal(pengRoom.currentRound.turnPhase, 'discard');
+});
+
 test('a player cannot immediately discard the same face that was just claimed by chi', () => {
   const room = susongRoom('chi-discard-restriction-room');
   room.dealSusongOpeningRound({ seed: '0'.padStart(64, '0'), dealerSeat: 0 }, {
