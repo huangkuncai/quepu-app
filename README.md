@@ -75,7 +75,7 @@ const app = await createRealtimeServerAsync({ config: loadConfig() });
 
 ## 下一步
 
-1. 汇总宿松麻将至少 20 个签字 golden cases，并用旧服样本补齐首局庄、补牌方向、花奖封顶和多三西关系边界。
+1. 请规则负责人验收已固化的 20 个宿松计分 golden cases，并用旧服样本补齐首局庄、补牌方向、花奖封顶和多三西关系边界。
 2. 将生产运行时切换到已实现的 PostgreSQL（用户、俱乐部、战绩、事件日志）+ Redis（在线状态/锁）适配器，并完成多进程故障演练。
 3. 增加 JWT 登录、俱乐部权限、后台钻石流水与审计日志。
 4. 完成 Flutter Android/iOS 真实客户端适配，并将客服纯文本 REST 接入真实客户端；鸿蒙按当前决定暂缓，严禁把牌局裁判逻辑放在客户端。

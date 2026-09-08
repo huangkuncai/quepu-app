@@ -1,0 +1,22 @@
+[
+  {"id":"flower-1-small","outcome":"self_draw","winners":[["A",1]],"expectedTier":["small"],"expectedTransfers":[["B","A",5],["C","A",5],["D","A",5]],"expectedDelta":{"A":15,"B":-5,"C":-5,"D":-5}},
+  {"id":"flower-4-small-boundary","outcome":"self_draw","winners":[["A",4]],"expectedTier":["small"],"expectedTransfers":[["B","A",5],["C","A",5],["D","A",5]],"expectedDelta":{"A":15,"B":-5,"C":-5,"D":-5}},
+  {"id":"flower-5-big-boundary","outcome":"self_draw","winners":[["A",5]],"expectedTier":["big"],"expectedTransfers":[["B","A",6],["C","A",6],["D","A",6]],"expectedDelta":{"A":18,"B":-6,"C":-6,"D":-6}},
+  {"id":"flower-9-big-boundary","outcome":"self_draw","winners":[["A",9]],"expectedTier":["big"],"expectedTransfers":[["B","A",6],["C","A",6],["D","A",6]],"expectedDelta":{"A":18,"B":-6,"C":-6,"D":-6}},
+  {"id":"flower-10-double-big-boundary","outcome":"self_draw","winners":[["A",10]],"expectedTier":["double_big"],"expectedTransfers":[["B","A",7],["C","A",7],["D","A",7]],"expectedDelta":{"A":21,"B":-7,"C":-7,"D":-7}},
+  {"id":"flower-18-double-big","outcome":"self_draw","winners":[["A",18]],"expectedTier":["double_big"],"expectedTransfers":[["B","A",7],["C","A",7],["D","A",7]],"expectedDelta":{"A":21,"B":-7,"C":-7,"D":-7}},
+  {"id":"no-flower-self-draw-cap","outcome":"self_draw","winners":[["A",0]],"expectedTier":["one_bamboo"],"expectedTransfers":[["B","A",8],["C","A",8],["D","A",8]],"expectedDelta":{"A":24,"B":-8,"C":-8,"D":-8}},
+  {"id":"discard-small","outcome":"discard","discarderId":"B","winners":[["A",4]],"expectedTier":["small"],"expectedTransfers":[["B","A",5]],"expectedDelta":{"A":5,"B":-5,"C":0,"D":0}},
+  {"id":"discard-big","outcome":"discard","discarderId":"B","winners":[["A",5]],"expectedTier":["big"],"expectedTransfers":[["B","A",6]],"expectedDelta":{"A":6,"B":-6,"C":0,"D":0}},
+  {"id":"discard-double-big","outcome":"discard","discarderId":"B","winners":[["A",10]],"expectedTier":["double_big"],"expectedTransfers":[["B","A",7]],"expectedDelta":{"A":7,"B":-7,"C":0,"D":0}},
+  {"id":"user-example-four-flowers","outcome":"self_draw","winners":[["A",4]],"zeng":{"A":2,"B":3,"C":1,"D":5},"expectedTier":["small"],"expectedTransfers":[["B","A",15],["C","A",11],["D","A",19]],"expectedDelta":{"A":45,"B":-15,"C":-11,"D":-19}},
+  {"id":"user-correction-five-flowers","outcome":"self_draw","winners":[["A",5]],"zeng":{"A":2,"B":3,"C":1,"D":5},"expectedTier":["big"],"expectedTransfers":[["B","A",16],["C","A",12],["D","A",20]],"expectedDelta":{"A":48,"B":-16,"C":-12,"D":-20}},
+  {"id":"sanxi-self-draw-extra-share","outcome":"self_draw","winners":[["A",4]],"sanxiPairs":[["A","B"]],"expectedTier":["small"],"expectedTransfers":[["B","A",10],["C","A",5],["D","A",5]],"expectedDelta":{"A":20,"B":-10,"C":-5,"D":-5}},
+  {"id":"sanxi-related-discard-double-share","outcome":"discard","discarderId":"B","winners":[["A",4]],"sanxiPairs":[["A","B"]],"expectedTier":["small"],"expectedTransfers":[["B","A",10]],"expectedDelta":{"A":10,"B":-10,"C":0,"D":0}},
+  {"id":"sanxi-third-party-discard","outcome":"discard","discarderId":"C","winners":[["A",4]],"sanxiPairs":[["A","B"]],"expectedTier":["small"],"expectedTransfers":[["B","A",5],["C","A",5]],"expectedDelta":{"A":10,"B":-5,"C":-5,"D":0}},
+  {"id":"sanxi-related-co-winners-release","outcome":"discard","discarderId":"C","winners":[["A",4],["B",5]],"sanxiPairs":[["A","B"]],"expectedTier":["small","big"],"expectedTransfers":[["C","A",5],["C","B",6]],"expectedDelta":{"A":5,"B":6,"C":-11,"D":0},"expectedReleased":[["A","B"]]},
+  {"id":"one-discard-three-winners","outcome":"discard","discarderId":"D","winners":[["A",4],["B",5],["C",10]],"expectedTier":["small","big","double_big"],"expectedTransfers":[["D","A",5],["D","B",6],["D","C",7]],"expectedDelta":{"A":5,"B":6,"C":7,"D":-18}},
+  {"id":"sanxi-third-party-with-zeng","outcome":"discard","discarderId":"C","winners":[["A",4]],"zeng":{"A":2,"B":3,"C":1,"D":5},"sanxiPairs":[["A","B"]],"expectedTier":["small"],"expectedTransfers":[["B","A",15],["C","A",11]],"expectedDelta":{"A":26,"B":-15,"C":-11,"D":0}},
+  {"id":"sanxi-self-draw-double-big","outcome":"self_draw","winners":[["A",10]],"sanxiPairs":[["A","B"]],"expectedTier":["double_big"],"expectedTransfers":[["B","A",14],["C","A",7],["D","A",7]],"expectedDelta":{"A":28,"B":-14,"C":-7,"D":-7}},
+  {"id":"sanxi-related-discard-with-zeng","outcome":"discard","discarderId":"B","winners":[["A",5]],"zeng":{"A":2,"B":3,"C":1,"D":5},"sanxiPairs":[["A","B"]],"expectedTier":["big"],"expectedTransfers":[["B","A",32]],"expectedDelta":{"A":32,"B":-32,"C":0,"D":0}}
+]
