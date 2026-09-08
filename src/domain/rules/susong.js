@@ -4,7 +4,7 @@ const ZENG_OPTIONS = Object.freeze([0, 1, 2, 3, 5]);
 const PIAO_MODES = Object.freeze(['strong', 'optional']);
 
 export const SUSONG_SCORE_ORDER_VERSION = 'zeng-piao-flower-sanxi-v1';
-export const SUSONG_RULE_VERSION = '8931-apk-baseline.4';
+export const SUSONG_RULE_VERSION = '8931-apk-baseline.5';
 
 export const SUSONG_SPECIAL_HU = Object.freeze([
   'seven_pairs', 'no_flower', 'pure_one_suit', 'mixed_one_suit', 'all_triplets',

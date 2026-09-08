@@ -2,7 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 
 export const SUSONG_WALL_VERSION = 'susong-144-candidate-v1';
 export const SUSONG_SHUFFLE_ALGORITHM = 'sha256-counter-fisher-yates-v1';
-export const SUSONG_DEAL_ALGORITHM = 'dealer-clockwise-4x3-1x1-extra-v1';
+export const SUSONG_DEAL_ALGORITHM = 'dealer-clockwise-4x3-jump-one-idle-one-v2';
+export const LEGACY_SUSONG_DEAL_ALGORITHM = 'dealer-clockwise-4x3-1x1-extra-v1';
 // Confirmed rule: ordinary draws consume the head; flower and kong replacement
 // draws consume the tail. The legacy name remains accepted when replaying old
 // snapshots because both versions used the same deterministic algorithm.
@@ -194,8 +195,13 @@ export function createSusongShuffledWall({ seed } = {}) {
   });
 }
 
-/** Deal 53 opening tiles in four-tile batches, starting from the dealer. */
-export function dealSusongOpeningHands({ wall, playerIds, dealerId } = {}) {
+/** Deal 52 opening tiles: 4x3, dealer jumps one stack, then idle players take one. */
+export function dealSusongOpeningHands({
+  wall,
+  playerIds,
+  dealerId,
+  dealAlgorithm = SUSONG_DEAL_ALGORITHM
+} = {}) {
   const players = normalizePlayers(playerIds);
   const dealer = String(dealerId ?? '').trim();
   const dealerIndex = players.indexOf(dealer);
@@ -211,24 +217,57 @@ export function dealSusongOpeningHands({ wall, playerIds, dealerId } = {}) {
       cursor += 4;
     }
   }
-  for (const playerId of seatOrder) {
-    handsByPlayer[playerId].push(tileIds[cursor]);
+  if (dealAlgorithm === LEGACY_SUSONG_DEAL_ALGORITHM) {
+    for (const playerId of seatOrder) {
+      handsByPlayer[playerId].push(tileIds[cursor]);
+      cursor += 1;
+    }
+    handsByPlayer[dealer].push(tileIds[cursor]);
     cursor += 1;
+  } else if (dealAlgorithm === SUSONG_DEAL_ALGORITHM) {
+    const skippedStack = tileIds.slice(cursor, cursor + 2);
+    cursor += 2;
+    handsByPlayer[dealer].push(tileIds[cursor]);
+    cursor += 1;
+    for (const playerId of seatOrder.slice(1)) {
+      handsByPlayer[playerId].push(tileIds[cursor]);
+      cursor += 1;
+    }
+    const liveWall = tileIds.slice(cursor);
+    return dealResult({
+      wall,
+      dealer,
+      handsByPlayer,
+      players,
+      dealAlgorithm,
+      remainingWall: [...liveWall, ...skippedStack]
+    });
+  } else {
+    throw new TypeError('dealAlgorithm is unsupported');
   }
-  handsByPlayer[dealer].push(tileIds[cursor]);
-  cursor += 1;
 
+  return dealResult({
+    wall,
+    dealer,
+    handsByPlayer,
+    players,
+    dealAlgorithm,
+    remainingWall: tileIds.slice(cursor)
+  });
+}
+
+function dealResult({ wall, dealer, handsByPlayer, players, dealAlgorithm, remainingWall }) {
   return deepFreeze({
     wallVersion: wall.wallVersion,
     shuffleAlgorithm: wall.shuffleAlgorithm,
-    dealAlgorithm: SUSONG_DEAL_ALGORITHM,
+    dealAlgorithm,
     replacementDrawPolicy: SUSONG_REPLACEMENT_DRAW_POLICY,
     seedCommitment: wall.seedCommitment,
     dealerId: dealer,
     handsByPlayer,
     handCountsByPlayer: Object.fromEntries(players.map(playerId => [playerId, handsByPlayer[playerId].length])),
-    remainingWall: tileIds.slice(cursor),
-    wallRemaining: tileIds.length - cursor
+    remainingWall,
+    wallRemaining: remainingWall.length
   });
 }
 

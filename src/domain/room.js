@@ -25,6 +25,7 @@ import {
   getSusongTurnKongCandidates,
   getSusongWinningHand,
   isSusongReplacementFlower,
+  LEGACY_SUSONG_DEAL_ALGORITHM,
   publicSusongWallState,
   susongTileFace,
   verifySusongSeedCommitment
@@ -347,7 +348,8 @@ export class Room {
     let configuredDeadlinePolicy = deadlinePolicy
       ?? snapshot.deadlinePolicy
       ?? snapshot.config?.deadlinePolicy;
-    if (snapshot.ruleId === 'susong_v1' && snapshot.ruleVersion === SUSONG_RULE_VERSION
+    if (snapshot.ruleId === 'susong_v1'
+      && [SUSONG_RULE_VERSION, '8931-apk-baseline.4'].includes(snapshot.ruleVersion)
       && configuredDeadlinePolicy !== undefined) {
       configuredDeadlinePolicy = {
         ...configuredDeadlinePolicy,
@@ -817,7 +819,10 @@ export class Room {
         dealt = dealSusongOpeningHands({
           wall,
           playerIds: players.map(player => player.id),
-          dealerId: dealer.id
+          dealerId: dealer.id,
+          dealAlgorithm: this.ruleVersion === SUSONG_RULE_VERSION
+            ? undefined
+            : LEGACY_SUSONG_DEAL_ALGORITHM
         });
       } catch (cause) {
         throw new AppError('INVALID_ACTION', { cause });
@@ -1171,7 +1176,10 @@ export class Room {
       this.currentRound.startedAt = iso(this.clock);
       this.turn = this._firstTurn();
       this.turnPlayerId = this.turn;
-      this.currentRound.turnPhase = 'discard';
+      const dealerOpeningDraw = this.ruleId === 'susong_v1'
+        && this.ruleVersion === SUSONG_RULE_VERSION
+        && this._privateRoundState !== null;
+      this.currentRound.turnPhase = dealerOpeningDraw ? 'draw' : 'discard';
       this.currentRound.discardsByPlayer = Object.fromEntries([...this.players.keys()].map(playerId => [playerId, []]));
       this.currentRound.meldsByPlayer = Object.fromEntries([...this.players.keys()].map(playerId => [playerId, []]));
       this.currentRound.passedHuByPlayer = Object.fromEntries([...this.players.keys()].map(playerId => [playerId, false]));
@@ -1189,6 +1197,9 @@ export class Room {
         turnStartedAt: this.currentRound.turnStartedAt,
         turnDeadlineAt: this.currentRound.turnDeadlineAt
       }, command);
+      if (dealerOpeningDraw) {
+        return this._applySusongTurnAction(this.turn, 'draw', {}, command);
+      }
       return this._result(event, { matchId: this.matchId, roundId: this.roundId });
     });
   }
@@ -1257,11 +1268,15 @@ export class Room {
     const hand = this._privateRoundState?.handsByPlayer?.[playerId];
     if (!pending || !Array.isArray(hand)) return [];
     if (pending.kind === 'added_kong') return [];
-    return getSusongDiscardReactionCandidates({
+    const candidates = getSusongDiscardReactionCandidates({
       hand,
       tileId: pending.tileId,
       isNextPlayer: pending.responderOrder[0] === playerId
     });
+    if (this.currentRound?.flowerStates?.[playerId]?.status !== 'piao') return candidates;
+    const face = susongTileFace(pending.tileId);
+    if (!['east', 'south', 'west', 'north'].includes(face)) return candidates;
+    return candidates.filter(candidate => !['peng', 'exposed_kong'].includes(candidate.action));
   }
 
   _susongAvailableReactionActions(playerId) {
@@ -1330,7 +1345,10 @@ export class Room {
     if (winSource === 'self_draw') {
       const dealerId = this._orderedPlayers()
         .find(player => player.seat === this.currentRound.dealerSeat)?.id;
-      if (gameplayHistory.length === 0 && playerId === dealerId) {
+      if (playerId === dealerId && (gameplayHistory.length === 0
+        || (gameplayHistory.length === 1
+          && gameplayHistory[0].action === 'draw'
+          && gameplayHistory[0].playerId === dealerId))) {
         patterns.push('heavenly_win');
       } else if (playerId !== dealerId && lastTurnAction === 'draw') {
         const priorGameplay = gameplayHistory.slice(0, -1);
@@ -1428,7 +1446,11 @@ export class Room {
     const hand = this._privateRoundState?.handsByPlayer?.[playerId];
     const melds = this.currentRound?.meldsByPlayer?.[playerId] ?? [];
     if (!Array.isArray(hand)) return [];
-    const candidates = getSusongTurnKongCandidates({ hand, melds });
+    let candidates = getSusongTurnKongCandidates({ hand, melds });
+    if (this.currentRound?.flowerStates?.[playerId]?.status === 'piao') {
+      candidates = candidates.filter(candidate =>
+        !['east', 'south', 'west', 'north'].includes(candidate.face));
+    }
     return action ? candidates.filter(candidate => candidate.action === action) : candidates;
   }
 
@@ -1992,6 +2014,14 @@ export class Room {
 
     const tileId = normalizeId(args?.tileId, 'args.tileId', { max: 128 });
     if (isSusongReplacementFlower(tileId)) throw new AppError('INVALID_ACTION');
+    const latestOwnBoundary = [...privateState.turnHistory].reverse().find(operation =>
+      operation?.playerId === playerId && ['chi', 'draw', 'discard'].includes(operation.action));
+    if (latestOwnBoundary?.action === 'chi'
+      && susongTileFace(latestOwnBoundary.tileId) === susongTileFace(tileId)) {
+      throw new AppError('INVALID_ACTION', {
+        details: [{ path: 'args.tileId', message: 'cannot discard the claimed face immediately after chi' }]
+      });
+    }
     const tileIndex = hand.indexOf(tileId);
     if (tileIndex < 0) throw new AppError('INVALID_ACTION', {
       details: [{ path: 'args.tileId', message: 'tile is not in the player hand' }]
@@ -3466,7 +3496,8 @@ function normalizePrivateRoundState(input, players, round) {
     const expectedDeal = dealSusongOpeningHands({
       wall: expectedWall,
       playerIds: orderedPlayers.map(player => player.id),
-      dealerId: dealer?.id
+      dealerId: dealer?.id,
+      dealAlgorithm: input.dealAlgorithm
     });
     const replayHands = clone(expectedDeal.handsByPlayer);
     let replayWall = [...expectedDeal.remainingWall];

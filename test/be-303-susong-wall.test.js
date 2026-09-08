@@ -15,6 +15,7 @@ import {
   verifySusongSeedCommitment
 } from '../src/domain/rules/susong-wall.js';
 import { scoreSusongRound } from '../src/domain/rules/susong-scoring.js';
+import { createSusongFlowerState, SUSONG_RULE_VERSION } from '../src/domain/rules/susong.js';
 import { Room } from '../src/domain/room.js';
 import { RoomActor } from '../src/domain/room-actor.js';
 import { createMemoryGameStore } from '../src/infra/persistence/index.js';
@@ -45,13 +46,15 @@ test('seeded shuffle is deterministic, unique and auditable', () => {
   assert.equal(verifySusongSeedCommitment('ee'.repeat(32), first.seedCommitment), false);
 });
 
-test('opening deal gives dealer 14, other players 13 and leaves 91 tiles', () => {
+test('opening deal gives all players 13 after the dealer jumps one stack', () => {
   const wall = createSusongShuffledWall({ seed });
   const dealt = dealSusongOpeningHands({ wall, playerIds: players, dealerId: 'C' });
-  assert.deepEqual(dealt.handCountsByPlayer, { A: 13, B: 13, C: 14, D: 13 });
-  assert.equal(dealt.wallRemaining, 91);
+  assert.deepEqual(dealt.handCountsByPlayer, { A: 13, B: 13, C: 13, D: 13 });
+  assert.equal(dealt.wallRemaining, 92);
+  assert.equal(dealt.handsByPlayer.C.at(-1), wall.tileIds[50]);
+  assert.deepEqual(dealt.remainingWall.slice(-2), wall.tileIds.slice(48, 50));
   const allDealt = players.flatMap(playerId => dealt.handsByPlayer[playerId]);
-  assert.equal(allDealt.length, 53);
+  assert.equal(allDealt.length, 52);
   assert.equal(new Set([...allDealt, ...dealt.remainingWall]).size, 144);
   assert.deepEqual([...allDealt, ...dealt.remainingWall].sort(), [...wall.tileIds].sort());
 });
@@ -61,13 +64,44 @@ test('public wall state exposes counts and commitment but no secret material', (
   const dealt = dealSusongOpeningHands({ wall, playerIds: players, dealerId: 'A' });
   const publicState = publicSusongWallState(dealt);
   const serialized = JSON.stringify(publicState);
-  assert.equal(publicState.wallRemaining, 91);
-  assert.deepEqual(publicState.handCountsByPlayer, { A: 14, B: 13, C: 13, D: 13 });
+  assert.equal(publicState.wallRemaining, 92);
+  assert.deepEqual(publicState.handCountsByPlayer, { A: 13, B: 13, C: 13, D: 13 });
   assert.equal(serialized.includes(seed), false);
   assert.equal(serialized.includes('privateSeedHex'), false);
   assert.equal(serialized.includes('tileIds'), false);
   assert.equal(serialized.includes('handsByPlayer'), false);
   assert.equal(serialized.includes('remainingWall'), false);
+});
+
+test('current rule deals 13 each and automatically performs the dealer opening draw', () => {
+  const room = new Room({
+    id: 'current-opening-draw-room',
+    ownerId: 'A',
+    maxPlayers: 4,
+    ruleSnapshot: {
+      gameType: 'mahjong',
+      ruleId: 'susong_v1',
+      ruleVersion: SUSONG_RULE_VERSION,
+      config: { rounds: 4, scoreTiers: [1, 2, 3, 4], zeng: 1, piao: 'optional', forcedHu: false }
+    }
+  });
+  for (const playerId of players) room.join({ id: playerId });
+  for (const playerId of players) room.setReady(playerId);
+  room.start({ actorId: 'A' });
+  room.dealSusongOpeningRound({ seed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  assert.deepEqual(room.currentRound.wall.handCountsByPlayer, { A: 13, B: 13, C: 13, D: 13 });
+  const wallBefore = room.currentRound.wall.wallRemaining;
+
+  room.beginPlaying({ actorId: 'A' });
+
+  assert.equal(room.currentRound.wall.handCountsByPlayer.A, 14);
+  assert.ok(room.currentRound.wall.wallRemaining < wallBefore);
+  assert.equal(room._privateRoundState.turnHistory[0].action, 'draw');
+  assert.deepEqual(room.events.slice(-2).map(event => event.type), ['ROUND_PLAYING', 'SUSONG_TILE_DRAWN']);
+  assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
 });
 
 test('wall and player validation rejects malformed authority input', () => {
@@ -594,6 +628,60 @@ test('only the next player receives server-indexed chi choices and can resolve o
   assert.equal(room.turn, 'B');
   assert.equal(room.currentRound.turnPhase, 'discard');
   assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
+});
+
+test('a player cannot immediately discard the same face that was just claimed by chi', () => {
+  const room = susongRoom('chi-discard-restriction-room');
+  room.dealSusongOpeningRound({ seed: '0'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  room.applyAction('A', { action: 'discard', args: { tileId: 'dots-2-4' } });
+  room.applyAction('B', { action: 'chi', args: { candidateIndex: 0 } });
+  room.applyAction('C', 'pass');
+  room.applyAction('D', 'pass');
+
+  assert.ok(room.snapshot({ viewerId: 'B' }).round.privateHand.includes('dots-2-3'));
+  assert.throws(
+    () => room.applyAction('B', { action: 'discard', args: { tileId: 'dots-2-3' } }),
+    error => error.code === 'INVALID_ACTION'
+      && error.details?.[0]?.message === 'cannot discard the claimed face immediately after chi'
+  );
+});
+
+test('a piao player cannot peng or kong a wind tile', () => {
+  const room = susongRoom('piao-wind-claim-room');
+  room.dealSusongOpeningRound({ seed: 'f'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  room.currentRound.flowerStates.B = createSusongFlowerState({
+    piaoMode: 'strong',
+    initialFlowerCount: 0
+  });
+  room.applyAction('A', { action: 'discard', args: { tileId: 'north-1' } });
+
+  assert.deepEqual(room.snapshot({ viewerId: 'B' }).round.availableReactions, ['pass']);
+  assert.throws(() => room.applyAction('B', 'peng'), error => error.code === 'INVALID_ACTION');
+});
+
+test('a piao player is not offered a concealed wind kong', () => {
+  const room = susongRoom('piao-concealed-wind-kong-room');
+  room.dealSusongOpeningRound({ seed: '5dc'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  room.currentRound.flowerStates.A = createSusongFlowerState({
+    piaoMode: 'strong',
+    initialFlowerCount: 0
+  });
+
+  const viewer = room.snapshot({ viewerId: 'A' });
+  assert.equal(viewer.round.privateHand.filter(tileId => tileId.startsWith('north-')).length, 4);
+  assert.equal(viewer.round.availableActions.includes('concealed_kong'), false);
 });
 
 test('a wind peng adds one authoritative flower while an ordinary peng adds none', () => {
