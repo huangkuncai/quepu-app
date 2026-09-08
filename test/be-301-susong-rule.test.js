@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   SUSONG_DEFAULT_CONFIG,
+  SUSONG_SCORE_ORDER_VERSION,
   classifySusongHu,
   createSusongFlowerState,
   evaluateSusongWin,
@@ -150,11 +151,21 @@ test('room creation freezes normalized 8931 config instead of accepting client s
   const created = await service.createRoom({
     principal: { userId: 'owner-1' },
     commandId: '08d62d0d-d80e-4a62-bc4b-f56f3baa90c4',
-    payload: { ruleId: 'susong_v1', ruleConfig: { times: 8, branch: '1359', zun: 3, piao: 2, hu: 1 } }
+    payload: {
+      ruleSnapshot: {
+        ruleId: 'susong_v1',
+        scoreOrderVersion: 'client-forged-order',
+        config: { times: 8, branch: '1359', zun: 3, piao: 2, hu: 1 }
+      }
+    }
   });
   assert.equal(created.room.maxPlayers, 4);
   assert.equal(created.room.totalRounds, 8);
   assert.equal(created.room.ruleVersion, '8931-apk-baseline.3');
+  assert.equal(
+    created.room.ruleSnapshot.scoreOrderVersion,
+    SUSONG_SCORE_ORDER_VERSION
+  );
   assert.deepEqual(created.room.ruleSnapshot.config, {
     rounds: 8,
     scoreTiers: [1, 3, 5, 9],

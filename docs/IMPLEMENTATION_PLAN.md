@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-08（BE-308 已对已确认计分域完成 10,000 组确定性属性回放，0 divergence，Node 173/173、Flutter 23/23）
+> 最近更新：2026-09-08（BE-302/307 房间规则快照已由服务端冻结计分顺序版本，客户端不可覆盖，Node 173/173、Flutter 23/23）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -336,7 +336,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | ID | 任务 | 依赖 | 主要产出 | 验收 |
 | --- | --- | --- | --- | --- |
 | BE-301 | 牌组、牌 ID、CSPRNG/seed | DEC-RULE-001 | 牌组表、服务端随机、seed hash/算法版本 | 牌数/手牌/补花守恒，未结束牌墙不泄露；IN_PROGRESS（`susong-144-candidate-v1` 已实现稳定牌 ID、无模偏可复现洗牌、seed commitment 和脱敏公共视图；精确构成待旧服牌局样本签字） |
-| BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.3` 配置、飘花状态机和服务端计分核心已实现） |
+| BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.3` 配置、飘花状态机、服务端计分核心和不可由客户端覆盖的 `scoreOrderVersion` 快照已实现） |
 | BE-303 | 发牌、补花、牌墙、庄轮转 | DEC-RULE-002/003 | round state、dealer、wall、deadline | 固定 seed 重现；流局边界正确；IN_PROGRESS（候选开局、连续补花、正常摸出牌与保留 14 张流局已接入 Room/RoomActor/RoomService；私牌及操作历史可按 seed 重放，玩家仅见本人手牌；待跨局庄轮转） |
 | BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝；IN_PROGRESS（draw/discard、手牌归属、三家顺序响应/过牌、按玩家私有候选投影及权威吃/碰/明杠/暗杠/巴杠、抢杠胡、标准胡/七对/清一色/混一色/碰碰胡/全求人/天胡/地胡、自摸、点炮、必胡自动裁决和不必胡过圈均已实现；当前优先级为胡 > 碰/明杠 > 吃；待三西） |
 | BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（增、起手飘花选择、摸花、打/补花、碰风 1 花、普通/风牌明杠、暗杠及巴杠增量花数、杠后尾部连续补牌和可持久化过圈状态均已接入；过圈按 `turn-return-v1-provisional` 在本人实际摸牌或取得出牌权时解除，待旧服样本确认边界） |
@@ -609,6 +609,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.42 | 2026-09-08 | 新增持久结算迹线验证器：按房间配置与当时增分重算五阶段迹线、付款关系和 delta；顺序/算术篡改在事件重放时 fail-closed | `be-302-susong-scoring.test.js` + `be-303-susong-wall.test.js`（49/49）；全量 Node 171/171 |
 | 0.1.43 | 2026-09-08 | 完成 CL-302 单局结算页纵切：横屏展示四家本局 delta/累计积分、胜负关系、结算顺序版本和逐笔增→飘→花→三西明细；客户端不重算分数 | `flutter test`（23/23）、`dart analyze`；整场汇总待 BE-501 |
 | 0.1.44 | 2026-09-08 | 新增 BE-308 确定性属性回放：固定 PRNG 种子生成 10,000 组已签计分输入，验证重算相等、四家零和和迹线逐项可审计；增加无花果自摸封顶属性 | `be-308-susong-properties.test.js`（2/2，10,000 组 0 divergence）；全量 Node 173/173 |
+| 0.1.45 | 2026-09-08 | 将 `scoreOrderVersion` 加入宿松规则定义和新房间不可变规则快照；建房过程始终使用服务端注册版本，忽略客户端伪造值 | `be-301-susong-rule.test.js`（12/12）；全量 Node 173/173 |
 
 ## 16. 我们下一次具体做什么
 

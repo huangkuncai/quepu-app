@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { Room, stableCommandString } from '../../domain/room.js';
-import { normalizeSusongConfig, susongRule } from '../../domain/rules/susong.js';
+import {
+  normalizeSusongConfig,
+  SUSONG_SCORE_ORDER_VERSION,
+  susongRule
+} from '../../domain/rules/susong.js';
 import { scoreSusongRound } from '../../domain/rules/susong-scoring.js';
 import { AppError } from '../../shared/errors.js';
 
@@ -194,6 +198,7 @@ export class RoomService {
           gameType: 'mahjong',
           ruleId: susongRule.id,
           ruleVersion: susongRule.version,
+          scoreOrderVersion: SUSONG_SCORE_ORDER_VERSION,
           config
         };
         totalRounds = config.rounds;

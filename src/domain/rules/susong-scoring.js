@@ -1,6 +1,7 @@
 import {
   evaluateSusongWin,
-  normalizeSusongConfig
+  normalizeSusongConfig,
+  SUSONG_SCORE_ORDER_VERSION
 } from './susong.js';
 
 const TIER_INDEX = Object.freeze({
@@ -10,7 +11,7 @@ const TIER_INDEX = Object.freeze({
   one_bamboo: 3
 });
 
-export const SUSONG_SCORE_ORDER_VERSION = 'zeng-piao-flower-sanxi-v1';
+export { SUSONG_SCORE_ORDER_VERSION } from './susong.js';
 
 /**
  * Produce an immutable, zero-sum settlement from server-owned round facts.
