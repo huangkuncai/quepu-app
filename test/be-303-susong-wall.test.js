@@ -307,13 +307,22 @@ test('next Susong round assigns the first winner as dealer and rejects a dealer 
   });
   room.beginPlaying({ actorId: 'A' });
   settleSusongFixture(room, {
-    outcome: 'self_draw',
-    winners: [{
-      winnerId: 'C',
-      flowerState: room.currentRound.flowerStates.C,
-      patterns: [],
-      gangWinCount: 0
-    }]
+    outcome: 'discard',
+    discarderId: 'A',
+    winners: [
+      {
+        winnerId: 'C',
+        flowerState: room.currentRound.flowerStates.C,
+        patterns: [],
+        gangWinCount: 0
+      },
+      {
+        winnerId: 'B',
+        flowerState: room.currentRound.flowerStates.B,
+        patterns: [],
+        gangWinCount: 0
+      }
+    ]
   });
   room.nextRound({ actorId: 'A' });
   const beforeDealing = room.persistenceSnapshot();
@@ -1406,4 +1415,72 @@ test('RoomService advances, assigns and deals the next Susong round atomically',
   assert.equal(result.room.round.dealerSeat, 2);
   assert.equal(result.room.round.wall.handCountsByPlayer.C, 14);
   assert.equal('privateRoundState' in result.room, false);
+});
+
+test('durable next-round retries do not duplicate dealer or wall events', async () => {
+  const store = createMemoryGameStore();
+  const room = susongRoom('durable-next-round-room');
+  room.dealSusongOpeningRound({ seed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  settleSusongFixture(room, {
+    outcome: 'self_draw',
+    winners: [{
+      winnerId: 'D',
+      flowerState: room.currentRound.flowerStates.D,
+      patterns: [],
+      gangWinCount: 0
+    }]
+  });
+  const actor = new RoomActor({
+    room,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'next-round-actor-1'
+  });
+  const registry = {
+    get: roomId => roomId === room.id ? actor : null,
+    recover: async () => null,
+    dispatch: (roomId, command, context) => actor.dispatch(command, context)
+  };
+  const service = new RoomService({ registry });
+  const previousVersion = room.version;
+  const request = {
+    roomId: room.id,
+    principal: { userId: 'A', role: 'USER' },
+    type: 'next_round',
+    payload: {},
+    commandId: 'durable-next-round-command',
+    requestId: 'durable-next-round-request',
+    roomVersion: previousVersion
+  };
+  const first = await service.dispatch(request);
+  const versionAfterFirst = actor.version;
+  const eventsAfterFirst = await store.eventStore.getEvents(room.id, { afterVersion: previousVersion });
+  assert.deepEqual(eventsAfterFirst.map(event => event.type), [
+    'NEXT_ROUND',
+    'ROUND_DEALING',
+    'SUSONG_ROUND_DEALT'
+  ]);
+  assert.equal(first.room.round.dealerSeat, 3);
+
+  const replay = await service.dispatch(request);
+  assert.equal(actor.version, versionAfterFirst);
+  assert.deepEqual(replay.room, first.room);
+  assert.equal(
+    (await store.eventStore.getEvents(room.id, { afterVersion: previousVersion })).length,
+    eventsAfterFirst.length
+  );
+
+  const restarted = new RoomActor({
+    roomId: room.id,
+    eventStore: store.eventStore,
+    lock: store.lock,
+    actorId: 'next-round-actor-2'
+  });
+  await restarted.recover();
+  assert.deepEqual(restarted.snapshot({ viewerId: 'A' }), actor.snapshot({ viewerId: 'A' }));
+  assert.equal(restarted.room.currentRound.dealerSeat, 3);
 });
