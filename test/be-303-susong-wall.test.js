@@ -960,6 +960,97 @@ test('a legal robbing-kong winner cancels the added kong and charges its declare
   assert.equal(room._privateRoundState.handsByPlayer.B.includes('characters-9-1'), true);
 });
 
+test('one added kong can be robbed by multiple authoritative winners', () => {
+  const room = susongRoom('multi-robbing-kong-room');
+  room.dealSusongOpeningRound({ seed: '1'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  advanceSusongToAddedKong(room);
+  room._privateRoundState.handsByPlayer.C = [
+    'characters-1-1', 'characters-2-1', 'characters-3-1',
+    'bamboo-1-1', 'bamboo-2-1', 'bamboo-3-1',
+    'dots-4-1', 'dots-5-1', 'dots-6-1',
+    'east-1', 'east-2', 'east-3', 'characters-9-2'
+  ];
+  room._privateRoundState.handsByPlayer.D = [
+    'characters-4-1', 'characters-5-1', 'characters-6-1',
+    'bamboo-4-1', 'bamboo-5-1', 'bamboo-6-1',
+    'dots-1-1', 'dots-2-1', 'dots-3-1',
+    'south-1', 'south-2', 'south-3', 'characters-9-3'
+  ];
+  for (const playerId of ['C', 'D']) {
+    room.currentRound.flowerStates[playerId] = {
+      ...room.currentRound.flowerStates[playerId],
+      status: 'not_piao',
+      openingFlowers: 1,
+      countedFlowers: 1
+    };
+  }
+  room.applyAction('B', { action: 'added_kong', args: { candidateIndex: 0 } });
+
+  assert.deepEqual(room.snapshot({ viewerId: 'C' }).round.availableReactions, ['pass', 'hu']);
+  room.applyAction('C', 'hu');
+  assert.deepEqual(room.snapshot({ viewerId: 'D' }).round.availableReactions, ['pass', 'hu']);
+  room.applyAction('D', 'hu');
+  const result = room.applyAction('A', 'pass');
+
+  assert.equal(result.event.type, 'ROUND_SETTLING');
+  assert.deepEqual(result.settlement.winnerIds, ['C', 'D']);
+  assert.equal(result.settlement.discarderId, 'B');
+  assert.deepEqual(result.settlement.wins.map(win => win.tier), ['one_bamboo', 'one_bamboo']);
+  assert.deepEqual(result.settlement.transfers.map(transfer => [transfer.from, transfer.to]), [
+    ['B', 'C'],
+    ['B', 'D']
+  ]);
+  assert.equal(room.currentRound.meldsByPlayer.B[1].action, 'peng');
+  assert.equal(room._privateRoundState.handsByPlayer.B.includes('characters-9-1'), true);
+});
+
+test('passing a legal robbing-kong win enters pass-hu until the player draws', () => {
+  const room = susongRoom('pass-robbing-kong-room');
+  room.dealSusongOpeningRound({ seed: '1'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  advanceSusongToAddedKong(room);
+  room._privateRoundState.handsByPlayer.C = [
+    'characters-1-1', 'characters-2-1', 'characters-3-1',
+    'bamboo-1-1', 'bamboo-2-1', 'bamboo-3-1',
+    'dots-4-1', 'dots-5-1', 'dots-6-1',
+    'east-1', 'east-2', 'east-3', 'characters-9-2'
+  ];
+  room.currentRound.flowerStates.C = {
+    ...room.currentRound.flowerStates.C,
+    status: 'not_piao',
+    openingFlowers: 1,
+    countedFlowers: 1
+  };
+  room.applyAction('B', { action: 'added_kong', args: { candidateIndex: 0 } });
+
+  assert.deepEqual(room.snapshot({ viewerId: 'C' }).round.availableReactions, ['pass', 'hu']);
+  room.applyAction('C', 'pass');
+  assert.equal(room.currentRound.passedHuByPlayer.C, true);
+  room.applyAction('D', 'pass');
+  room.applyAction('A', 'pass');
+  assert.equal(room.currentRound.passedHuByPlayer.C, true);
+
+  const bHand = room.snapshot({ viewerId: 'B' }).round.privateHand;
+  const discardTileId = bHand.find(tileId => !isSusongReplacementFlower(tileId));
+  room.applyAction('B', { action: 'discard', args: { tileId: discardTileId } });
+  assert.equal(room.snapshot({ viewerId: 'C' }).round.availableReactions.includes('hu'), false);
+  room.applyAction('C', 'pass');
+  room.applyAction('D', 'pass');
+  room.applyAction('A', 'pass');
+  assert.equal(room.turn, 'C');
+  assert.equal(room.currentRound.turnPhase, 'draw');
+  assert.equal(room.currentRound.passedHuByPlayer.C, true);
+  room.applyAction('C', 'draw');
+  assert.equal(room.currentRound.passedHuByPlayer.C, false);
+});
+
 test('a discard win is recognized and settled entirely from authoritative room state', () => {
   const room = susongRoom('discard-win-room');
   room.dealSusongOpeningRound({ seed: 'e68'.padStart(64, '0'), dealerSeat: 0 }, {

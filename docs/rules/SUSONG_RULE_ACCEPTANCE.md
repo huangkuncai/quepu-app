@@ -7,7 +7,7 @@
 
 | 范围 | 服务端行为 | 主要证据 |
 | --- | --- | --- |
-| 巴杠/抢杠胡 | 巴杠声明期间不改牌组、私牌或牌墙；三家响应后，有胡则取消巴杠并由声明者点炮，无胡才升级并补牌 | `test/be-303-susong-wall.test.js` |
+| 巴杠/抢杠胡 | 巴杠声明期间不改牌组、私牌或牌墙；三家响应后，有胡则取消巴杠并由声明者点炮，无胡才升级并补牌；允许多人同时抢杠胡并分别结算 | `test/be-303-susong-wall.test.js` |
 | 首庄与取牌 | 首局庄家由服务端随机产生；普通摸牌取牌墙头，补花和杠后补牌取牌墙尾 | `test/be-303-susong-wall.test.js` |
 | 过圈 | 不必胡时放弃点炮胡/抢杠胡后屏蔽后续点炮胡；自摸不受影响；仅在本人随后实际摸牌后解除，吃碰杠取得出牌权不解除 | `test/be-303-susong-wall.test.js` |
 | 超时 | 倒计时可降到 0，但服务端继续等待，不自动过、不托管、不代替玩家执行动作 | `test/be-204-room-deadline-integration.test.js` |
@@ -23,7 +23,7 @@
 | 权威与恢复 | 三西从公开牌组历史重算；客户端关系、分数、缺失关系或伪造解除不能通过持久化审计 | `src/domain/room.js`、`src/domain/rules/susong-scoring.js` |
 | 计分回归 | 22 个 JSON golden cases + 固定种子 10,000 组属性回放，校验档位、付款、四家零和及迹线 | `test/fixtures/rules/susong-scoring-golden.json`、`test/be-308-susong-properties.test.js` |
 
-当前质量门：`npm run check` 为 Node 218/218；Flutter 24/24，静态分析无问题。
+当前质量门：`npm run check` 为 Node 220/220；Flutter 24/24，静态分析无问题。
 
 ## 2. APK 能证明与不能证明的边界
 
