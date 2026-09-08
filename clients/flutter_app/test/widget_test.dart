@@ -306,6 +306,21 @@ void main() {
                 transfer('B', 15, 6),
                 transfer('C', 11, 2),
                 transfer('D', 19, 10),
+                {
+                  'kind': 'flower_award',
+                  'from': 'B',
+                  'to': 'poc-user',
+                  'amount': 12,
+                  'scoreOrderVersion': 'zeng-piao-flower-sanxi-v1',
+                  'trace': [
+                    {
+                      'stage': 'flower_award',
+                      'count': 2,
+                      'unit': 6,
+                      'value': 12,
+                    },
+                  ],
+                },
               ],
             },
           },
@@ -323,6 +338,8 @@ void main() {
     expect(find.text('-15'), findsOneWidget);
     expect(find.textContaining('玩家B → 演示玩家  15 分'), findsOneWidget);
     expect(find.textContaining('赢家增 4  →  付款家增 6'), findsOneWidget);
+    expect(find.textContaining('花奖 · 玩家B → 演示玩家  12 分'), findsOneWidget);
+    expect(find.textContaining('花奖 ×2（第二档 6）'), findsOneWidget);
     expect(find.text('开始下一局'), findsOneWidget);
     await tester.tap(find.text('开始下一局'));
     await tester.pump(const Duration(milliseconds: 30));

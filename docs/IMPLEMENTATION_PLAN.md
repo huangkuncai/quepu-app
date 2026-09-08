@@ -620,6 +620,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.53 | 2026-09-08 | 新增 20 个独立 JSON 计分 golden cases，覆盖花档、无花果、增分、多响和三西核心；每例校验档位、逐笔付款、四家 delta、解除关系及服务端审计 | `be-308-susong-golden.test.js`（21/21）；`npm run check`（Node 205/205） |
 | 0.1.54 | 2026-09-08 | 完成规则纵切收尾审计：逐项核验巴杠/抢杠胡、过圈、三西与 golden 证据；复核 APK 规则文本、protobuf 和客户端 Lua 字段，确认剩余六类边界必须由旧服样本或规则负责人决定 | [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md)；未决项保持 provisional/fail-closed |
 | 0.1.55 | 2026-09-08 | 规则版本升至 `8931-apk-baseline.4`：确认随机首庄、牌墙头摸/尾补、仅本人摸牌解除过圈、倒计时归零继续等待；实现独立花奖转账、重叠组合、点炮/流局取消和多重三西逐关系结算 | `npm run check`（Node 214/214）；Flutter 24/24 |
+| 0.1.56 | 2026-09-08 | CL-302 结算页识别服务端 `flower_award` 独立转账，展示奖数、第二底分档单价和付款关系，不在客户端重算或混入三西倍数 | `dart analyze`、`flutter test`（24/24） |
 
 ## 16. 我们下一次具体做什么
 

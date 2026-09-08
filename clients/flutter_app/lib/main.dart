@@ -1725,6 +1725,8 @@ class _SettlementTransferCard extends StatelessWidget {
           'payer_zeng' => '付款家增 ${stage['value'] ?? 0}',
           'piao' => stage['status'] == 'piao' ? '飘花' : '不飘花',
           'flower_tier' => '花档 ${stage['value'] ?? 0}',
+          'flower_award' =>
+            '花奖 ×${stage['count'] ?? 0}（第二档 ${stage['unit'] ?? 0}）',
           'sanxi' when stage['sanxiShare'] == 1 && stage['regularShare'] == 0 =>
             '三西加付 ×1',
           'sanxi' when stage['sanxiShare'] == 1 =>
@@ -1746,7 +1748,7 @@ class _SettlementTransferCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${_settlementPlayerName(players, from)} → ${_settlementPlayerName(players, to)}  ${transfer['amount'] ?? 0} 分',
+              '${transfer['kind'] == 'flower_award' ? '花奖 · ' : ''}${_settlementPlayerName(players, from)} → ${_settlementPlayerName(players, to)}  ${transfer['amount'] ?? 0} 分',
               style: const TextStyle(
                 color: Color(0xffffd369),
                 fontWeight: FontWeight.w900,
