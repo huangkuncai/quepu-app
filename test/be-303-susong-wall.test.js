@@ -804,6 +804,11 @@ test('a discard win is recognized and settled entirely from authoritative room s
   assert.equal(room.status, 'settling');
   assert.deepEqual(result.settlement.winnerIds, ['D']);
   assert.equal(result.settlement.outcome, 'discard');
+  assert.equal(result.settlement.scoreOrderVersion, 'zeng-piao-flower-sanxi-v1');
+  assert.deepEqual(
+    result.settlement.transfers[0].trace.map(item => item.stage),
+    ['winner_zeng', 'payer_zeng', 'piao', 'flower_tier', 'sanxi']
+  );
   assert.equal(result.settlement.discarderId, 'A');
   assert.deepEqual(result.settlement.deltaByPlayer, { A: -1, B: 0, C: 0, D: 1 });
   assert.deepEqual(room.snapshot().scores, { A: -1, B: 0, C: 0, D: 1 });
@@ -895,7 +900,13 @@ test('RoomActor persists an automatic forced-hu discard and settlement atomicall
   }, { actorId: 'A' });
 
   assert.equal(result.event.type, 'ROUND_SETTLING');
-  assert.equal(store.eventStore.getSnapshot(room.id).status, 'settling');
+  const durable = store.eventStore.getSnapshot(room.id);
+  assert.equal(durable.status, 'settling');
+  assert.equal(durable.round.settlement.scoreOrderVersion, 'zeng-piao-flower-sanxi-v1');
+  assert.deepEqual(
+    durable.round.settlement.transfers[0].trace.map(item => item.stage),
+    ['winner_zeng', 'payer_zeng', 'piao', 'flower_tier', 'sanxi']
+  );
   const restarted = new RoomActor({
     roomId: room.id,
     eventStore: store.eventStore,
@@ -905,6 +916,10 @@ test('RoomActor persists an automatic forced-hu discard and settlement atomicall
   });
   await restarted.recover();
   assert.deepEqual(restarted.snapshot(), actor.snapshot());
+  assert.deepEqual(
+    restarted.snapshot().round.settlement,
+    actor.snapshot().round.settlement
+  );
 });
 
 test('a legal self-draw is privately projected and settled without client-authored facts', () => {
@@ -1064,6 +1079,9 @@ test('Susong live wall settles as a zero-score draw at the reserved 14-tile boun
   assert.equal(result.reason, 'WALL_RESERVED_14');
   assert.ok(room.currentRound.wall.wallRemaining >= 14);
   assert.ok(room.currentRound.wall.wallRemaining <= 15);
+  assert.equal(result.settlement.scoreOrderVersion, 'zeng-piao-flower-sanxi-v1');
+  assert.equal(result.settlement.scoreAuthority, 'server');
+  assert.deepEqual(result.settlement.transfers, []);
   assert.deepEqual(result.settlement.deltaByPlayer, { A: 0, B: 0, C: 0, D: 0 });
   assert.equal(room.turn, null);
   assert.equal(room.currentRound.turnPhase, null);

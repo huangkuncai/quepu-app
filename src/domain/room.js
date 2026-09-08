@@ -1793,15 +1793,11 @@ export class Room {
 
   _settleSusongWallDraw(command) {
     const players = this._orderedPlayers().map(player => player.id);
-    const settlement = {
-      scoreAuthority: 'server',
-      outcome: 'draw',
-      winnerIds: [],
-      discarderId: null,
-      wins: [],
-      transfers: [],
-      deltaByPlayer: Object.fromEntries(players.map(playerId => [playerId, 0]))
-    };
+    const settlement = scoreSusongRound({
+      config: this.ruleSnapshot.config,
+      playerIds: players,
+      outcome: 'draw'
+    });
     this._setStatus(ROOM_STATUS.SETTLING);
     this.currentRound.status = ROOM_STATUS.SETTLING;
     this.currentRound.settlement = clone(settlement);
