@@ -227,6 +227,93 @@ void main() {
     },
   );
 
+  testWidgets('settlement page renders only server-provided totals and trace', (
+    tester,
+  ) async {
+    final transport = FakeTransport();
+    await tester.pumpWidget(SusongApp(transport: transport));
+    await tester.tap(find.text('进入大厅'));
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.tap(find.text('创建演示房'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认创建'));
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.tap(find.text('进入牌桌'));
+    await tester.pumpAndSettle();
+
+    Map<String, dynamic> transfer(String from, int amount, int payerZeng) => {
+      'from': from,
+      'to': 'poc-user',
+      'amount': amount,
+      'tier': 'small',
+      'scoreOrderVersion': 'zeng-piao-flower-sanxi-v1',
+      'trace': [
+        {'stage': 'winner_zeng', 'value': 4},
+        {'stage': 'payer_zeng', 'value': payerZeng},
+        {'stage': 'piao', 'status': 'not_piao', 'value': 0},
+        {'stage': 'flower_tier', 'value': 5},
+        {'stage': 'sanxi', 'multiplier': 1, 'value': amount},
+      ],
+    };
+
+    transport.inject({
+      'protocolVersion': '1.0',
+      'type': 'room_event',
+      'eventId': '22222222-2222-4222-8222-222222222222',
+      'roomId': 'demo-room',
+      'roomVersion': 1,
+      'payload': {
+        'snapshot': {
+          'id': 'demo-room',
+          'roomId': 'demo-room',
+          'ownerId': 'poc-user',
+          'status': 'settling',
+          'maxPlayers': 4,
+          'connectedCount': 4,
+          'roundNumber': 1,
+          'totalRounds': 8,
+          'players': [
+            {
+              'id': 'poc-user',
+              'displayName': '演示玩家',
+              'seat': 0,
+              'connected': true,
+            },
+            {'id': 'B', 'displayName': '玩家B', 'seat': 1, 'connected': true},
+            {'id': 'C', 'displayName': '玩家C', 'seat': 2, 'connected': true},
+            {'id': 'D', 'displayName': '玩家D', 'seat': 3, 'connected': true},
+          ],
+          'scores': {'poc-user': 45, 'B': -15, 'C': -11, 'D': -19},
+          'round': {
+            'roundNumber': 1,
+            'settlement': {
+              'scoreAuthority': 'server',
+              'scoreOrderVersion': 'zeng-piao-flower-sanxi-v1',
+              'outcome': 'self_draw',
+              'deltaByPlayer': {'poc-user': 45, 'B': -15, 'C': -11, 'D': -19},
+              'transfers': [
+                transfer('B', 15, 6),
+                transfer('C', 11, 2),
+                transfer('D', 19, 10),
+              ],
+            },
+          },
+        },
+      },
+      'occurredAt': DateTime.now().toUtc().toIso8601String(),
+    });
+    await tester.pump(const Duration(milliseconds: 80));
+
+    expect(find.text('单局结算 · 自摸'), findsOneWidget);
+    expect(find.text('服务端计分明细'), findsOneWidget);
+    expect(find.text('zeng-piao-flower-sanxi-v1'), findsOneWidget);
+    expect(find.text('+45'), findsOneWidget);
+    expect(find.text('-15'), findsOneWidget);
+    expect(find.textContaining('玩家B → 演示玩家  15 分'), findsOneWidget);
+    expect(find.textContaining('赢家增 4  →  付款家增 6'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('connection card exposes safe disconnect and maintenance retry', (
     tester,
   ) async {

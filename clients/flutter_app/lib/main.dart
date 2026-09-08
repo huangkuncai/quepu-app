@@ -1105,11 +1105,21 @@ class _RoomTable extends StatelessWidget {
         _positiveInt(room['connectedCount']) ??
         players.where((player) => player['connected'] == true).length;
     final round = _dynamicMap(room['round']);
+    final settlement = _dynamicMap(round?['settlement']);
     final privateHand = _stringValues(round?['privateHand']);
     final availableActions = _stringValues(round?['availableActions']);
     final availableReactions = _stringValues(round?['availableReactions']);
     final hasAuthoritativeActions =
         availableActions.isNotEmpty || availableReactions.isNotEmpty;
+    if (settlement != null && (status == 'settling' || status == 'finished')) {
+      return _RoomSettlementTable(
+        room: room,
+        round: round!,
+        settlement: settlement,
+        players: players,
+        snapshot: snapshot,
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) => ListView(
         padding: const EdgeInsets.all(12),
@@ -1366,6 +1376,249 @@ class _RoomTable extends StatelessWidget {
       }
     }
   }
+}
+
+class _RoomSettlementTable extends StatelessWidget {
+  const _RoomSettlementTable({
+    required this.room,
+    required this.round,
+    required this.settlement,
+    required this.players,
+    required this.snapshot,
+  });
+
+  final Map<String, dynamic> room;
+  final Map<String, dynamic> round;
+  final Map<String, dynamic> settlement;
+  final List<Map<String, dynamic>> players;
+  final ClientSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final deltas = _dynamicMap(settlement['deltaByPlayer']) ?? const {};
+    final scores = _dynamicMap(room['scores']) ?? const {};
+    final transfers = settlement['transfers'] is List
+        ? List<Object?>.from(settlement['transfers'] as List)
+        : const <Object?>[];
+    final outcome = switch (settlement['outcome']?.toString()) {
+      'self_draw' => '自摸',
+      'discard' => '点炮',
+      'draw' => '流局',
+      _ => '已结算',
+    };
+    final orderedPlayers = [...players]
+      ..sort(
+        (left, right) => (_intValue(left['seat']) ?? 0).compareTo(
+          _intValue(right['seat']) ?? 0,
+        ),
+      );
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          SizedBox(
+            height: constraints.maxHeight - 24,
+            child: Column(
+              children: [
+                _RoomStatusStrip(
+                  status: '单局结算 · $outcome',
+                  version: snapshot.roomVersion,
+                  connected: _positiveInt(room['connectedCount']) ?? 0,
+                  maxPlayers: _positiveInt(room['maxPlayers']) ?? 4,
+                  ready: _positiveInt(room['readyCount']) ?? 0,
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: Card(
+                          margin: EdgeInsets.zero,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  '第 ${_intValue(round['roundNumber']) ?? '—'} 局积分',
+                                  style: const TextStyle(
+                                    color: Color(0xffffe4a3),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Expanded(
+                                  child: ListView.separated(
+                                    itemCount: orderedPlayers.length,
+                                    separatorBuilder: (_, _) =>
+                                        const Divider(height: 1),
+                                    itemBuilder: (context, index) {
+                                      final player = orderedPlayers[index];
+                                      final playerId =
+                                          player['id']?.toString() ??
+                                          player['playerId']?.toString() ??
+                                          '';
+                                      final delta =
+                                          _intValue(deltas[playerId]) ?? 0;
+                                      final total =
+                                          _intValue(scores[playerId]) ?? 0;
+                                      return ListTile(
+                                        dense: true,
+                                        leading: CircleAvatar(
+                                          child: Text('${index + 1}'),
+                                        ),
+                                        title: Text(_playerName(player)),
+                                        subtitle: Text('累计 $total 分'),
+                                        trailing: Text(
+                                          delta > 0 ? '+$delta' : '$delta',
+                                          style: TextStyle(
+                                            color: delta > 0
+                                                ? const Color(0xffffd369)
+                                                : delta < 0
+                                                ? const Color(0xffff8d78)
+                                                : const Color(0xffc6e0da),
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 6,
+                        child: Card(
+                          margin: EdgeInsets.zero,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const Text(
+                                  '服务端计分明细',
+                                  style: TextStyle(
+                                    color: Color(0xffffe4a3),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                Text(
+                                  settlement['scoreOrderVersion']?.toString() ??
+                                      '未提供迹线版本',
+                                  style: const TextStyle(
+                                    color: Color(0xffaec8c1),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Expanded(
+                                  child: transfers.isEmpty
+                                      ? const Center(child: Text('流局·本局积分不变'))
+                                      : ListView.separated(
+                                          itemCount: transfers.length,
+                                          separatorBuilder: (_, _) =>
+                                              const SizedBox(height: 7),
+                                          itemBuilder: (context, index) {
+                                            final transfer =
+                                                _dynamicMap(transfers[index]) ??
+                                                const {};
+                                            return _SettlementTransferCard(
+                                              transfer: transfer,
+                                              players: players,
+                                            );
+                                          },
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettlementTransferCard extends StatelessWidget {
+  const _SettlementTransferCard({
+    required this.transfer,
+    required this.players,
+  });
+
+  final Map<String, dynamic> transfer;
+  final List<Map<String, dynamic>> players;
+
+  @override
+  Widget build(BuildContext context) {
+    final from = transfer['from']?.toString();
+    final to = transfer['to']?.toString();
+    final trace = transfer['trace'] is List
+        ? List<Object?>.from(transfer['trace'] as List)
+        : const <Object?>[];
+    final labels = trace.map(_dynamicMap).whereType<Map<String, dynamic>>().map(
+      (stage) {
+        return switch (stage['stage']?.toString()) {
+          'winner_zeng' => '赢家增 ${stage['value'] ?? 0}',
+          'payer_zeng' => '付款家增 ${stage['value'] ?? 0}',
+          'piao' => stage['status'] == 'piao' ? '飘花' : '不飘花',
+          'flower_tier' => '花档 ${stage['value'] ?? 0}',
+          'sanxi' => '三西 ×${stage['multiplier'] ?? 1}',
+          _ => stage['stage']?.toString() ?? '未知阶段',
+        };
+      },
+    ).toList();
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0x33000000),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0x337fffff)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${_settlementPlayerName(players, from)} → ${_settlementPlayerName(players, to)}  ${transfer['amount'] ?? 0} 分',
+              style: const TextStyle(
+                color: Color(0xffffd369),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              labels.isEmpty ? '服务端未下发迹线' : labels.join('  →  '),
+              style: const TextStyle(color: Color(0xffd4e8e2), fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _settlementPlayerName(
+  List<Map<String, dynamic>> players,
+  String? playerId,
+) {
+  final player = _findPlayer(players, playerId);
+  return player == null ? (playerId ?? '—') : _playerName(player);
 }
 
 class _RoundPublicBoard extends StatelessWidget {

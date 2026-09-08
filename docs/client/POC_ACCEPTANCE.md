@@ -156,4 +156,4 @@ artifacts/client-poc/<runId>/
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `POC-20260907-01` | Flutter Android | `Medium_Phone` Emulator / API 37 | 2026-09-07 | `d054a91` + layout fix | debug APK 安装、横屏启动、dev WS 登录/在线、2400×1080 布局 | `PASS (EMULATOR ONLY)` | [大厅截图](evidence/POC-20260907-01/android-emulator-wss-lobby.png) | AI/DEV |
 
-当前本机证据（不替代下表的真机记录）：`clients/flutter_app` 执行 `flutter test` 22/22、`dart analyze` 和 Android debug APK 构建通过；Android API 37 Emulator 已安装配置版 APK，经本机开发 WebSocket 完成登录并显示在线大厅。覆盖房间桌面、命令 outbox、维护/版本冲突提示、手动重试、前台恢复、权威手牌/动作面板、弃牌/副露/花数/牌墙/回合倒计时、可配置原生 WSS 和 SupportApi 注入表单。当前未连接生产或 staging WSS；Android/iOS 真机与签名门保持 `G1_BLOCKED`，鸿蒙按当前决定暂缓。
+当前本机证据（不替代下表的真机记录）：`clients/flutter_app` 执行 `flutter test` 23/23、`dart analyze` 和 Android debug APK 构建通过；Android API 37 Emulator 已安装配置版 APK，经本机开发 WebSocket 完成登录并显示在线大厅。覆盖房间桌面、命令 outbox、维护/版本冲突提示、手动重试、前台恢复、权威手牌/动作面板、弃牌/副露/花数/牌墙/回合倒计时、只读服务端单局结算页、可配置原生 WSS 和 SupportApi 注入表单。当前未连接生产或 staging WSS；Android/iOS 真机与签名门保持 `G1_BLOCKED`，鸿蒙按当前决定暂缓。
