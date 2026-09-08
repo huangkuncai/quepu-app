@@ -820,6 +820,13 @@ test('a discard win is recognized and settled entirely from authoritative room s
     () => Room.fromSnapshot(beforeSettlement).applyPersistedEvent(forgedEvent),
     error => error.code === 'INVALID_ACTION'
   );
+  const forgedSnapshot = structuredClone(room.persistenceSnapshot());
+  delete forgedSnapshot.snapshotHash;
+  forgedSnapshot.round.settlement.transfers[0].trace[3].subtotal += 100;
+  assert.throws(
+    () => Room.fromSnapshot(forgedSnapshot),
+    error => error.code === 'INVALID_ACTION'
+  );
 });
 
 test('passing a legal discard win blocks further discard wins until the player turn comes around', () => {

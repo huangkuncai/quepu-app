@@ -2574,6 +2574,25 @@ export class Room {
         delete this.currentRound[field];
       }
     }
+    if (this.ruleId === 'susong_v1'
+      && this.currentRound?.settlement?.scoreAuthority === 'server') {
+      if (this.ruleSnapshot.scoreOrderVersion !== undefined
+        && this.ruleSnapshot.scoreOrderVersion !== this.currentRound.settlement.scoreOrderVersion) {
+        throw new AppError('INVALID_ACTION', {
+          details: [{ path: 'round.settlement.scoreOrderVersion', message: 'does not match the frozen rule snapshot' }]
+        });
+      }
+      try {
+        validateSusongSettlementAudit({
+          config: this.ruleSnapshot.config,
+          playerIds: this._orderedPlayers().map(player => player.id),
+          zengByPlayer: Object.fromEntries(this.zengByPlayer),
+          settlement: this.currentRound.settlement
+        });
+      } catch (cause) {
+        throw new AppError('INVALID_ACTION', { cause });
+      }
+    }
     this.round = this.currentRound;
     this._privateRoundState = snapshot.privateRoundState
       ? normalizePrivateRoundState(snapshot.privateRoundState, this.players, this.currentRound)
