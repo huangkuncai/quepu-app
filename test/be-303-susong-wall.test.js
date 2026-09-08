@@ -46,15 +46,14 @@ test('seeded shuffle is deterministic, unique and auditable', () => {
   assert.equal(verifySusongSeedCommitment('ee'.repeat(32), first.seedCommitment), false);
 });
 
-test('opening deal gives all players 13 after the dealer jumps one stack', () => {
+test('opening deal gives dealer 14 by taking the first and fifth jump tiles', () => {
   const wall = createSusongShuffledWall({ seed });
   const dealt = dealSusongOpeningHands({ wall, playerIds: players, dealerId: 'C' });
-  assert.deepEqual(dealt.handCountsByPlayer, { A: 13, B: 13, C: 13, D: 13 });
-  assert.equal(dealt.wallRemaining, 92);
-  assert.equal(dealt.handsByPlayer.C.at(-1), wall.tileIds[50]);
-  assert.deepEqual(dealt.remainingWall.slice(-2), wall.tileIds.slice(48, 50));
+  assert.deepEqual(dealt.handCountsByPlayer, { A: 13, B: 13, C: 14, D: 13 });
+  assert.equal(dealt.wallRemaining, 91);
+  assert.deepEqual(dealt.handsByPlayer.C.slice(-2), [wall.tileIds[48], wall.tileIds[52]]);
   const allDealt = players.flatMap(playerId => dealt.handsByPlayer[playerId]);
-  assert.equal(allDealt.length, 52);
+  assert.equal(allDealt.length, 53);
   assert.equal(new Set([...allDealt, ...dealt.remainingWall]).size, 144);
   assert.deepEqual([...allDealt, ...dealt.remainingWall].sort(), [...wall.tileIds].sort());
 });
@@ -64,8 +63,8 @@ test('public wall state exposes counts and commitment but no secret material', (
   const dealt = dealSusongOpeningHands({ wall, playerIds: players, dealerId: 'A' });
   const publicState = publicSusongWallState(dealt);
   const serialized = JSON.stringify(publicState);
-  assert.equal(publicState.wallRemaining, 92);
-  assert.deepEqual(publicState.handCountsByPlayer, { A: 13, B: 13, C: 13, D: 13 });
+  assert.equal(publicState.wallRemaining, 91);
+  assert.deepEqual(publicState.handCountsByPlayer, { A: 14, B: 13, C: 13, D: 13 });
   assert.equal(serialized.includes(seed), false);
   assert.equal(serialized.includes('privateSeedHex'), false);
   assert.equal(serialized.includes('tileIds'), false);
@@ -73,7 +72,7 @@ test('public wall state exposes counts and commitment but no secret material', (
   assert.equal(serialized.includes('remainingWall'), false);
 });
 
-test('current rule deals 13 each and automatically performs the dealer opening draw', () => {
+test('current rule deals the dealer 14 and starts directly in discard phase', () => {
   const room = new Room({
     id: 'current-opening-draw-room',
     ownerId: 'A',
@@ -92,15 +91,16 @@ test('current rule deals 13 each and automatically performs the dealer opening d
     actorId: 'system:susong-rule-engine',
     actorRole: 'SYSTEM'
   });
-  assert.deepEqual(room.currentRound.wall.handCountsByPlayer, { A: 13, B: 13, C: 13, D: 13 });
+  assert.deepEqual(room.currentRound.wall.handCountsByPlayer, { A: 14, B: 13, C: 13, D: 13 });
   const wallBefore = room.currentRound.wall.wallRemaining;
 
   room.beginPlaying({ actorId: 'A' });
 
   assert.equal(room.currentRound.wall.handCountsByPlayer.A, 14);
-  assert.ok(room.currentRound.wall.wallRemaining < wallBefore);
-  assert.equal(room._privateRoundState.turnHistory[0].action, 'draw');
-  assert.deepEqual(room.events.slice(-2).map(event => event.type), ['ROUND_PLAYING', 'SUSONG_TILE_DRAWN']);
+  assert.equal(room.currentRound.wall.wallRemaining, wallBefore);
+  assert.deepEqual(room._privateRoundState.turnHistory, []);
+  assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.equal(room.events.at(-1).type, 'ROUND_PLAYING');
   assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
 });
 

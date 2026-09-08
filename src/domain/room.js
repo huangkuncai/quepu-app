@@ -1176,10 +1176,7 @@ export class Room {
       this.currentRound.startedAt = iso(this.clock);
       this.turn = this._firstTurn();
       this.turnPlayerId = this.turn;
-      const dealerOpeningDraw = this.ruleId === 'susong_v1'
-        && this.ruleVersion === SUSONG_RULE_VERSION
-        && this._privateRoundState !== null;
-      this.currentRound.turnPhase = dealerOpeningDraw ? 'draw' : 'discard';
+      this.currentRound.turnPhase = 'discard';
       this.currentRound.discardsByPlayer = Object.fromEntries([...this.players.keys()].map(playerId => [playerId, []]));
       this.currentRound.meldsByPlayer = Object.fromEntries([...this.players.keys()].map(playerId => [playerId, []]));
       this.currentRound.passedHuByPlayer = Object.fromEntries([...this.players.keys()].map(playerId => [playerId, false]));
@@ -1197,9 +1194,6 @@ export class Room {
         turnStartedAt: this.currentRound.turnStartedAt,
         turnDeadlineAt: this.currentRound.turnDeadlineAt
       }, command);
-      if (dealerOpeningDraw) {
-        return this._applySusongTurnAction(this.turn, 'draw', {}, command);
-      }
       return this._result(event, { matchId: this.matchId, roundId: this.roundId });
     });
   }

@@ -71,7 +71,7 @@
 | BLOCKER-ID | 影响 REQ/RULE/任务 | 缺失决策或证据 | Owner | 截止 | 临时降级 | 解除证据 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | BLOCKER-G0-001 | BE-103 生产接入、CL-102～103、发布合规 | DEC-002 登录和年龄/地区/实名边界 | USER + LEGAL | G0 | fake auth；禁止生产房间 | 已确认 Auth 策略和验收样例 | OPEN |
-| BLOCKER-G0-002 | R-*、BE-301～306 | `.5` 已确认红黑花、动作限制、四家 13 张、庄家隔墩取牌/自动首摸及摸牌解过圈 | USER + RULE | GR | 已确认域使用 `8931-apk-baseline.5`；未枚举特殊场景继续 fail-closed | 规则负责人新增样例 | OPEN（范围缩小） |
+| BLOCKER-G0-002 | R-*、BE-301～306 | `.5` 已确认红黑花、动作限制、庄家跳牌取 14 张直接先出及摸牌解过圈 | USER + RULE | GR | 已确认域使用 `8931-apk-baseline.5`；未枚举特殊场景继续 fail-closed | 规则负责人新增样例 | OPEN（范围缩小） |
 | BLOCKER-G0-003 | BE-401～405、Club/Floor | DEC-003～006 俱乐部/楼层/访问权限 | USER/PM | G0 | 只读 mock 数据 | RBAC 与 ruleSnapshot schema 已确认 | OPEN |
 | BLOCKER-G0-004 | BE-501～504 | DEC-008～009 钻石归属和扣费策略 | USER + OPS | G0 | ledger sandbox；不扣真实钻石 | reserve/consume/release/reverse 流程签字 | OPEN |
 | BLOCKER-G0-005 | CL-102～103、OPS-301～304、G1 | Android/iOS 设备、SDK/API/签名清单（鸿蒙已暂缓） | USER + CL | G0/G1 | Dart 原生 transport 与 Flutter/FakeTransport POC 可本机验证；不生成可安装包 | Android+iOS 真机矩阵和签名条件 | OPEN |
@@ -145,7 +145,7 @@
 | 2026-09-08 | AI/DEV | 将已确认花档、增分、多响和三西规则整理为 20 个独立 JSON golden cases，逐例重算付款、四家 delta、关系解除和审计迹线 | BE-308、QA-301 | `be-308-susong-golden.test.js`（21/21）；待规则负责人整包验收 |
 | 2026-09-08 | AI/DEV | 复核 APK 规则文本、protobuf 与客户端 Lua 字段：旧客户端只消费庄位、倒计时、剩余牌、三西等服务端结果，不能证明取牌方向、过圈解除、超时动作等内部裁决 | DEC-RULE-001/002/003/007/008、QA-301 | [规则验收清单](../rules/SUSONG_RULE_ACCEPTANCE.md)；六类外部证据待 USER + RULE |
 | 2026-09-08 | USER/AI/DEV | 确认随机首庄、牌墙头摸/补花杠后尾补、本人摸牌解除过圈、倒计时归零继续等待；确认花奖独立叠加且三西不含花奖、多条三西逐关系结算 | DEC-RULE-003/005/007、BE-303/305/306/308 | `npm run check`（Node 214/214）；规则版本 `8931-apk-baseline.4` |
-| 2026-09-08 | USER/AI/DEV | 确认红黑花分组、飘花禁碰杠风牌、吃后禁打同牌；四家开局各 13 张，庄家隔墩取 1 张并自动首摸；过圈仅在本人摸牌完成后解除 | DEC-RULE-001/002/003/005/007、BE-303/305 | `be-303-susong-wall.test.js`；规则版本 `8931-apk-baseline.5` |
+| 2026-09-08 | USER/AI/DEV | 确认红黑花分组、飘花禁碰杠风牌、吃后禁打同牌；庄家跳牌阶段取得第 14 张并直接先出；过圈仅在本人摸牌完成后解除 | DEC-RULE-001/002/003/005/007、BE-303/305 | `be-303-susong-wall.test.js`；规则版本 `8931-apk-baseline.5` |
 
 ## 8. 变更记录
 

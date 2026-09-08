@@ -174,7 +174,7 @@ void main() {
               'roundNumber': 2,
               'turnPhase': 'discard',
               'turnDeadlineAt': DateTime.now()
-                  .add(const Duration(seconds: 20))
+                  .subtract(const Duration(seconds: 1))
                   .toUtc()
                   .toIso8601String(),
               'wall': {'wallRemaining': 63},
@@ -215,6 +215,8 @@ void main() {
       expect(find.textContaining('演示玩家 · 花 4'), findsOneWidget);
       expect(find.textContaining('副露 碰东东东'), findsOneWidget);
       expect(find.textContaining('弃牌 3筒 白'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('待出牌 0 秒'), findsOneWidget);
       await tester.tap(find.text('1万'));
       await tester.pump(const Duration(milliseconds: 30));
       final action = transport.sentMessages.lastWhere(

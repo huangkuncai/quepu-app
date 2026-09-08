@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 export const SUSONG_WALL_VERSION = 'susong-144-candidate-v1';
 export const SUSONG_SHUFFLE_ALGORITHM = 'sha256-counter-fisher-yates-v1';
-export const SUSONG_DEAL_ALGORITHM = 'dealer-clockwise-4x3-jump-one-idle-one-v2';
+export const SUSONG_DEAL_ALGORITHM = 'dealer-clockwise-4x3-jump-first-fifth-v3';
 export const LEGACY_SUSONG_DEAL_ALGORITHM = 'dealer-clockwise-4x3-1x1-extra-v1';
 // Confirmed rule: ordinary draws consume the head; flower and kong replacement
 // draws consume the tail. The legacy name remains accepted when replaying old
@@ -195,7 +195,7 @@ export function createSusongShuffledWall({ seed } = {}) {
   });
 }
 
-/** Deal 52 opening tiles: 4x3, dealer jumps one stack, then idle players take one. */
+/** Deal 53 opening tiles: 4x3, dealer takes the first/fifth jump tiles, idle players fill. */
 export function dealSusongOpeningHands({
   wall,
   playerIds,
@@ -225,23 +225,12 @@ export function dealSusongOpeningHands({
     handsByPlayer[dealer].push(tileIds[cursor]);
     cursor += 1;
   } else if (dealAlgorithm === SUSONG_DEAL_ALGORITHM) {
-    const skippedStack = tileIds.slice(cursor, cursor + 2);
-    cursor += 2;
     handsByPlayer[dealer].push(tileIds[cursor]);
-    cursor += 1;
-    for (const playerId of seatOrder.slice(1)) {
-      handsByPlayer[playerId].push(tileIds[cursor]);
-      cursor += 1;
-    }
-    const liveWall = tileIds.slice(cursor);
-    return dealResult({
-      wall,
-      dealer,
-      handsByPlayer,
-      players,
-      dealAlgorithm,
-      remainingWall: [...liveWall, ...skippedStack]
+    handsByPlayer[dealer].push(tileIds[cursor + 4]);
+    seatOrder.slice(1).forEach((playerId, index) => {
+      handsByPlayer[playerId].push(tileIds[cursor + index + 1]);
     });
+    cursor += 5;
   } else {
     throw new TypeError('dealAlgorithm is unsupported');
   }
