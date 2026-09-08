@@ -61,7 +61,7 @@
 | DEC-RULE-005 | 花奖、杠花、出增、飘花、三西/三道规则 | 花奖独立按第二档叠加；红/黑花分别累计对子单位；单方累计吃碰 3 次建立关系；每条三西独立额外一份；关系双方同炮双响解除 | M+APK+USER | USER + RULE | GR | CONFIRMED | `8931_rule.txt`、用户 2026-09-07～08 计分及三西样例 |
 | DEC-RULE-006 | 无花果、“一察/一素”等术语、数值和触发 | APK 原文术语为“无花果”“一索”；无花果归一索且只能自摸 | M+APK | USER + RULE | GR | CONFIRMED | `8931_rule.txt` |
 | DEC-RULE-007 | 必胡/不必胡、“过圈”和超时默认动作 | 必胡自动胡；过圈仅在本人摸牌后解除；倒计时归零继续等待且不代操作 | M+APK+USER | USER + RULE | GR | CONFIRMED | 创建房配置、规则文本、用户 2026-09-08 确认 |
-| DEC-RULE-008 | 小胡/大胡、特殊胡型、≥9、封顶、舍入、零和 | 花数档、九类一索和杠开档确认；多条件叠加/封顶待旧服结算样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt` |
+| DEC-RULE-008 | 小胡/大胡、特殊胡型、封顶、无花果放冲、零和 | 花数档、九类一索和杠开档确认；APK“无花果放冲即一索”是否由无花放炮者触发赢家升档待确认 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt`、[规则验收清单](../rules/SUSONG_RULE_ACCEPTANCE.md) |
 | DEC-RULE-009 | 4/8/16 局、出增中途调整和房周期边界 | 4/8/16 局；默认 4；房周期内增可加不可减 | M+APK | USER + RULE | GR | CONFIRMED | 创建房配置及规则文本 |
 
 ## 5. 阻塞登记
@@ -71,7 +71,7 @@
 | BLOCKER-ID | 影响 REQ/RULE/任务 | 缺失决策或证据 | Owner | 截止 | 临时降级 | 解除证据 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | BLOCKER-G0-001 | BE-103 生产接入、CL-102～103、发布合规 | DEC-002 登录和年龄/地区/实名边界 | USER + LEGAL | G0 | fake auth；禁止生产房间 | 已确认 Auth 策略和验收样例 | OPEN |
-| BLOCKER-G0-002 | R-*、BE-301～306 | `.5` 已确认红黑花、动作限制、庄家跳牌取 14 张直接先出及摸牌解过圈 | USER + RULE | GR | 已确认域使用 `8931-apk-baseline.5`；未枚举特殊场景继续 fail-closed | 规则负责人新增样例 | OPEN（范围缩小） |
+| BLOCKER-G0-002 | R-*、BE-301～306 | 144 张候选精确构成待签；APK“无花果放冲即一索”的付款方触发语义待确认 | USER + RULE | GR | 已确认域使用 `8931-apk-baseline.5`；两项未决均保持 fail-closed | 规则负责人书面回答验收清单第 3 节 | OPEN（范围缩小） |
 | BLOCKER-G0-003 | BE-401～405、Club/Floor | DEC-003～006 俱乐部/楼层/访问权限 | USER/PM | G0 | 只读 mock 数据 | RBAC 与 ruleSnapshot schema 已确认 | OPEN |
 | BLOCKER-G0-004 | BE-501～504 | DEC-008～009 钻石归属和扣费策略 | USER + OPS | G0 | ledger sandbox；不扣真实钻石 | reserve/consume/release/reverse 流程签字 | OPEN |
 | BLOCKER-G0-005 | CL-102～103、OPS-301～304、G1 | Android/iOS 设备、SDK/API/签名清单（鸿蒙已暂缓） | USER + CL | G0/G1 | Dart 原生 transport 与 Flutter/FakeTransport POC 可本机验证；不生成可安装包 | Android+iOS 真机矩阵和签名条件 | OPEN |
@@ -150,6 +150,7 @@
 | 2026-09-08 | AI/DEV | 补齐响应先后无关的动作冲突回归：同一弃牌上的胡覆盖碰/明杠/吃，碰或明杠覆盖先到的吃；同一玩家可自行选择碰或明杠；DEC-RULE-002 转为已确认 | DEC-RULE-002、BE-304/308 | `be-303-susong-wall.test.js`；Node 221/221 |
 | 2026-09-08 | AI/DEV | 修正杠开次数为当前出牌权内连续杠链，双杠及以上封顶；普通摸牌或出牌切断旧杠，避免跨回合误累计 | DEC-RULE-008、BE-304/306/308 | `be-303-susong-wall.test.js`；Node 222/222 |
 | 2026-09-08 | AI/DEV | 补齐 `.5` 庄家跳牌后零行牌历史直接天胡的一索结算，确认无首次摸牌事件依赖 | DEC-RULE-003/008、BE-303/304/306 | `be-303-susong-wall.test.js`；Node 223/223 |
+| 2026-09-08 | AI/DEV | 完成已确认规则纵切阻塞审计；正式签字仅余 144 张精确构成及“无花果放冲即一索”的付款方触发语义 | DEC-RULE-001/008、BE-301/306/308 | [规则验收清单](../rules/SUSONG_RULE_ACCEPTANCE.md) 第 3 节；未确认前 fail-closed |
 
 ## 8. 变更记录
 
@@ -213,6 +214,7 @@
 | 0.1.56 | 2026-09-08 | 登记同一弃牌吃碰胡冲突优先级回归，并将 DEC-RULE-002 更新为已确认 | AI/DEV |
 | 0.1.57 | 2026-09-08 | 登记房间层连续杠开次数与双杠封顶修正 | AI/DEV |
 | 0.1.58 | 2026-09-08 | 登记 `.5` 庄家无首次摸牌的天胡完整纵切 | AI/DEV |
+| 0.1.59 | 2026-09-08 | 将剩余正式规则阻塞收敛为精确牌组签字与无花果放冲语义 | AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 

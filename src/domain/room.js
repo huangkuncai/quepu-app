@@ -1292,8 +1292,9 @@ export class Room {
     }
     const pengPlayers = pending.responderOrder.filter(id => this._susongReactionCandidates(id)
       .some(candidate => candidate.action === 'peng'));
-    // Until the legacy priority rule is signed, execute only an unambiguous
-    // peng claim. Competing claims remain fail-closed instead of guessing.
+    // One physical discarded tile leaves at most three matching copies, so at
+    // most one honest hand can offer peng/exposed-kong. Reject corrupt
+    // multi-claim state instead of selecting a claimant by response order.
     if (pengPlayers.length === 1 && pengPlayers[0] === playerId) {
       if (candidates.some(candidate => candidate.action === 'exposed_kong')
         && this._canResolveSusongKong(playerId)) actions.push('exposed_kong');
