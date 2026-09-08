@@ -8,7 +8,10 @@ import {
   recordSusongMeldFlowers,
   resolveSusongFlowers
 } from './rules/susong.js';
-import { scoreSusongRound } from './rules/susong-scoring.js';
+import {
+  scoreSusongRound,
+  validateSusongSettlementAudit
+} from './rules/susong-scoring.js';
 import {
   buildSusongTileSet,
   createSusongShuffledWall,
@@ -1812,6 +1815,7 @@ export class Room {
       matchId: this.matchId,
       roundId: this.roundId,
       settlement,
+      scoreAuthority: 'server',
       scores: Object.fromEntries(this.scores),
       reason: 'WALL_RESERVED_14'
     }, command);
@@ -2060,6 +2064,18 @@ export class Room {
       }
       if (actorId && actorId !== this.ownerId && !command.isAdmin && !command.admin && command.actorRole !== 'SYSTEM') {
         throw new AppError('NOT_ROOM_OWNER');
+      }
+      if (this.ruleId === 'susong_v1' && isRecord(result) && result.scoreAuthority === 'server') {
+        try {
+          validateSusongSettlementAudit({
+            config: this.ruleSnapshot.config,
+            playerIds: this._orderedPlayers().map(player => player.id),
+            zengByPlayer: Object.fromEntries(this.zengByPlayer),
+            settlement: result
+          });
+        } catch (cause) {
+          throw new AppError('INVALID_ACTION', { cause });
+        }
       }
       const scoreDeltas = serverSettlementDeltas(result, this.players, command);
       if (scoreDeltas) {
@@ -2956,6 +2972,18 @@ export class Room {
         }
         break;
       case 'ROUND_SETTLING':
+        if (this.ruleId === 'susong_v1' && payload.scoreAuthority === 'server') {
+          try {
+            validateSusongSettlementAudit({
+              config: this.ruleSnapshot.config,
+              playerIds: this._orderedPlayers().map(player => player.id),
+              zengByPlayer: Object.fromEntries(this.zengByPlayer),
+              settlement: payload.settlement
+            });
+          } catch (cause) {
+            throw new AppError('INVALID_ACTION', { cause });
+          }
+        }
         this._setStatus(ROOM_STATUS.SETTLING);
         if (this.currentRound) {
           this.currentRound.status = ROOM_STATUS.SETTLING;

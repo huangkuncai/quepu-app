@@ -5,7 +5,8 @@ import { createSusongFlowerState, resolveSusongFlowers } from '../src/domain/rul
 import {
   scoreSusongRound,
   scoreSusongWin,
-  SUSONG_SCORE_ORDER_VERSION
+  SUSONG_SCORE_ORDER_VERSION,
+  validateSusongSettlementAudit
 } from '../src/domain/rules/susong-scoring.js';
 import { Room } from '../src/domain/room.js';
 import { RoomService } from '../src/modules/room/service.js';
@@ -193,6 +194,38 @@ test('draw at the wall boundary is an auditable zero settlement', () => {
   assert.equal(settlement.scoreOrderVersion, SUSONG_SCORE_ORDER_VERSION);
   assert.deepEqual(settlement.transfers, []);
   assert.deepEqual(settlement.deltaByPlayer, { A: 0, B: 0, C: 0, D: 0 });
+});
+
+test('persisted score audit rejects reordered or arithmetically forged traces', () => {
+  const settlement = scoreSusongRound({
+    config,
+    playerIds: players,
+    outcome: 'self_draw',
+    winnerId: 'A',
+    flowerState: flowerState(4),
+    zengByPlayer: { A: 2, B: 3, C: 1, D: 5 }
+  });
+  const input = {
+    config,
+    playerIds: players,
+    zengByPlayer: { A: 2, B: 3, C: 1, D: 5 }
+  };
+  assert.equal(validateSusongSettlementAudit({ ...input, settlement }), true);
+
+  const reordered = structuredClone(settlement);
+  [reordered.transfers[0].trace[0], reordered.transfers[0].trace[1]] =
+    [reordered.transfers[0].trace[1], reordered.transfers[0].trace[0]];
+  assert.throws(
+    () => validateSusongSettlementAudit({ ...input, settlement: reordered }),
+    /trace order/
+  );
+
+  const forged = structuredClone(settlement);
+  forged.transfers[0].trace[3].subtotal += 100;
+  assert.throws(
+    () => validateSusongSettlementAudit({ ...input, settlement: forged }),
+    /trace arithmetic/
+  );
 });
 
 test('internal RoomService settlement scores and persists through SYSTEM authority', async () => {

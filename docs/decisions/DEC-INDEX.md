@@ -131,6 +131,7 @@
 | 2026-09-07 | AI/DEV | Android API 37 Emulator 安装配置版 APK，经 `10.0.2.2` 完成开发 WS 登录和在线大厅；实尺寸暴露的 3 处底部溢出已修复并固化 2400×1080 回归 | CL-201、G1 前置 | `flutter test`（22/22）、重新构建/安装/截图；仅 Emulator/dev WS，不代表真机/WSS |
 | 2026-09-08 | AI/DEV | 权威结算叠加顺序版本化为增→飘→花档→三西；转账保留完整阶段迹线，局结果携带版本，固化 1–4/5–9/10+ 花档与自摸不升档 | BE-306、BE-307 | `be-302-susong-scoring.test.js`、`npm run check`（Node 170/170）；三西关系生成仍 fail-closed |
 | 2026-09-08 | AI/DEV | 胡牌与保留 14 张流局统一走服务端结算器；结算顺序版本/迹线必须穿过回合事件、原子快照和 RoomActor 重启恢复 | BE-306、BE-307 | `be-302-susong-scoring.test.js` + `be-303-susong-wall.test.js`（48/48） |
+| 2026-09-08 | AI/DEV | 重放按冻结配置/增分重算持久结算迹线；即使 delta 仍零和，阶段换序、关系错置、小计或倍数篡改也必须 fail-closed | BE-306、BE-307 | `be-302-susong-scoring.test.js` + `be-303-susong-wall.test.js`（49/49） |
 
 ## 8. 变更记录
 
@@ -174,6 +175,7 @@
 | 0.1.36 | 2026-09-07 | 登记 Android API 37 Emulator 开发 WS 登录、在线大厅、紧凑横屏溢出修复与可复核截图 | AI/DEV |
 | 0.1.37 | 2026-09-08 | 登记 `zeng-piao-flower-sanxi-v1` 权威结算迹线、花档边界及自摸不升档 golden cases | AI/DEV |
 | 0.1.38 | 2026-09-08 | 登记结算版本/迹线的房间事件、持久快照与重启恢复闭环，保留 14 张流局改为共用权威结算入口 | AI/DEV |
+| 0.1.39 | 2026-09-08 | 登记权威结算迹线重算验证和篡改拒绝，BE-307 进入 IN_PROGRESS | AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 

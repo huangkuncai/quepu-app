@@ -172,6 +172,116 @@ export function scoreSusongRound(input = {}) {
   });
 }
 
+/** Verify a persisted settlement without trusting its precomputed total. */
+export function validateSusongSettlementAudit({
+  config: configInput,
+  playerIds,
+  zengByPlayer,
+  settlement
+} = {}) {
+  const config = normalizeSusongConfig(configInput);
+  const players = normalizePlayers(playerIds);
+  const zeng = normalizeZeng(zengByPlayer, players);
+  if (!settlement || typeof settlement !== 'object' || Array.isArray(settlement)
+    || settlement.scoreAuthority !== 'server'
+    || settlement.scoreOrderVersion !== SUSONG_SCORE_ORDER_VERSION) {
+    throw new TypeError('settlement must use the supported server score order');
+  }
+  if (!['draw', 'self_draw', 'discard'].includes(settlement.outcome)
+    || !Array.isArray(settlement.winnerIds) || !Array.isArray(settlement.wins)
+    || !Array.isArray(settlement.transfers)) {
+    throw new TypeError('settlement audit shape is invalid');
+  }
+  const winnerIds = settlement.winnerIds.map(id => member(id, players, 'winnerId'));
+  if (new Set(winnerIds).size !== winnerIds.length
+    || settlement.wins.length !== winnerIds.length) {
+    throw new TypeError('settlement winners are inconsistent');
+  }
+  const tierByWinner = new Map();
+  for (const [index, win] of settlement.wins.entries()) {
+    if (!win || typeof win !== 'object' || Array.isArray(win)) {
+      throw new TypeError(`settlement.wins.${index} is invalid`);
+    }
+    const winnerId = member(win.winnerId, players, 'winnerId');
+    if (winnerId !== winnerIds[index] || TIER_INDEX[win.tier] === undefined) {
+      throw new TypeError(`settlement.wins.${index} is inconsistent`);
+    }
+    tierByWinner.set(winnerId, win.tier);
+  }
+  if (settlement.outcome === 'draw') {
+    if (winnerIds.length !== 0 || settlement.transfers.length !== 0
+      || settlement.discarderId !== null) {
+      throw new TypeError('draw settlement must not contain winners or transfers');
+    }
+  } else if (settlement.outcome === 'self_draw') {
+    if (winnerIds.length !== 1 || settlement.discarderId !== null
+      || settlement.transfers.length !== players.length - 1) {
+      throw new TypeError('self-draw settlement shape is invalid');
+    }
+  } else {
+    const discarderId = member(settlement.discarderId, players, 'discarderId');
+    if (winnerIds.length < 1 || winnerIds.length > 3 || winnerIds.includes(discarderId)
+      || settlement.transfers.length !== winnerIds.length) {
+      throw new TypeError('discard settlement shape is invalid');
+    }
+  }
+
+  const reconstructed = Object.fromEntries(players.map(playerId => [playerId, 0]));
+  const relationKeys = new Set();
+  for (const [index, transfer] of settlement.transfers.entries()) {
+    const payerId = member(transfer?.from, players, 'transfer.from');
+    const winnerId = member(transfer?.to, players, 'transfer.to');
+    const tier = tierByWinner.get(winnerId);
+    const relationKey = `${payerId}\u0000${winnerId}`;
+    if (!tier || payerId === winnerId || relationKeys.has(relationKey)
+      || transfer.tier !== tier
+      || transfer.scoreOrderVersion !== SUSONG_SCORE_ORDER_VERSION) {
+      throw new TypeError(`settlement.transfers.${index} relation is invalid`);
+    }
+    relationKeys.add(relationKey);
+    if (settlement.outcome === 'self_draw') {
+      if (winnerId !== winnerIds[0] || winnerIds.includes(payerId)) {
+        throw new TypeError(`settlement.transfers.${index} self-draw relation is invalid`);
+      }
+    } else if (settlement.outcome === 'discard' && payerId !== settlement.discarderId) {
+      throw new TypeError(`settlement.transfers.${index} payer is not the discarder`);
+    }
+    const trace = transfer.trace;
+    const stages = ['winner_zeng', 'payer_zeng', 'piao', 'flower_tier', 'sanxi'];
+    if (!Array.isArray(trace) || trace.length !== stages.length
+      || trace.some((stage, stageIndex) => stage?.stage !== stages[stageIndex])) {
+      throw new TypeError(`settlement.transfers.${index} trace order is invalid`);
+    }
+    const winnerZeng = zeng[winnerId] * config.zeng;
+    const payerZeng = zeng[payerId] * config.zeng;
+    const baseScore = config.scoreTiers[TIER_INDEX[tier]];
+    const subtotal = winnerZeng + payerZeng + baseScore;
+    const multiplier = trace[4].multiplier;
+    if (trace[0].count !== zeng[winnerId] || trace[0].unit !== config.zeng
+      || trace[0].value !== winnerZeng
+      || trace[1].count !== zeng[payerId] || trace[1].unit !== config.zeng
+      || trace[1].value !== payerZeng
+      || !['piao', 'not_piao'].includes(trace[2].status) || trace[2].value !== 0
+      || trace[3].tier !== tier || trace[3].value !== baseScore
+      || trace[3].subtotal !== subtotal
+      || ![1, 2].includes(multiplier)
+      || trace[4].value !== subtotal * multiplier
+      || transfer.amount !== trace[4].value
+      || !Number.isSafeInteger(transfer.amount) || transfer.amount <= 0) {
+      throw new TypeError(`settlement.transfers.${index} trace arithmetic is invalid`);
+    }
+    reconstructed[payerId] -= transfer.amount;
+    reconstructed[winnerId] += transfer.amount;
+  }
+  if (!settlement.deltaByPlayer || typeof settlement.deltaByPlayer !== 'object'
+    || Array.isArray(settlement.deltaByPlayer)
+    || Object.keys(settlement.deltaByPlayer).length !== players.length
+    || players.some(playerId => settlement.deltaByPlayer[playerId] !== reconstructed[playerId])) {
+    throw new TypeError('settlement delta does not reconcile with its audit trace');
+  }
+  return true;
+}
+
 function normalizeWinnerInputs(input) {
   if (Array.isArray(input.winners)) {
     if (input.winners.length < 1 || input.winners.length > 3) {

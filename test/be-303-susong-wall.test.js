@@ -798,6 +798,7 @@ test('a discard win is recognized and settled entirely from authoritative room s
     () => room.applyAction('D', { action: 'hu', args: { tier: 'one_bamboo', score: 999 } }),
     error => error.code === 'INVALID_ACTION'
   );
+  const beforeSettlement = room.persistenceSnapshot();
   const result = room.applyAction('D', 'hu');
 
   assert.equal(result.event.type, 'ROUND_SETTLING');
@@ -813,6 +814,12 @@ test('a discard win is recognized and settled entirely from authoritative room s
   assert.deepEqual(result.settlement.deltaByPlayer, { A: -1, B: 0, C: 0, D: 1 });
   assert.deepEqual(room.snapshot().scores, { A: -1, B: 0, C: 0, D: 1 });
   assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
+  const forgedEvent = structuredClone(result.event);
+  forgedEvent.payload.settlement.transfers[0].trace[3].subtotal += 100;
+  assert.throws(
+    () => Room.fromSnapshot(beforeSettlement).applyPersistedEvent(forgedEvent),
+    error => error.code === 'INVALID_ACTION'
+  );
 });
 
 test('passing a legal discard win blocks further discard wins until the player turn comes around', () => {
