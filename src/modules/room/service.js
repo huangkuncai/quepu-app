@@ -287,6 +287,11 @@ export class RoomService {
         autoAdvance: actor.room.ruleId !== susongRule.id,
         bypassReady: true
       };
+    } else if (normalizedType === 'next_round' && actor.room.ruleId === susongRule.id) {
+      // A Susong next-round command is one server-owned lifecycle transition:
+      // select the dealer from the previous settlement, open the round, then
+      // deal from a fresh private wall. Clients cannot split or override it.
+      command.payload = { ...command.payload, autoDeal: true };
     }
     let result = await this.registry.dispatch(actor.room.id, command, {
       actorId: principal.userId,
@@ -303,6 +308,17 @@ export class RoomService {
         type: 'deal_susong_round',
         payload: {},
         commandId: stableSystemCommandId('susong:deal', command.commandId),
+        requestId: command.requestId,
+        roomVersion: result.roomVersion ?? actor.version
+      });
+    } else if (normalizedType === 'next_round'
+      && actor.room.ruleId === susongRule.id
+      && actor.room.status === 'dealing') {
+      result = await this._dispatchSusongSystem({
+        roomId: actor.room.id,
+        type: 'deal_susong_round',
+        payload: {},
+        commandId: stableSystemCommandId('susong:deal-next', command.commandId),
         requestId: command.requestId,
         roomVersion: result.roomVersion ?? actor.version
       });

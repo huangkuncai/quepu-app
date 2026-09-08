@@ -14,6 +14,7 @@ import {
   publicSusongWallState,
   verifySusongSeedCommitment
 } from '../src/domain/rules/susong-wall.js';
+import { scoreSusongRound } from '../src/domain/rules/susong-scoring.js';
 import { Room } from '../src/domain/room.js';
 import { RoomActor } from '../src/domain/room-actor.js';
 import { createMemoryGameStore } from '../src/infra/persistence/index.js';
@@ -283,6 +284,79 @@ function passSusongReaction(room, prefix = 'reaction') {
   }
   return responders;
 }
+
+function settleSusongFixture(room, facts) {
+  const settlement = scoreSusongRound({
+    config: room.ruleSnapshot.config,
+    playerIds: players,
+    zengByPlayer: Object.fromEntries(room.zengByPlayer),
+    ...facts
+  });
+  room.settleRound(settlement, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  return settlement;
+}
+
+test('next Susong round assigns the first winner as dealer and rejects a dealer override', () => {
+  const room = susongRoom('winner-dealer-room');
+  room.dealSusongOpeningRound({ seed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  settleSusongFixture(room, {
+    outcome: 'self_draw',
+    winners: [{
+      winnerId: 'C',
+      flowerState: room.currentRound.flowerStates.C,
+      patterns: [],
+      gangWinCount: 0
+    }]
+  });
+  room.nextRound({ actorId: 'A' });
+  const beforeDealing = room.persistenceSnapshot();
+  const dealing = room.beginNextRound({ actorId: 'A' });
+  assert.equal(dealing.event.payload.dealerSeat, 2);
+  assert.equal(room.currentRound.dealerSeat, 2);
+
+  const forged = structuredClone(dealing.event);
+  forged.payload.dealerSeat = 1;
+  assert.throws(
+    () => Room.fromSnapshot(beforeDealing).applyPersistedEvent(forged),
+    error => error.code === 'INVALID_ACTION'
+  );
+  const replayed = Room.fromSnapshot(beforeDealing);
+  replayed.applyPersistedEvent(dealing.event);
+  assert.equal(replayed.currentRound.dealerSeat, 2);
+
+  assert.throws(
+    () => room.dealSusongOpeningRound({ seed: '1'.repeat(64), dealerSeat: 1 }, {
+      actorId: 'system:susong-rule-engine',
+      actorRole: 'SYSTEM'
+    }),
+    error => error.code === 'INVALID_ACTION'
+  );
+  room.dealSusongOpeningRound({ seed: '1'.repeat(64) }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  assert.deepEqual(room.currentRound.wall.handCountsByPlayer, { A: 13, B: 13, C: 14, D: 13 });
+});
+
+test('a drawn Susong round keeps the previous dealer for the next round', () => {
+  const room = susongRoom('draw-dealer-room');
+  room.dealSusongOpeningRound({ seed, dealerSeat: 3 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  settleSusongFixture(room, { outcome: 'draw' });
+  room.nextRound({ actorId: 'A' });
+  room.beginNextRound({ actorId: 'A' });
+  assert.equal(room.currentRound.dealerSeat, 3);
+});
 
 function advanceSusongToAddedKong(room, maxSteps = 300) {
   for (let step = 0; step < maxSteps && room.status === 'playing'; step += 1) {
@@ -1287,5 +1361,49 @@ test('RoomService start immediately invokes authoritative Susong dealing', async
   assert.equal(result.room.status, 'dealing');
   assert.ok(result.room.round.wall.wallRemaining < 91);
   assert.ok([13, 14].includes(result.room.round.privateHand.length));
+  assert.equal('privateRoundState' in result.room, false);
+});
+
+test('RoomService advances, assigns and deals the next Susong round atomically', async () => {
+  const room = susongRoom('service-next-round-room');
+  room.dealSusongOpeningRound({ seed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  settleSusongFixture(room, {
+    outcome: 'self_draw',
+    winners: [{
+      winnerId: 'C',
+      flowerState: room.currentRound.flowerStates.C,
+      patterns: [],
+      gangWinCount: 0
+    }]
+  });
+  const actor = { room, version: room.version };
+  const registry = {
+    get: roomId => roomId === room.id ? actor : null,
+    recover: async () => null,
+    dispatch: async (roomId, command, context) => {
+      assert.equal(roomId, room.id);
+      const result = room.execute(command, context);
+      actor.version = room.version;
+      return result;
+    }
+  };
+  const service = new RoomService({ registry });
+  const result = await service.dispatch({
+    roomId: room.id,
+    principal: { userId: 'A', role: 'USER' },
+    type: 'next_round',
+    payload: { autoDeal: false, dealerSeat: 1 },
+    commandId: 'service-next-round-command',
+    requestId: 'service-next-round-request',
+    roomVersion: room.version
+  });
+  assert.equal(result.room.status, 'dealing');
+  assert.equal(result.room.round.roundNumber, 2);
+  assert.equal(result.room.round.dealerSeat, 2);
+  assert.equal(result.room.round.wall.handCountsByPlayer.C, 14);
   assert.equal('privateRoundState' in result.room, false);
 });

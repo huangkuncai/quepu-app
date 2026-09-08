@@ -746,6 +746,26 @@ export class Room {
     return this._orderedPlayers()[0]?.id || null;
   }
 
+  _nextSusongDealerSeat() {
+    if (this.ruleId !== 'susong_v1') return null;
+    const previousRound = this.currentRound;
+    const previousDealerSeat = previousRound?.dealerSeat;
+    const settlement = previousRound?.settlement;
+    if (!Number.isInteger(previousDealerSeat)
+      || previousDealerSeat < 0
+      || previousDealerSeat >= this.maxPlayers
+      || !isRecord(settlement)) {
+      throw new AppError('INVALID_ACTION');
+    }
+    if (settlement.outcome === 'draw') return previousDealerSeat;
+    const firstWinnerId = Array.isArray(settlement.winnerIds) ? settlement.winnerIds[0] : null;
+    const firstWinner = firstWinnerId === undefined || firstWinnerId === null
+      ? null
+      : this.players.get(String(firstWinnerId));
+    if (!firstWinner) throw new AppError('INVALID_ACTION');
+    return firstWinner.seat;
+  }
+
   dealSusongOpeningRound(input = {}, options = {}) {
     if (!isRecord(input)) throw new AppError('INVALID_ACTION');
     const opts = normalizeOptions(options);
@@ -763,10 +783,18 @@ export class Room {
       if (this._privateRoundState || this.currentRound.wall) throw new AppError('DUPLICATE_REQUEST');
       const players = this._orderedPlayers();
       if (players.length !== 4) throw new AppError('PLAYERS_NOT_READY');
-      const dealerSeat = requestedDealerSeat === null ? randomInt(this.maxPlayers) : requestedDealerSeat;
+      const assignedDealerSeat = this.currentRound.dealerSeat;
+      const dealerSeat = requestedDealerSeat === null
+        ? (Number.isInteger(assignedDealerSeat) ? assignedDealerSeat : randomInt(this.maxPlayers))
+        : requestedDealerSeat;
       if (!Number.isInteger(dealerSeat) || dealerSeat < 0 || dealerSeat >= this.maxPlayers) {
         throw new AppError('INVALID_ACTION', {
           details: [{ path: 'dealerSeat', message: 'must identify one of the four seats' }]
+        });
+      }
+      if (Number.isInteger(assignedDealerSeat) && dealerSeat !== assignedDealerSeat) {
+        throw new AppError('INVALID_ACTION', {
+          details: [{ path: 'dealerSeat', message: 'must match the server-assigned dealer for this round' }]
         });
       }
       const dealer = players.find(player => player.seat === dealerSeat);
@@ -2169,7 +2197,9 @@ export class Room {
   }
 
   _beginNextRound(options = {}) {
-    const round = this._newRound(this.roundNumber + 1, ROOM_STATUS.DEALING, options);
+    const dealerSeat = this.ruleId === 'susong_v1' ? this._nextSusongDealerSeat() : null;
+    const roundOptions = dealerSeat === null ? options : { ...options, dealerSeat };
+    const round = this._newRound(this.roundNumber + 1, ROOM_STATUS.DEALING, roundOptions);
     this._setStatus(ROOM_STATUS.DEALING);
     this.turn = null;
     this.turnPlayerId = null;
@@ -2178,7 +2208,8 @@ export class Room {
       roundId: round.roundId,
       roundNumber: round.roundNumber,
       status: this.status,
-      ruleSnapshotHash: this.ruleSnapshotHash
+      ruleSnapshotHash: this.ruleSnapshotHash,
+      ...(dealerSeat === null ? {} : { dealerSeat })
     }, options);
     return this._result(event, { matchId: this.matchId, roundId: round.roundId });
   }
@@ -3033,7 +3064,15 @@ export class Room {
           this.currentRound.turnDeadlineAt = null;
         }
         break;
-      case 'ROUND_DEALING':
+      case 'ROUND_DEALING': {
+        const expectedDealerSeat = this.ruleId === 'susong_v1'
+          ? this._nextSusongDealerSeat()
+          : null;
+        if (expectedDealerSeat !== null
+          && payload.dealerSeat !== undefined
+          && payload.dealerSeat !== expectedDealerSeat) {
+          throw new AppError('INVALID_ACTION');
+        }
         this.roundId = payload.roundId || this.roundId;
         this.roundNumber = Number(payload.roundNumber || this.roundNumber + 1);
         this.currentRound = {
@@ -3042,7 +3081,7 @@ export class Room {
           number: this.roundNumber,
           roundNumber: this.roundNumber,
           status: ROOM_STATUS.DEALING,
-          dealerSeat: null,
+          dealerSeat: expectedDealerSeat,
           ruleSnapshotHash: payload.ruleSnapshotHash || this.ruleSnapshotHash,
           wall: null,
           turnPhase: null,
@@ -3063,6 +3102,7 @@ export class Room {
         this._privateRoundState = null;
         this._setStatus(ROOM_STATUS.DEALING);
         break;
+      }
       case 'MATCH_FINISHED':
         this._setStatus(ROOM_STATUS.FINISHED);
         if (this.currentRound) {

@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-08（BE-306/CL-302 结算已保留并展示服务端特殊胡型、杠开、花数和无花果封顶原因，Node 175/175、Flutter 23/23）
+> 最近更新：2026-09-08（BE-303 已完成首个赢家坐庄/流局连庄及下一局服务端自动发牌，Node 178/178、Flutter 23/23）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -337,7 +337,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | --- | --- | --- | --- | --- |
 | BE-301 | 牌组、牌 ID、CSPRNG/seed | DEC-RULE-001 | 牌组表、服务端随机、seed hash/算法版本 | 牌数/手牌/补花守恒，未结束牌墙不泄露；IN_PROGRESS（`susong-144-candidate-v1` 已实现稳定牌 ID、无模偏可复现洗牌、seed commitment 和脱敏公共视图；精确构成待旧服牌局样本签字） |
 | BE-302 | `GameDefinition` + config schema | BE-102、DEC-RULE-001/004 | `susong` 插件、schema、版本注册 | 未知规则/配置拒绝；房间保存版本快照；IN_PROGRESS（`8931-apk-baseline.3` 配置、飘花状态机、服务端计分核心和不可由客户端覆盖的 `scoreOrderVersion` 快照已实现） |
-| BE-303 | 发牌、补花、牌墙、庄轮转 | DEC-RULE-002/003 | round state、dealer、wall、deadline | 固定 seed 重现；流局边界正确；IN_PROGRESS（候选开局、连续补花、正常摸出牌与保留 14 张流局已接入 Room/RoomActor/RoomService；私牌及操作历史可按 seed 重放，玩家仅见本人手牌；待跨局庄轮转） |
+| BE-303 | 发牌、补花、牌墙、庄轮转 | DEC-RULE-002/003 | round state、dealer、wall、deadline | 固定 seed 重现；流局边界正确；IN_PROGRESS（候选开局、连续补花、正常摸出牌、保留 14 张流局及“首个赢家坐庄/流局连庄”已接入 Room/RoomActor/RoomService；跨局庄位写入事件并防覆盖，私牌及操作历史可按 seed 重放，玩家仅见本人手牌；首局庄与补牌方向待样本） |
 | BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝；IN_PROGRESS（draw/discard、手牌归属、三家顺序响应/过牌、按玩家私有候选投影及权威吃/碰/明杠/暗杠/巴杠、抢杠胡、标准胡/七对/清一色/混一色/碰碰胡/全求人/天胡/地胡、自摸、点炮、必胡自动裁决和不必胡过圈均已实现；当前优先级为胡 > 碰/明杠 > 吃；待三西） |
 | BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（增、起手飘花选择、摸花、打/补花、碰风 1 花、普通/风牌明杠、暗杠及巴杠增量花数、杠后尾部连续补牌和可持久化过圈状态均已接入；过圈按 `turn-return-v1-provisional` 在本人实际摸牌或取得出牌权时解除，待旧服样本确认边界） |
 | BE-306 | 结算和两级积分账本 | DEC-RULE-004/005/008 | `RoundSettlement`、原因明细、累计战绩、零和/系统项策略 | 服务端重算；幂等；流局和多响样例通过；IN_PROGRESS（自摸、点炮、一冲二/三、流局、SYSTEM 写入、累计积分、重放/幂等和零和校验已实现；真实行牌现可直接触发服务端结算，三西识别仍保持关闭） |
@@ -533,7 +533,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | I1 | IN_PROGRESS | BE-101～BE-106 已完成（开发/单进程基线）；CL-101 已完成；CL-102 Flutter POC 与 CL-103 framework-neutral 核心/原生 transport 已完成本机验证；OPS-101 开发环境手册已完成；ArkUI/平台生命周期和真实设备仍待 | G2 预审 |
 | G1 | IN_PROGRESS | Android/iOS 工具链预检已通过，Android debug APK 已构建；Android/iOS 真机矩阵和发布签名仍待，鸿蒙暂缓 | Android/iOS 真机与签名验收 |
 | I2 | IN_PROGRESS | BE-201～BE-205 已完成（业务纵切仍为内存/fake-staging）；BE-204 PG/Redis adapter、presence overlay、异步启动装配、snapshot/delta、重连、显式 deadline 和 durable claim/lease 已完成，`verify:real` 与 `verify:multi-instance` 本地真实容器 smoke 通过，生产滚动重启/故障演练仍待；BE-207 纯文本客服 REST 已完成；CL-201 Flutter 房间桌面、四客户端 fake 验收夹具、CL-202 命令 outbox、CL-203 重连 UI 本机 POC 已完成；真实 WSS/设备验收和 CL-204 REST 联调待 | G3 实时纵切 |
-| 宿松规则 | IN_PROGRESS | 用户已确认采用参考 APK 8931 规则；开房配置、花数/胡型/杠开、服务端计分、候选 144 张牌墙、发牌、连续补花、摸出牌、保留 14 张流局、完整吃碰杠胡过、标准胡及 APK 所列特殊胡型、一炮多响均已编码，私密牌墙已接入持久化和按玩家脱敏视图；补花方向、过圈解除边界和三西识别仍缺旧服样本 | 识别三西关系并建立至少 20 个签字 golden cases |
+| 宿松规则 | IN_PROGRESS | 用户已确认采用参考 APK 8931 规则；开房配置、花数/胡型/杠开、服务端计分、候选 144 张牌墙、发牌、连续补花、摸出牌、保留 14 张流局、首个赢家坐庄/流局连庄、完整吃碰杠胡过、标准胡及 APK 所列特殊胡型、一炮多响均已编码，私密牌墙已接入持久化和按玩家脱敏视图；首局庄、补花方向、过圈解除边界和三西识别仍缺旧服样本 | 识别三西关系并建立至少 20 个签字 golden cases |
 | Club/Floor | BLOCKED | 依赖 DEC-003～006 | G2 + schema |
 | Diamond | BLOCKED | 依赖 DEC-008～009 | 计费决策会 |
 | History/Support | IN_PROGRESS | BE-207 纯文本工单 REST 已完成并通过 2 个集成用例；CL-204 共享 Dart SupportApi 与 Flutter 注入已完成，真实 REST/三端联调待 | G3 |
@@ -613,6 +613,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.46 | 2026-09-08 | 补齐最新持久快照恢复的结算防篡改：恢复时校验结算版本与冻结规则一致，并按配置/增分重算逐笔迹线；即使伪造者同时更新 snapshotHash 也会 fail-closed | `be-303-susong-wall.test.js` + `be-202-event-store.test.js`（45/45）；全量 Node 173/173 |
 | 0.1.47 | 2026-09-08 | 新增 BE-307 `verifyDurableRoomReplays`：枚举或指定持久房间，独立恢复两次后比对事件游标、snapshotHash 与完整快照；输出机器可读房间级报告，支持 `throwOnFailure` 阻断 CI | `be-307-room-replay-verifier.test.js`（2/2）；全量 Node 175/175 |
 | 0.1.48 | 2026-09-08 | 扩充服务端赢家结算摘要：保留飘花状态、无花果自摸封顶、权威特殊胡型和杠开次数；CL-302 在结算页只读展示原因，不自行推导。迹线验证保留对同版旧摘要的恢复兼容 | 计分/牌局定向 51/51；`flutter test`（23/23）、`dart analyze` |
+| 0.1.49 | 2026-09-08 | 完成 BE-303 跨局庄轮转：非流局取服务端结算 `winnerIds` 的首位坐庄，流局沿用原庄；`ROUND_DEALING` 固化庄位并在事件重放时拒绝篡改，客户端不能通过下一局参数改庄；`RoomService` 将下一局选庄、开局和私密发牌串为一次服务端流程 | `be-303-susong-wall.test.js`（39/39）；`npm run check`（Node 178/178） |
 
 ## 16. 我们下一次具体做什么
 
