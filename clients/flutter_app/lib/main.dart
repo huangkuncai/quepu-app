@@ -1459,6 +1459,9 @@ class _RoomSettlementTable extends StatelessWidget {
     final wins = settlement['wins'] is List
         ? List<Object?>.from(settlement['wins'] as List)
         : const <Object?>[];
+    final releasedSanxiPairs = settlement['releasedSanxiPairs'] is List
+        ? List<Object?>.from(settlement['releasedSanxiPairs'] as List)
+        : const <Object?>[];
     final outcome = switch (settlement['outcome']?.toString()) {
       'self_draw' => '自摸',
       'discard' => '点炮',
@@ -1634,6 +1637,21 @@ class _RoomSettlementTable extends StatelessWidget {
                                     ),
                                   ),
                                 ],
+                                if (releasedSanxiPairs.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '一炮多响 · 已解除三西：${releasedSanxiPairs.map((pair) {
+                                      final ids = pair is List ? pair : const [];
+                                      if (ids.length != 2) return '未知关系';
+                                      return '${_settlementPlayerName(players, ids[0]?.toString())} ↔ ${_settlementPlayerName(players, ids[1]?.toString())}';
+                                    }).join('、')}',
+                                    style: const TextStyle(
+                                      color: Color(0xffffb98d),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 8),
                                 Expanded(
                                   child: transfers.isEmpty
@@ -1707,7 +1725,11 @@ class _SettlementTransferCard extends StatelessWidget {
           'payer_zeng' => '付款家增 ${stage['value'] ?? 0}',
           'piao' => stage['status'] == 'piao' ? '飘花' : '不飘花',
           'flower_tier' => '花档 ${stage['value'] ?? 0}',
-          'sanxi' => '三西 ×${stage['multiplier'] ?? 1}',
+          'sanxi' when stage['sanxiShare'] == 1 && stage['regularShare'] == 0 =>
+            '三西加付 ×1',
+          'sanxi' when stage['sanxiShare'] == 1 =>
+            '三西叠加 ×${stage['multiplier'] ?? 2}',
+          'sanxi' => '无三西 ×${stage['multiplier'] ?? 1}',
           _ => stage['stage']?.toString() ?? '未知阶段',
         };
       },

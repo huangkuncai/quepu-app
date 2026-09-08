@@ -6,7 +6,10 @@ import {
   SUSONG_SCORE_ORDER_VERSION,
   susongRule
 } from '../../domain/rules/susong.js';
-import { scoreSusongRound } from '../../domain/rules/susong-scoring.js';
+import {
+  deriveSusongSanxiPairs,
+  scoreSusongRound
+} from '../../domain/rules/susong-scoring.js';
 import { AppError } from '../../shared/errors.js';
 
 const ROOM_COMMAND_TYPES = new Set([
@@ -389,7 +392,13 @@ export class RoomService {
       ...scoringFacts,
       config: actor.room.ruleSnapshot.config,
       playerIds: players,
-      zengByPlayer: Object.fromEntries(actor.room.zengByPlayer)
+      zengByPlayer: Object.fromEntries(actor.room.zengByPlayer),
+      // Sanxi always comes from server-owned meld history, never from facts
+      // supplied by a caller of this internal entry point.
+      sanxiPairs: deriveSusongSanxiPairs({
+        playerIds: players,
+        meldsByPlayer: actor.room.currentRound?.meldsByPlayer
+      })
     });
     const command = {
       protocolVersion: '1.0',

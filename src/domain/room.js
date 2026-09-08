@@ -9,6 +9,7 @@ import {
   resolveSusongFlowers
 } from './rules/susong.js';
 import {
+  deriveSusongSanxiPairs,
   scoreSusongRound,
   validateSusongSettlementAudit
 } from './rules/susong-scoring.js';
@@ -1351,9 +1352,10 @@ export class Room {
           gangWinCount: winner.gangWinCount
         })),
         zengByPlayer: Object.fromEntries(this.zengByPlayer),
-        // The identifying condition for Sanxi is still unsigned. Keep this
-        // draft gameplay slice at no Sanxi instead of accepting client facts.
-        sanxiPairs: []
+        sanxiPairs: deriveSusongSanxiPairs({
+          playerIds,
+          meldsByPlayer: this.currentRound.meldsByPlayer
+        })
       });
     } catch (cause) {
       throw new AppError('INVALID_ACTION', { cause });
@@ -1827,7 +1829,11 @@ export class Room {
     const settlement = scoreSusongRound({
       config: this.ruleSnapshot.config,
       playerIds: players,
-      outcome: 'draw'
+      outcome: 'draw',
+      sanxiPairs: deriveSusongSanxiPairs({
+        playerIds: players,
+        meldsByPlayer: this.currentRound.meldsByPlayer
+      })
     });
     this._setStatus(ROOM_STATUS.SETTLING);
     this.currentRound.status = ROOM_STATUS.SETTLING;
@@ -2095,6 +2101,11 @@ export class Room {
       }
       if (this.ruleId === 'susong_v1' && isRecord(result) && result.scoreAuthority === 'server') {
         try {
+          assertSusongSettlementSanxi({
+            settlement: result,
+            playerIds: this._orderedPlayers().map(player => player.id),
+            meldsByPlayer: this.currentRound?.meldsByPlayer
+          });
           validateSusongSettlementAudit({
             config: this.ruleSnapshot.config,
             playerIds: this._orderedPlayers().map(player => player.id),
@@ -2365,8 +2376,18 @@ export class Room {
 
   snapshot({ viewerId } = {}) {
     const players = this._orderedPlayers().map(player => this._publicPlayer(player));
+    const derivedSanxiPairs = this.currentRound && this.ruleId === 'susong_v1'
+      && isRecord(this.currentRound.meldsByPlayer)
+      ? deriveSusongSanxiPairs({
+          playerIds: players.map(player => player.id),
+          meldsByPlayer: this.currentRound.meldsByPlayer
+        })
+      : null;
     const round = this.currentRound ? {
       ...this.currentRound,
+      ...(derivedSanxiPairs ? {
+        sanxiPairs: this.currentRound.settlement?.sanxiPairs ?? derivedSanxiPairs
+      } : {}),
       ruleSnapshot: publicClone(this.ruleSnapshot)
     } : null;
     const base = {
@@ -2614,6 +2635,11 @@ export class Room {
         });
       }
       try {
+        assertSusongSettlementSanxi({
+          settlement: this.currentRound.settlement,
+          playerIds: this._orderedPlayers().map(player => player.id),
+          meldsByPlayer: this.currentRound.meldsByPlayer
+        });
         validateSusongSettlementAudit({
           config: this.ruleSnapshot.config,
           playerIds: this._orderedPlayers().map(player => player.id),
@@ -3024,6 +3050,11 @@ export class Room {
       case 'ROUND_SETTLING':
         if (this.ruleId === 'susong_v1' && payload.scoreAuthority === 'server') {
           try {
+            assertSusongSettlementSanxi({
+              settlement: payload.settlement,
+              playerIds: this._orderedPlayers().map(player => player.id),
+              meldsByPlayer: this.currentRound?.meldsByPlayer
+            });
             validateSusongSettlementAudit({
               config: this.ruleSnapshot.config,
               playerIds: this._orderedPlayers().map(player => player.id),
@@ -3616,6 +3647,40 @@ function normalizePrivateRoundState(input, players, round) {
     turnHistory,
     nextPrivateOperationSequence
   });
+}
+
+function assertSusongSettlementSanxi({ settlement, playerIds, meldsByPlayer }) {
+  const keyOf = pair => {
+    if (!Array.isArray(pair) || pair.length !== 2
+      || !playerIds.includes(pair[0]) || !playerIds.includes(pair[1])
+      || pair[0] === pair[1]) {
+      throw new TypeError('settlement contains an invalid Sanxi relation');
+    }
+    return [...pair].sort().join('\u0000');
+  };
+  const authoritative = new Set(deriveSusongSanxiPairs({
+    playerIds,
+    meldsByPlayer: isRecord(meldsByPlayer)
+      ? meldsByPlayer
+      : Object.fromEntries(playerIds.map(playerId => [playerId, []]))
+  }).map(keyOf));
+  const hasApplied = settlement?.sanxiPairs !== undefined;
+  const hasReleased = settlement?.releasedSanxiPairs !== undefined;
+  // Legacy settlements without relation metadata remain recoverable only when
+  // their authoritative meld history contains no Sanxi relation to omit.
+  if (!hasApplied && !hasReleased && authoritative.size === 0) return;
+  if (!Array.isArray(settlement?.sanxiPairs)
+    || !Array.isArray(settlement?.releasedSanxiPairs)) {
+    throw new TypeError('server settlement must include Sanxi relation metadata');
+  }
+  const recorded = new Set([
+    ...settlement.sanxiPairs,
+    ...settlement.releasedSanxiPairs
+  ].map(keyOf));
+  if (authoritative.size !== recorded.size
+    || [...authoritative].some(key => !recorded.has(key))) {
+    throw new TypeError('settlement Sanxi relations do not match authoritative meld history');
+  }
 }
 
 export { canonical as stableCommandString };

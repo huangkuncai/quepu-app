@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { createSusongFlowerState, resolveSusongFlowers } from '../src/domain/rules/susong.js';
 import {
+  deriveSusongSanxiPairs,
   scoreSusongRound,
   scoreSusongWin,
   SUSONG_SCORE_ORDER_VERSION,
@@ -48,7 +49,7 @@ test('A self-draw with four flowers stays small and settles each zeng relation',
     { stage: 'payer_zeng', count: 3, unit: 2, value: 6 },
     { stage: 'piao', status: 'not_piao', cappedByNoFlowerSelfDraw: false, value: 0 },
     { stage: 'flower_tier', tier: 'small', value: 5, subtotal: 15 },
-    { stage: 'sanxi', multiplier: 1, value: 15 }
+    { stage: 'sanxi', multiplier: 1, regularShare: 1, sanxiShare: 0, value: 15 }
   ]);
   assert.equal(settlement.scoreOrderVersion, SUSONG_SCORE_ORDER_VERSION);
   assert.equal(settlement.transfers[0].scoreOrderVersion, SUSONG_SCORE_ORDER_VERSION);
@@ -125,6 +126,109 @@ test('sanxi doubles only the matching pair after flower tier and both zeng terms
   });
   assert.deepEqual(settlement.transfers.map(item => item.amount), [30, 11, 19]);
   assert.deepEqual(settlement.deltaByPlayer, { A: 60, B: -30, C: -11, D: -19 });
+});
+
+test('sanxi forms only after one direction claims three chi or peng melds', () => {
+  const meldsByPlayer = {
+    A: [
+      { action: 'chi', fromPlayerId: 'B' },
+      { action: 'peng', fromPlayerId: 'B' }
+    ],
+    B: [
+      { action: 'peng', fromPlayerId: 'A' },
+      { action: 'exposed_kong', fromPlayerId: 'A' }
+    ],
+    C: [],
+    D: []
+  };
+  assert.deepEqual(deriveSusongSanxiPairs({ playerIds: players, meldsByPlayer }), []);
+  meldsByPlayer.A.push({ action: 'added_kong', fromPlayerId: 'B' });
+  assert.deepEqual(deriveSusongSanxiPairs({ playerIds: players, meldsByPlayer }), [['A', 'B']]);
+});
+
+test('third-party discard makes the discarder and Sanxi counterpart each pay one share', () => {
+  const settlement = scoreSusongRound({
+    config,
+    playerIds: players,
+    outcome: 'discard',
+    discarderId: 'C',
+    winnerId: 'A',
+    flowerState: flowerState(4),
+    zengByPlayer: { A: 2, B: 3, C: 1, D: 5 },
+    sanxiPairs: [['A', 'B']]
+  });
+  assert.deepEqual(
+    settlement.transfers.map(item => [
+      item.from,
+      item.to,
+      item.amount,
+      item.trace.at(-1).regularShare,
+      item.trace.at(-1).sanxiShare
+    ]),
+    [
+      ['B', 'A', 15, 0, 1],
+      ['C', 'A', 11, 1, 0]
+    ]
+  );
+  assert.deepEqual(settlement.deltaByPlayer, { A: 26, B: -15, C: -11, D: 0 });
+});
+
+test('related discarder pays both the normal and Sanxi shares', () => {
+  const settlement = scoreSusongRound({
+    config,
+    playerIds: players,
+    outcome: 'discard',
+    discarderId: 'B',
+    winnerId: 'A',
+    flowerState: flowerState(4),
+    zengByPlayer: { A: 2, B: 3, C: 1, D: 5 },
+    sanxiPairs: [['A', 'B']]
+  });
+  assert.deepEqual(settlement.transfers.map(item => [item.from, item.to, item.amount]), [['B', 'A', 30]]);
+  assert.deepEqual(settlement.transfers[0].trace.at(-1), {
+    stage: 'sanxi', multiplier: 2, regularShare: 1, sanxiShare: 1, value: 30
+  });
+});
+
+test('one discard with related co-winners releases their Sanxi relation', () => {
+  const settlement = scoreSusongRound({
+    config,
+    playerIds: players,
+    outcome: 'discard',
+    discarderId: 'C',
+    winners: [
+      { playerId: 'A', flowerState: flowerState(4) },
+      { playerId: 'B', flowerState: flowerState(5) }
+    ],
+    zengByPlayer: { A: 2, B: 3, C: 1, D: 5 },
+    sanxiPairs: [['A', 'B']]
+  });
+  assert.deepEqual(settlement.sanxiPairs, []);
+  assert.deepEqual(settlement.releasedSanxiPairs, [['A', 'B']]);
+  assert.deepEqual(
+    settlement.transfers.map(item => [item.from, item.to, item.amount]),
+    [['C', 'A', 11], ['C', 'B', 14]]
+  );
+  assert.deepEqual(settlement.deltaByPlayer, { A: 11, B: 14, C: -25, D: 0 });
+  assert.equal(validateSusongSettlementAudit({
+    config,
+    playerIds: players,
+    zengByPlayer: { A: 2, B: 3, C: 1, D: 5 },
+    settlement
+  }), true);
+
+  const forged = structuredClone(settlement);
+  forged.sanxiPairs = [['A', 'B']];
+  forged.releasedSanxiPairs = [];
+  assert.throws(
+    () => validateSusongSettlementAudit({
+      config,
+      playerIds: players,
+      zengByPlayer: { A: 2, B: 3, C: 1, D: 5 },
+      settlement: forged
+    }),
+    /must be released/
+  );
 });
 
 test('no-flower discard win is rejected instead of accepting client scoring claims', () => {
@@ -286,6 +390,11 @@ test('internal RoomService settlement scores and persists through SYSTEM authori
     room.resolveSusongFlower('A', 'replace', { actorId: 'A', commandId: `A-replace-${index}` });
   }
   room.beginPlaying({ actorId: 'A' });
+  room.currentRound.meldsByPlayer.A = [
+    { action: 'chi', fromPlayerId: 'B' },
+    { action: 'peng', fromPlayerId: 'B' },
+    { action: 'peng', fromPlayerId: 'B' }
+  ];
   const result = await service.settleSusongRound({
     roomId: room.id,
     roomVersion: room.version,
@@ -301,7 +410,8 @@ test('internal RoomService settlement scores and persists through SYSTEM authori
     }
   });
   assert.equal(result.snapshot.round.settlement.scoreAuthority, 'server');
-  assert.deepEqual(result.snapshot.scores, { A: 45, B: -15, C: -11, D: -19 });
+  assert.deepEqual(result.snapshot.round.sanxiPairs, [['A', 'B']]);
+  assert.deepEqual(result.snapshot.scores, { A: 60, B: -30, C: -11, D: -19 });
 });
 
 test('strong-piao round actions persist opening choice, flower discard and draw state', () => {

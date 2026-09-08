@@ -58,7 +58,7 @@
 | DEC-RULE-002 | 吃/碰/杠/补花/抢杠/胡/过及多家胡优先级 | 动作集确认；同时可行动作优先级待旧服样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `MsgXYSSMJ.pb`、回放 opcode |
 | DEC-RULE-003 | 首局庄、庄轮转、多家胡、流局、剩余牌墙和杠后牌 | 上局最先胡者坐庄、流局连庄、剩 14 张流局、一炮多响；首局庄和杠后牌方向待样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt` |
 | DEC-RULE-004 | 底分 1～9 的选择方式及第二档映射 | 1～9 必须选择 4 个递增档；默认 1/2/3/4；第二档用于花奖 | M+APK | USER + RULE | GR | CONFIRMED | 创建房配置及规则文本 |
-| DEC-RULE-005 | 花奖、杠花、出增、飘花、三西/三道规则 | 飘不是计分项；自摸不升档；单笔为档位分+赢家增×增单价+付款者增×增单价，之后三西翻倍 | M+APK+USER | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt`、用户 2026-09-07 A/B/C/D 样例及更正 |
+| DEC-RULE-005 | 花奖、杠花、出增、飘花、三西/三道规则 | 单方累计吃碰同一对手 3 次建立双方关系；三西额外一份；关系双方同炮双响则解除 | M+APK+USER | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt`、用户 2026-09-07～08 计分及三西样例 |
 | DEC-RULE-006 | 无花果、“一察/一素”等术语、数值和触发 | APK 原文术语为“无花果”“一索”；无花果归一索且只能自摸 | M+APK | USER + RULE | GR | CONFIRMED | `8931_rule.txt` |
 | DEC-RULE-007 | 必胡/不必胡、“过圈”和超时默认动作 | 必胡自动胡；不必胡可放弃但必须过圈；超时动作待旧服样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | 创建房配置及规则文本 |
 | DEC-RULE-008 | 小胡/大胡、特殊胡型、≥9、封顶、舍入、零和 | 花数档、九类一索和杠开档确认；多条件叠加/封顶待旧服结算样本 | M+APK | USER + RULE | GR | CONFIRMED（部分） | `8931_rule.txt` |
@@ -71,7 +71,7 @@
 | BLOCKER-ID | 影响 REQ/RULE/任务 | 缺失决策或证据 | Owner | 截止 | 临时降级 | 解除证据 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | BLOCKER-G0-001 | BE-103 生产接入、CL-102～103、发布合规 | DEC-002 登录和年龄/地区/实名边界 | USER + LEGAL | G0 | fake auth；禁止生产房间 | 已确认 Auth 策略和验收样例 | OPEN |
-| BLOCKER-G0-002 | R-*、BE-301～306 | 已确认采用 8931；三西额外付款、多响组合、牌墙细节和优先级仍缺结算/回放样本 | USER + RULE | GR | 已验证部分使用 `8931-apk-baseline.3`；缺失部分禁止生产结算 | 旧 App 牌局样本、计分表、≥20 golden cases | OPEN（范围缩小） |
+| BLOCKER-G0-002 | R-*、BE-301～306 | 已确认采用 8931；三西核心与双方同炮解除已确认，多关系、牌墙细节、花奖封顶和优先级仍缺样本 | USER + RULE | GR | 已验证部分使用 `8931-apk-baseline.3`；缺失部分禁止生产结算 | 旧 App 牌局样本、计分表、≥20 golden cases | OPEN（范围缩小） |
 | BLOCKER-G0-003 | BE-401～405、Club/Floor | DEC-003～006 俱乐部/楼层/访问权限 | USER/PM | G0 | 只读 mock 数据 | RBAC 与 ruleSnapshot schema 已确认 | OPEN |
 | BLOCKER-G0-004 | BE-501～504 | DEC-008～009 钻石归属和扣费策略 | USER + OPS | G0 | ledger sandbox；不扣真实钻石 | reserve/consume/release/reverse 流程签字 | OPEN |
 | BLOCKER-G0-005 | CL-102～103、OPS-301～304、G1 | Android/iOS 设备、SDK/API/签名清单（鸿蒙已暂缓） | USER + CL | G0/G1 | Dart 原生 transport 与 Flutter/FakeTransport POC 可本机验证；不生成可安装包 | Android+iOS 真机矩阵和签名条件 | OPEN |
@@ -141,6 +141,7 @@
 | 2026-09-08 | AI/DEV | 跨局庄位由上一局服务端结算唯一确定：首个赢家坐庄、流局连庄；下一局事件携带可重算庄位，客户端覆盖和事件篡改均拒绝，RoomService 自动完成下一局私密发牌 | BE-303、BE-307 | `be-303-susong-wall.test.js`（40/40，含持久化重试/重启）；首局庄仍待样本 |
 | 2026-09-08 | AI/DEV | 结算页由房主按权威 roomVersion 触发下一局并复用客户端 outbox；非房主只等待，整场结束隐藏入口 | CL-302、CL-202 | Flutter 23/23、Dart/Flutter analyze 与协议脚本通过 |
 | 2026-09-08 | AI/DEV | 起手强飘客户端只提交选择/打花意图；所有起手花状态解决后，服务端以 roundId 稳定命令幂等进入正式行牌 | BE-303、BE-305、CL-301 | 服务端 41/41；Flutter 24/24、analyze 通过 |
+| 2026-09-08 | USER/AI/DEV | 单方累计吃碰同一对手 3 次建立双方三西；自摸/关系内点炮/第三方点炮分别按额外一份结算；关系双方被同一炮同时胡时解除且不互付 | DEC-RULE-005、BE-304、BE-306、BE-308 | `be-302-susong-scoring.test.js`、`npm run check`（Node 184/184）；Flutter 24/24 |
 
 ## 8. 变更记录
 
@@ -194,6 +195,7 @@
 | 0.1.46 | 2026-09-08 | 登记 BE-303 首个赢家坐庄/流局连庄、庄位事件重放校验和下一局服务端自动发牌 | AI/DEV |
 | 0.1.47 | 2026-09-08 | 登记 CL-302 房主下一局入口、roomVersion 并发保护和 outbox 重试闭环 | AI/DEV |
 | 0.1.48 | 2026-09-08 | 登记起手强飘交互和花状态全解决后的服务端幂等自动开打 | AI/DEV |
+| 0.1.49 | 2026-09-08 | 登记三西形成、三类付款、一炮双响解除、权威恢复审计和客户端只读提示 | USER/AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 

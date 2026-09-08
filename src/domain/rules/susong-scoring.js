@@ -14,6 +14,43 @@ const TIER_INDEX = Object.freeze({
 export { SUSONG_SCORE_ORDER_VERSION } from './susong.js';
 
 /**
+ * Derive symmetric Sanxi relations from authoritative public meld history.
+ * A relation is formed when either player has claimed at least three chi/peng
+ * melds from the same opponent. An added kong still counts as its original
+ * peng; an exposed/concealed kong does not create a Sanxi claim.
+ */
+export function deriveSusongSanxiPairs({ meldsByPlayer, playerIds } = {}) {
+  const players = normalizePlayers(playerIds);
+  if (!meldsByPlayer || typeof meldsByPlayer !== 'object' || Array.isArray(meldsByPlayer)) {
+    throw new TypeError('meldsByPlayer must be an object');
+  }
+  const directedCounts = new Map();
+  for (const claimantId of players) {
+    const melds = meldsByPlayer[claimantId] ?? [];
+    if (!Array.isArray(melds)) throw new TypeError(`meldsByPlayer.${claimantId} must be an array`);
+    for (const meld of melds) {
+      if (!meld || typeof meld !== 'object' || Array.isArray(meld)) {
+        throw new TypeError(`meldsByPlayer.${claimantId} contains an invalid meld`);
+      }
+      if (!['chi', 'peng', 'added_kong'].includes(meld.action)) continue;
+      const providerId = member(meld.fromPlayerId, players, 'meld.fromPlayerId');
+      if (providerId === claimantId) throw new TypeError('a Sanxi claim requires another player');
+      const key = `${claimantId}\u0000${providerId}`;
+      directedCounts.set(key, (directedCounts.get(key) ?? 0) + 1);
+    }
+  }
+  const pairKeys = new Set();
+  for (const [key, count] of directedCounts) {
+    if (count < 3) continue;
+    const [claimantId, providerId] = key.split('\u0000');
+    pairKeys.add(pairKey(claimantId, providerId));
+  }
+  return deepFreeze([...pairKeys]
+    .sort()
+    .map(key => key.split('\u0000')));
+}
+
+/**
  * Produce an immutable, zero-sum settlement from server-owned round facts.
  *
  * Pair score confirmed by the 2026-09-07 A/B/C/D example:
@@ -49,19 +86,25 @@ export function scoreSusongWin({
     throw new TypeError(`win is not allowed: ${decision.reason}`);
   }
 
-  const payers = winSource === 'self_draw'
+  const regularPayers = winSource === 'self_draw'
     ? players.filter(playerId => playerId !== winner)
     : [member(discarderId, players, 'discarderId')];
-  if (payers.includes(winner)) throw new TypeError('winnerId cannot also be a payer');
+  if (regularPayers.includes(winner)) throw new TypeError('winnerId cannot also be a payer');
 
   const tier = decision.tier;
   const baseScore = config.scoreTiers[TIER_INDEX[tier]];
   const relations = normalizeSanxiPairs(sanxiPairs, players);
+  const sanxiPayers = players.filter(playerId =>
+    playerId !== winner && relations.has(pairKey(winner, playerId)));
+  const payers = players.filter(playerId =>
+    regularPayers.includes(playerId) || sanxiPayers.includes(playerId));
   const transfers = payers.map(payerId => {
     const winnerZengScore = zeng[winner] * config.zeng;
     const payerZengScore = zeng[payerId] * config.zeng;
     const beforeSanxi = baseScore + winnerZengScore + payerZengScore;
-    const sanxiMultiplier = relations.has(pairKey(winner, payerId)) ? 2 : 1;
+    const regularShare = regularPayers.includes(payerId) ? 1 : 0;
+    const sanxiShare = relations.has(pairKey(winner, payerId)) ? 1 : 0;
+    const sanxiMultiplier = regularShare + sanxiShare;
     return deepFreeze({
       from: payerId,
       to: winner,
@@ -78,7 +121,13 @@ export function scoreSusongWin({
           value: 0
         },
         { stage: 'flower_tier', tier, value: baseScore, subtotal: beforeSanxi },
-        { stage: 'sanxi', multiplier: sanxiMultiplier, value: beforeSanxi * sanxiMultiplier }
+        {
+          stage: 'sanxi',
+          multiplier: sanxiMultiplier,
+          regularShare,
+          sanxiShare,
+          value: beforeSanxi * sanxiMultiplier
+        }
       ]
     });
   });
@@ -105,6 +154,7 @@ export function scoreSusongWin({
     cappedByNoFlowerSelfDraw: decision.cappedByNoFlowerSelfDraw === true,
     patterns: normalizedPatterns,
     gangWinCount,
+    sanxiPairs: normalizedSanxiPairList(sanxiPairs, players),
     transfers,
     deltaByPlayer
   });
@@ -116,12 +166,15 @@ export function scoreSusongRound(input = {}) {
   const config = normalizeSusongConfig(input.config);
   const outcome = input.outcome ?? input.winSource;
   if (outcome === 'draw') {
+    const configuredSanxiPairs = normalizedSanxiPairList(input.sanxiPairs ?? [], players);
     return deepFreeze({
       scoreAuthority: 'server',
       scoreOrderVersion: SUSONG_SCORE_ORDER_VERSION,
       outcome: 'draw',
       winnerIds: [],
       discarderId: null,
+      sanxiPairs: configuredSanxiPairs,
+      releasedSanxiPairs: [],
       wins: [],
       transfers: [],
       deltaByPlayer: Object.fromEntries(players.map(playerId => [playerId, 0]))
@@ -146,6 +199,13 @@ export function scoreSusongRound(input = {}) {
     throw new TypeError('discarderId cannot be a winner');
   }
 
+  const configuredSanxiPairs = normalizedSanxiPairList(input.sanxiPairs ?? [], players);
+  const releasedSanxiPairs = outcome === 'discard' && winnerIds.length > 1
+    ? configuredSanxiPairs.filter(pair => pair.every(playerId => winnerIds.includes(playerId)))
+    : [];
+  const releasedKeys = new Set(releasedSanxiPairs.map(pair => pairKey(pair[0], pair[1])));
+  const appliedSanxiPairs = configuredSanxiPairs.filter(pair => !releasedKeys.has(pairKey(pair[0], pair[1])));
+
   const wins = winnerInputs.map(winner => scoreSusongWin({
     config,
     playerIds: players,
@@ -156,7 +216,7 @@ export function scoreSusongRound(input = {}) {
     zengByPlayer: input.zengByPlayer,
     patterns: winner.patterns ?? [],
     gangWinCount: winner.gangWinCount ?? 0,
-    sanxiPairs: input.sanxiPairs ?? []
+    sanxiPairs: appliedSanxiPairs
   }));
   const transfers = wins.flatMap(win => win.transfers);
   const deltaByPlayer = Object.fromEntries(players.map(playerId => [playerId, 0]));
@@ -173,6 +233,8 @@ export function scoreSusongRound(input = {}) {
     outcome,
     winnerIds,
     discarderId,
+    sanxiPairs: appliedSanxiPairs,
+    releasedSanxiPairs,
     wins: wins.map(win => ({
       winnerId: win.winnerId,
       flowerCount: win.flowerCount,
@@ -232,6 +294,45 @@ export function validateSusongSettlementAudit({
     tierByWinner.set(winnerId, win.tier);
     piaoByWinner.set(winnerId, win.piao);
   }
+  const hasSanxiMetadata = settlement.sanxiPairs !== undefined
+    || settlement.releasedSanxiPairs !== undefined;
+  if (hasSanxiMetadata
+    && (!Array.isArray(settlement.sanxiPairs) || !Array.isArray(settlement.releasedSanxiPairs))) {
+    throw new TypeError('settlement Sanxi metadata is incomplete');
+  }
+  const appliedSanxiPairs = hasSanxiMetadata
+    ? normalizedSanxiPairList(settlement.sanxiPairs, players)
+    : [];
+  const releasedSanxiPairs = hasSanxiMetadata
+    ? normalizedSanxiPairList(settlement.releasedSanxiPairs, players)
+    : [];
+  const appliedSanxi = new Set(appliedSanxiPairs.map(pair => pairKey(pair[0], pair[1])));
+  const releasedSanxi = new Set(releasedSanxiPairs.map(pair => pairKey(pair[0], pair[1])));
+  if (hasSanxiMetadata && [...appliedSanxi].some(key => releasedSanxi.has(key))) {
+    throw new TypeError('applied and released Sanxi relations must be disjoint');
+  }
+  if (settlement.outcome === 'discard' && winnerIds.length > 1
+    && appliedSanxiPairs.some(pair => pair.every(playerId => winnerIds.includes(playerId)))) {
+    throw new TypeError('Sanxi relations between co-winners must be released');
+  }
+  if (releasedSanxiPairs.some(pair => settlement.outcome !== 'discard'
+    || winnerIds.length < 2
+    || !pair.every(playerId => winnerIds.includes(playerId)))) {
+    throw new TypeError('released Sanxi relations must connect co-winners of one discard');
+  }
+  const expectedRelations = new Set();
+  if (hasSanxiMetadata && settlement.outcome !== 'draw') {
+    for (const winnerId of winnerIds) {
+      const regularPayers = settlement.outcome === 'self_draw'
+        ? players.filter(playerId => playerId !== winnerId)
+        : [settlement.discarderId];
+      const sanxiPayers = players.filter(playerId =>
+        playerId !== winnerId && appliedSanxi.has(pairKey(winnerId, playerId)));
+      for (const payerId of new Set([...regularPayers, ...sanxiPayers])) {
+        expectedRelations.add(`${payerId}\u0000${winnerId}`);
+      }
+    }
+  }
   if (settlement.outcome === 'draw') {
     if (winnerIds.length !== 0 || settlement.transfers.length !== 0
       || settlement.discarderId !== null) {
@@ -239,13 +340,13 @@ export function validateSusongSettlementAudit({
     }
   } else if (settlement.outcome === 'self_draw') {
     if (winnerIds.length !== 1 || settlement.discarderId !== null
-      || settlement.transfers.length !== players.length - 1) {
+      || settlement.transfers.length !== (hasSanxiMetadata ? expectedRelations.size : players.length - 1)) {
       throw new TypeError('self-draw settlement shape is invalid');
     }
   } else {
     const discarderId = member(settlement.discarderId, players, 'discarderId');
     if (winnerIds.length < 1 || winnerIds.length > 3 || winnerIds.includes(discarderId)
-      || settlement.transfers.length !== winnerIds.length) {
+      || settlement.transfers.length !== (hasSanxiMetadata ? expectedRelations.size : winnerIds.length)) {
       throw new TypeError('discard settlement shape is invalid');
     }
   }
@@ -267,7 +368,9 @@ export function validateSusongSettlementAudit({
       if (winnerId !== winnerIds[0] || winnerIds.includes(payerId)) {
         throw new TypeError(`settlement.transfers.${index} self-draw relation is invalid`);
       }
-    } else if (settlement.outcome === 'discard' && payerId !== settlement.discarderId) {
+    } else if (settlement.outcome === 'discard'
+      && payerId !== settlement.discarderId
+      && !(hasSanxiMetadata && appliedSanxi.has(pairKey(winnerId, payerId)))) {
       throw new TypeError(`settlement.transfers.${index} payer is not the discarder`);
     }
     const trace = transfer.trace;
@@ -281,6 +384,10 @@ export function validateSusongSettlementAudit({
     const baseScore = config.scoreTiers[TIER_INDEX[tier]];
     const subtotal = winnerZeng + payerZeng + baseScore;
     const multiplier = trace[4].multiplier;
+    const expectedRegularShare = settlement.outcome === 'self_draw'
+      ? (payerId === winnerId ? 0 : 1)
+      : (payerId === settlement.discarderId ? 1 : 0);
+    const expectedSanxiShare = hasSanxiMetadata && appliedSanxi.has(pairKey(winnerId, payerId)) ? 1 : 0;
     if (trace[0].count !== zeng[winnerId] || trace[0].unit !== config.zeng
       || trace[0].value !== winnerZeng
       || trace[1].count !== zeng[payerId] || trace[1].unit !== config.zeng
@@ -291,6 +398,9 @@ export function validateSusongSettlementAudit({
       || trace[3].tier !== tier || trace[3].value !== baseScore
       || trace[3].subtotal !== subtotal
       || ![1, 2].includes(multiplier)
+      || (hasSanxiMetadata && (trace[4].regularShare !== expectedRegularShare
+        || trace[4].sanxiShare !== expectedSanxiShare
+        || multiplier !== expectedRegularShare + expectedSanxiShare))
       || trace[4].value !== subtotal * multiplier
       || transfer.amount !== trace[4].value
       || !Number.isSafeInteger(transfer.amount) || transfer.amount <= 0) {
@@ -298,6 +408,11 @@ export function validateSusongSettlementAudit({
     }
     reconstructed[payerId] -= transfer.amount;
     reconstructed[winnerId] += transfer.amount;
+  }
+  if (hasSanxiMetadata
+    && (relationKeys.size !== expectedRelations.size
+      || [...expectedRelations].some(key => !relationKeys.has(key)))) {
+    throw new TypeError('settlement transfers do not match Sanxi payment relations');
   }
   if (!settlement.deltaByPlayer || typeof settlement.deltaByPlayer !== 'object'
     || Array.isArray(settlement.deltaByPlayer)
@@ -376,6 +491,12 @@ function normalizeSanxiPairs(value, players) {
     result.add(pairKey(left, right));
   }
   return result;
+}
+
+function normalizedSanxiPairList(value, players) {
+  return [...normalizeSanxiPairs(value, players)]
+    .sort()
+    .map(key => key.split('\u0000'));
 }
 
 function pairKey(left, right) {
