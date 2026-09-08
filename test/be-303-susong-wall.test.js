@@ -651,9 +651,9 @@ test('authoritative reaction priority is hu over peng over chi regardless of res
         'bamboo-6-2', 'bamboo-7-2', 'bamboo-8-2', 'bamboo-9-2', 'dots-1-1', 'dots-2-1'
       ],
       C: [
-        'characters-3-2', 'characters-3-3',
+        'characters-3-2', 'characters-3-3', 'characters-3-4',
         'dots-1-2', 'dots-2-2', 'dots-3-2', 'dots-4-2', 'dots-5-2',
-        'dots-6-2', 'dots-7-2', 'dots-8-2', 'dots-9-2', 'south-1', 'south-2'
+        'dots-6-2', 'dots-7-2', 'dots-8-2', 'dots-9-2', 'south-1'
       ],
       D: dCanWin ? [
         'characters-1-4', 'characters-2-4',
@@ -686,6 +686,7 @@ test('authoritative reaction priority is hu over peng over chi regardless of res
   assert.equal(huRoom.snapshot({ viewerId: 'B' }).round.availableReactions.includes('chi'), true);
   huRoom.applyAction('B', { action: 'chi', args: { candidateIndex: 0 } });
   assert.equal(huRoom.snapshot({ viewerId: 'C' }).round.availableReactions.includes('peng'), true);
+  assert.equal(huRoom.snapshot({ viewerId: 'C' }).round.availableReactions.includes('exposed_kong'), true);
   huRoom.applyAction('C', 'peng');
   assert.equal(huRoom.snapshot({ viewerId: 'D' }).round.availableReactions.includes('hu'), true);
   const huResult = huRoom.applyAction('D', 'hu');
@@ -704,6 +705,19 @@ test('authoritative reaction priority is hu over peng over chi regardless of res
   assert.equal(pengRoom.currentRound.meldsByPlayer.C.at(-1).action, 'peng');
   assert.equal(pengRoom.turn, 'C');
   assert.equal(pengRoom.currentRound.turnPhase, 'discard');
+
+  const kongRoom = createPriorityRoom({ id: 'kong-chi-priority-room', dCanWin: false });
+  kongRoom.applyAction('B', { action: 'chi', args: { candidateIndex: 0 } });
+  const wallBefore = kongRoom.currentRound.wall.wallRemaining;
+  kongRoom.applyAction('C', 'exposed_kong');
+  const kongResult = kongRoom.applyAction('D', 'pass');
+  assert.equal(kongResult.resolution.action, 'exposed_kong');
+  assert.equal(kongResult.resolution.playerId, 'C');
+  assert.deepEqual(kongRoom.currentRound.meldsByPlayer.B, []);
+  assert.equal(kongRoom.currentRound.meldsByPlayer.C.at(-1).action, 'exposed_kong');
+  assert.ok(kongRoom.currentRound.wall.wallRemaining < wallBefore);
+  assert.equal(kongRoom.turn, 'C');
+  assert.equal(kongRoom.currentRound.turnPhase, 'discard');
 });
 
 test('a player cannot immediately discard the same face that was just claimed by chi', () => {
