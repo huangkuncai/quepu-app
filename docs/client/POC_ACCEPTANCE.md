@@ -22,7 +22,7 @@
 | 候选 ID | 方案 | POC 分支/提交 | 已验证平台 | 未验证风险 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | `CAND-ARKUIX` | ArkUI-X/ArkTS + 平台适配层 | `TBD` | `TBD` | Bridge、推送、安全存储、客服、上架工具链 | `PLANNED` |
-| `CAND-FLUTTER` | Flutter + OpenHarmony 方案 | `clients/flutter_app`（工作树） | Web/本机 Flutter 测试 | OHOS SDK/插件、HAP 打包、三端签名、长期维护 | `LOCAL_POC_PASS / G1_BLOCKED` |
+| `CAND-FLUTTER` | Flutter Android/iOS（HarmonyOS 暂缓） | `clients/flutter_app` | 本机 Flutter 测试、Android API 37 Emulator 开发 WSS | Android/iOS 真机、WSS 证书链、签名、后台/弱网和长期维护 | `EMULATOR_POC_PASS / G1_BLOCKED` |
 | `CAND-OTHER` | 评审后新增候选（需说明理由） | `TBD` | `TBD` | `TBD` | `DEFERRED` |
 
 候选评分只用于 G1 决策，不等同于产品承诺：
@@ -154,6 +154,6 @@ artifacts/client-poc/<runId>/
 
 | runId | 候选 | deviceId | 日期 | git SHA | 用例范围 | 结果 | 证据 | 复核人 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` |
+| `POC-20260907-01` | Flutter Android | `Medium_Phone` Emulator / API 37 | 2026-09-07 | `d054a91` + layout fix | debug APK 安装、横屏启动、dev WS 登录/在线、2400×1080 布局 | `PASS (EMULATOR ONLY)` | [大厅截图](evidence/POC-20260907-01/android-emulator-wss-lobby.png) | AI/DEV |
 
-当前本机证据（不替代下表的真机记录）：`clients/flutter_app` 执行 `flutter test` 21/21、`dart analyze` 和 Android debug APK 构建通过；覆盖房间桌面、命令 outbox、维护/版本冲突提示、手动重试、前台恢复、权威手牌/动作面板、弃牌/副露/花数/牌墙/回合倒计时、可配置原生 WSS 和 SupportApi 注入表单。当前未连接生产或 staging WSS；Android/iOS 真机与签名门保持 `G1_BLOCKED`，鸿蒙按当前决定暂缓。
+当前本机证据（不替代下表的真机记录）：`clients/flutter_app` 执行 `flutter test` 22/22、`dart analyze` 和 Android debug APK 构建通过；Android API 37 Emulator 已安装配置版 APK，经本机开发 WebSocket 完成登录并显示在线大厅。覆盖房间桌面、命令 outbox、维护/版本冲突提示、手动重试、前台恢复、权威手牌/动作面板、弃牌/副露/花数/牌墙/回合倒计时、可配置原生 WSS 和 SupportApi 注入表单。当前未连接生产或 staging WSS；Android/iOS 真机与签名门保持 `G1_BLOCKED`，鸿蒙按当前决定暂缓。

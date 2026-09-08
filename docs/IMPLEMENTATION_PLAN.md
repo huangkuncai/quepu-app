@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-07（CL-201 可配置原生 WSS 运行时，Node 168/168、Flutter 21/21）
+> 最近更新：2026-09-07（CL-201 Android Emulator 真实开发 WSS 登录与紧凑横屏，Node 168/168、Flutter 22/22）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -307,7 +307,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | BE-204 | Snapshot/delta reconnect | BE-202/203 | `lastRoomVersion`、snapshotHash、事件窗口、sync_required、重连宽限、显式服务端 deadline、presence overlay、PG/Redis adapter 装配、durable room inventory、deadline claim/lease | 丢包/乱序/重复/重启后同一时刻 hash 一致；房间枚举后能恢复并重新 arm deadline；同一 deadline 只能由一个租约执行；stale deadline 不得推进新回合；生产 adapter 事务和多实例验证通过 | AI | IN_PROGRESS（真实 adapter 与双实例开发 smoke 已通过；生产滚动重启/故障演练和长期压测待） |
 | BE-205 | Room REST/BFF | BE-201 | room create/get/join/leave/ready/start/disband、ETag/If-Match/version、`Idempotency-Key` | REST 与 WS 命令权限和结果一致；错误 envelope、成员边界和重试幂等通过 | AI | DONE（内存/fake-staging；生产 adapter/多实例仍待） |
 | BE-206 | 纵切故障测试 | 全部 I2 | fake rule + 四客户端 + fault injection + restart test | 基础房间可演示；尚不开放真实钻石/麻将计分 | AI + QA | DONE（fake-rule 基础） |
-| CL-201 | 房间导航/桌面 beta | CL-101/103、BE-203 | 房间列表、座位、准备、公共状态、私牌占位、错误提示 | 4 个实例显示同一 roomVersion | AI + CL | IN_PROGRESS（4 客户端 framework-neutral fake 夹具通过；Flutter 已可用 `SUSONG_WSS_URL` 切换原生 WSS，Android debug APK 构建通过；真实服务/设备四客户端验收待） |
+| CL-201 | 房间导航/桌面 beta | CL-101/103、BE-203 | 房间列表、座位、准备、公共状态、私牌占位、错误提示 | 4 个实例显示同一 roomVersion | AI + CL | IN_PROGRESS（4 客户端 framework-neutral fake 夹具通过；Flutter 已通过 `SUSONG_WSS_URL` 在 Android API 37 Emulator 完成真实开发 WSS 登录/在线验证及紧凑横屏修复；真实四客户端房间、弱网与 Android/iOS 真机验收待） |
 | CL-202 | 命令 outbox/幂等 | CL-103、BE-204 | commandId 队列、ACK 后移除、超时安全重试 | 重试不产生重复事件；同步中禁操作 | AI + CL | DONE（Flutter/fake-staging POC） |
 | CL-203 | 重连 UI | BE-204 | 连接状态、同步中、维护、版本冲突和手动重试 | 前后台/杀进程回前台可恢复 | AI + CL | DONE（Flutter 本机 POC；真实设备前后台/杀进程验收属于 G1） |
 | QA-201 | 四客户端验收脚本 | 全部 I2 | 自动化/录屏脚本和事件对比器 | 顺序、版本、快照 hash、私有字段检查通过 | AI + QA | DONE（基础故障矩阵） |
@@ -603,6 +603,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.36 | 2026-09-07 | CL-301 横屏牌桌接入服务端权威本人手牌与动作面板：手牌点选出牌，摸/过/胡/自摸/碰/明杠和多候选吃/暗杠/巴杠均按快照动态生成；Dart 命令仅透传候选编号或所选牌 ID | `flutter test`（18/18）、Flutter/Dart analyze 和协议核心测试通过；待公开弃牌/牌组、花数/deadline 与真实 WSS 设备联调 |
 | 0.1.37 | 2026-09-07 | 完成 CL-301 公开牌桌状态：按座位展示服务端弃牌、副露、花数/飘花状态、当前行动玩家、牌墙剩余数和回合 deadline 倒计时；局数不再硬编码 | `flutter test`（18/18）、`dart analyze`通过；真实 WSS/Android/iOS 设备验收仍归 CL-201/G1 |
 | 0.1.38 | 2026-09-07 | Flutter 默认保留离线 FakeTransport，增加经 `SUSONG_WSS_URL`/`SUSONG_ENV` dart-define 选择的 Android/iOS 原生 WSS 运行时；登录页显示后端环境，URL fail-closed 校验，Android release 联网权限与 debug-only 明文 WS 边界已配置 | `flutter test`（21/21）、`dart analyze`、`flutter build apk --debug`通过；真实服务四客户端与真机仍待验收 |
+| 0.1.39 | 2026-09-07 | 将配置版 debug APK 安装至 Android API 37 `Medium_Phone` Emulator，验证横屏启动、`ws://10.0.2.2:8787` 开发服务登录和在线大厅；真尺寸发现的大厅操作卡片/空状态底部溢出已做紧凑布局修复并新增 2400×1080 回归 | `flutter test`（22/22）、Android 重新构建/安装/登录和截图通过；仅为 Emulator/dev WS 证据，不替代真机/WSS |
 
 ## 16. 我们下一次具体做什么
 

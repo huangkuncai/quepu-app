@@ -19,14 +19,14 @@
 
 | 字段 | 当前值 |
 | --- | --- |
-| 产品版本 | `TBD` |
-| G1 POC 构建号范围 | `TBD` |
+| 产品版本 | `1.0.0+1`（POC） |
+| G1 POC 构建号范围 | `1.0.0+1`（待正式规划） |
 | G4 RC 构建号范围 | `TBD` |
 | 最低 Android API/版本 | `TBD`（相对基线：项目锁定后填写） |
 | 最低 iOS 版本 | `TBD` |
 | HarmonyOS NEXT / OpenHarmony 目标 API | `TBD` |
 | 是否支持旧鸿蒙 Android APK | `TBD`（独立决策） |
-| Android applicationId | `TBD` |
+| Android applicationId | `com.example.susong_app`（POC 占位，发布前必须替换） |
 | iOS bundleId | `TBD` |
 | Harmony bundleName | `TBD` |
 | staging endpoint | `TBD` |
@@ -51,7 +51,7 @@ G1 只有 1 台每个平台的最小集合时，结论范围限于这些设备�
 
 | deviceId | 厂商/型号 | RAM/SoC | Android 版本/API | ROM | GMS/HMS | 网络 | 安装/升级 | 后台/回收 | WSS/弱网 | 结果/缺陷 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | GMS/HMS/无 | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` |
+| `EMU-API37-01` | Android Studio `Medium_Phone` Emulator | 4 GB / ARM64 | Android API 37 | Google Play image | GMS | Mac host dev WS | debug APK install/replace PASS | 未验 | 登录/online PASS | 仅模拟器开发证据；[截图](evidence/POC-20260907-01/android-emulator-wss-lobby.png) |
 
 覆盖要求：
 

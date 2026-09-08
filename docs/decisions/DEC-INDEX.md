@@ -128,6 +128,7 @@
 | 2026-09-07 | AI/DEV | Flutter 横屏牌桌接入本人手牌、点选出牌和服务端动态动作面板；多候选吃/暗杠/巴杠仅回传候选编号，客户端不提交计分或牌墙事实 | CL-301、CL-202 | `flutter test`（18/18）、Flutter/Dart analyze、Dart 协议核心测试；真实 WSS/设备待验收 |
 | 2026-09-07 | AI/DEV | CL-301 公开牌桌直接渲染服务端弃牌、副露、花数/飘花、行动者、牌墙和 deadline；局数来自快照而非客户端常量 | CL-301 | `flutter test`（18/18）、`dart analyze`；真实 WSS/设备待 CL-201/G1 验收 |
 | 2026-09-07 | AI/DEV | Flutter 运行时可通过 dart-define 在默认离线演示和 Android/iOS 原生 WSS 之间切换；URL 仅接受绝对 ws/wss，Android release 具备联网权限且明文 WS 仅限 debug | CL-103、CL-201 | `flutter test`（21/21）、`dart analyze`、Android debug APK 实际构建；真实服务/设备仍待 |
+| 2026-09-07 | AI/DEV | Android API 37 Emulator 安装配置版 APK，经 `10.0.2.2` 完成开发 WS 登录和在线大厅；实尺寸暴露的 3 处底部溢出已修复并固化 2400×1080 回归 | CL-201、G1 前置 | `flutter test`（22/22）、重新构建/安装/截图；仅 Emulator/dev WS，不代表真机/WSS |
 
 ## 8. 变更记录
 
@@ -168,6 +169,7 @@
 | 0.1.33 | 2026-09-07 | 登记 CL-301 权威手牌、出牌及吃碰杠胡动作面板和候选参数透传 | AI/DEV |
 | 0.1.34 | 2026-09-07 | 登记 CL-301 公开弃牌、副露、花数、牌墙、当前行动者与 deadline 倒计时 | AI/DEV |
 | 0.1.35 | 2026-09-07 | 登记 Flutter 可配置原生 WSS 运行时、登录环境标识、Android 联网权限与 debug-only 明文 WS 边界 | AI/DEV |
+| 0.1.36 | 2026-09-07 | 登记 Android API 37 Emulator 开发 WS 登录、在线大厅、紧凑横屏溢出修复与可复核截图 | AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 

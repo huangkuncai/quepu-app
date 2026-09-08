@@ -6,6 +6,21 @@ import 'package:susong_app/src/fake_transport.dart';
 import 'package:susong_protocol_client/support.dart';
 
 void main() {
+  testWidgets('lobby fits a compact landscape phone viewport', (tester) async {
+    tester.view.physicalSize = const Size(2400, 1080);
+    tester.view.devicePixelRatio = 2.625;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const SusongApp());
+    await tester.tap(find.text('进入大厅'));
+    await tester.pump(const Duration(milliseconds: 180));
+
+    expect(find.text('创建演示房'), findsOneWidget);
+    expect(find.text('还没有进行中的房间'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('POC login exposes the lobby and room controls', (tester) async {
     await tester.pumpWidget(const SusongApp());
     expect(find.text('宿松麻将'), findsOneWidget);
