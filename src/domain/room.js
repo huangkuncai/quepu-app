@@ -79,6 +79,7 @@ const ZENG_STATES = new Set([
   ROOM_STATUS.SETTLING,
   ROOM_STATUS.NEXT_ROUND
 ]);
+const SUSONG_KONG_ACTIONS = new Set(['exposed_kong', 'concealed_kong', 'added_kong']);
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -1352,8 +1353,13 @@ export class Room {
         if (firstTurnCycle) patterns.push('earthly_win');
       }
     }
-    const gangWinCount = winSource === 'self_draw'
-      && ['exposed_kong', 'concealed_kong', 'added_kong'].includes(lastTurnAction) ? 1 : 0;
+    let gangWinCount = 0;
+    if (winSource === 'self_draw') {
+      for (let index = gameplayHistory.length - 1; index >= 0; index -= 1) {
+        if (!SUSONG_KONG_ACTIONS.has(gameplayHistory[index]?.action)) break;
+        gangWinCount += 1;
+      }
+    }
     const decision = evaluateSusongWin({ flowerState, winSource, patterns, gangWinCount });
     return decision.allowed ? { playerId, patterns, gangWinCount } : null;
   }

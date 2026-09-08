@@ -21,10 +21,11 @@
 | 飘花风牌限制 | 飘花玩家不能碰或杠风牌，服务端不投影相应候选，伪造动作会被拒绝 | `test/be-303-susong-wall.test.js` |
 | 吃后限制 | 吃牌取得出牌权后，不能立即打出与所吃进牌相同的牌面 | `test/be-303-susong-wall.test.js` |
 | 动作优先级 | 同一张弃牌按胡 > 碰/明杠 > 吃裁决，与三家响应先后无关；同一玩家可碰或明杠时由本人选择 | `test/be-303-susong-wall.test.js` |
+| 连续杠开 | 当前出牌权内连续两次及以上杠后自摸进入一索；出牌或下一次普通摸牌会切断杠链，旧回合杠次数不累计 | `test/be-303-susong-wall.test.js` |
 | 权威与恢复 | 三西从公开牌组历史重算；客户端关系、分数、缺失关系或伪造解除不能通过持久化审计 | `src/domain/room.js`、`src/domain/rules/susong-scoring.js` |
 | 计分回归 | 22 个 JSON golden cases + 固定种子 10,000 组属性回放，校验档位、付款、四家零和及迹线 | `test/fixtures/rules/susong-scoring-golden.json`、`test/be-308-susong-properties.test.js` |
 
-当前质量门：`npm run check` 为 Node 221/221；Flutter 24/24，静态分析无问题。
+当前质量门：`npm run check` 为 Node 222/222；Flutter 24/24，静态分析无问题。
 
 ## 2. APK 能证明与不能证明的边界
 

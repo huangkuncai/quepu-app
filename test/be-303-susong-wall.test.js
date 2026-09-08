@@ -285,6 +285,55 @@ test('Room derives heavenly, earthly and all-from-others patterns from authorita
   assert.ok(room._susongWinningCandidate('C', 'discard').patterns.includes('all_from_others'));
 });
 
+test('Room counts only the current consecutive kong chain for a kong win', () => {
+  const room = susongRoom('consecutive-kong-win-room');
+  room.dealSusongOpeningRound({ seed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  room._privateRoundState.handsByPlayer.B = [
+    'characters-1-1', 'characters-2-1', 'characters-3-1',
+    'bamboo-1-1', 'bamboo-2-1', 'bamboo-3-1',
+    'dots-4-1', 'dots-5-1', 'dots-6-1',
+    'east-1', 'east-2', 'east-3', 'north-1', 'north-2'
+  ];
+  room.currentRound.flowerStates.B = {
+    ...room.currentRound.flowerStates.B,
+    status: 'not_piao',
+    openingFlowers: 1,
+    countedFlowers: 1
+  };
+  room._privateRoundState.turnHistory = [
+    { action: 'draw', playerId: 'B' },
+    { action: 'concealed_kong', playerId: 'B' },
+    { action: 'added_kong', playerId: 'B' }
+  ];
+
+  const doubleKongWinner = room._susongWinningCandidate('B', 'self_draw');
+  assert.equal(doubleKongWinner.gangWinCount, 2);
+  const settlement = scoreSusongRound({
+    config: room.ruleSnapshot.config,
+    playerIds: players,
+    outcome: 'self_draw',
+    winners: [{
+      winnerId: 'B',
+      flowerState: room.currentRound.flowerStates.B,
+      patterns: doubleKongWinner.patterns,
+      gangWinCount: doubleKongWinner.gangWinCount
+    }],
+    zengByPlayer: { A: 0, B: 0, C: 0, D: 0 }
+  });
+  assert.equal(settlement.wins[0].tier, 'one_bamboo');
+
+  room._privateRoundState.turnHistory = [
+    { action: 'concealed_kong', playerId: 'B' },
+    { action: 'discard', playerId: 'B' },
+    { action: 'draw', playerId: 'B' }
+  ];
+  assert.equal(room._susongWinningCandidate('B', 'self_draw').gangWinCount, 0);
+});
+
 function susongRoom(id = 'wall-room', piao = 'optional', config = {}) {
   const room = new Room({
     id,
