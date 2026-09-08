@@ -9,6 +9,7 @@ import {
   evaluateSusongWin,
   flowerAwardScore,
   flowerUnitsForMeld,
+  isSusongNoFlowerState,
   normalizeSusongConfig,
   recordSusongFlowerDraw,
   recordSusongMeldFlowers,
@@ -43,6 +44,18 @@ test('strong piao with no opening flower discards later flowers and stays no-flo
     piao: true
   });
   assert.equal(evaluateSusongWin({ flowerState: state, winSource: 'self_draw' }).tier, 'one_bamboo');
+});
+
+test('strong-piao and optional zero-flower states share the no-flower payer rule', () => {
+  assert.equal(isSusongNoFlowerState(
+    createSusongFlowerState({ piaoMode: 'strong', initialFlowerCount: 0 })
+  ), true);
+  assert.equal(isSusongNoFlowerState(
+    createSusongFlowerState({ piaoMode: 'optional', initialFlowerCount: 0 })
+  ), true);
+  assert.equal(isSusongNoFlowerState(
+    createSusongFlowerState({ piaoMode: 'optional', initialFlowerCount: 1 })
+  ), false);
 });
 
 test('strong piao with opening flowers requires a choice and discards all flowers when chosen', () => {

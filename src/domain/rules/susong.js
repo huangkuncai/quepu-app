@@ -4,7 +4,7 @@ const ZENG_OPTIONS = Object.freeze([0, 1, 2, 3, 5]);
 const PIAO_MODES = Object.freeze(['strong', 'optional']);
 
 export const SUSONG_SCORE_ORDER_VERSION = 'zeng-piao-flower-sanxi-v1';
-export const SUSONG_RULE_VERSION = '8931-apk-baseline.5';
+export const SUSONG_RULE_VERSION = '8931-apk-baseline.6';
 
 export const SUSONG_SPECIAL_HU = Object.freeze([
   'seven_pairs', 'no_flower', 'pure_one_suit', 'mixed_one_suit', 'all_triplets',
@@ -130,6 +130,12 @@ export function createSusongFlowerState({
   });
 }
 
+/** Whether authoritative flower state is treated as a no-flower hand/payer. */
+export function isSusongNoFlowerState(current) {
+  const state = normalizeFlowerState(current);
+  return state.status === 'piao' || state.countedFlowers === 0;
+}
+
 /** Record a server-observed flower draw and return the next immutable state. */
 export function recordSusongFlowerDraw(current, count = 1) {
   const state = normalizeFlowerState(current);
@@ -199,7 +205,7 @@ export function evaluateSusongWin({ flowerState: current, winSource, patterns = 
   if (state.pendingFlowerReplacements > 0) {
     return winDecision(false, null, 'FLOWER_REPLACEMENT_REQUIRED', state);
   }
-  const noFlower = state.status === 'piao' || state.countedFlowers === 0;
+  const noFlower = isSusongNoFlowerState(state);
   if (noFlower && winSource !== 'self_draw') {
     return winDecision(false, null, 'NO_FLOWER_SELF_DRAW_ONLY', state);
   }

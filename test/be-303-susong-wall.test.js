@@ -24,7 +24,7 @@ import { RoomService } from '../src/modules/room/service.js';
 const players = ['A', 'B', 'C', 'D'];
 const seed = '0123456789abcdef'.repeat(4);
 
-test('candidate Susong wall contains 144 unique physical tiles', () => {
+test('confirmed Susong wall contains 144 unique physical tiles', () => {
   const tiles = buildSusongTileSet();
   assert.equal(tiles.length, 144);
   assert.equal(new Set(tiles.map(tile => tile.id)).size, 144);
@@ -166,7 +166,7 @@ test('wall and player validation rejects malformed authority input', () => {
   );
 });
 
-test('candidate replacement draw consumes the tail and respects the 14-tile reserve', () => {
+test('replacement draw consumes the tail and respects the 14-tile reserve', () => {
   const draw = drawSusongReplacementTile(['first', 'second', 'tail'], { reserveTiles: 1 });
   assert.equal(draw.tileId, 'tail');
   assert.deepEqual(draw.remainingWall, ['first', 'second']);
@@ -384,14 +384,19 @@ test('Room counts only the current consecutive kong chain for a kong win', () =>
   assert.equal(room._susongWinningCandidate('B', 'self_draw').gangWinCount, 0);
 });
 
-function susongRoom(id = 'wall-room', piao = 'optional', config = {}) {
+function susongRoom(
+  id = 'wall-room',
+  piao = 'optional',
+  config = {},
+  ruleVersion = '8931-apk-baseline.3'
+) {
   const room = new Room({
     id,
     ownerId: 'A',
     ruleSnapshot: {
       gameType: 'mahjong',
       ruleId: 'susong_v1',
-      ruleVersion: '8931-apk-baseline.3',
+      ruleVersion,
       config: {
         rounds: 4,
         scoreTiers: [1, 2, 3, 4],
@@ -1282,6 +1287,48 @@ test('a discard win is recognized and settled entirely from authoritative room s
   forgedSnapshot.round.settlement.transfers[0].trace[3].subtotal += 100;
   assert.throws(
     () => Room.fromSnapshot(forgedSnapshot),
+    error => error.code === 'INVALID_ACTION'
+  );
+});
+
+test('current rule derives the no-flower discarder cap from server flower state', () => {
+  const room = susongRoom(
+    'no-flower-discarder-room',
+    'optional',
+    {},
+    SUSONG_RULE_VERSION
+  );
+  room.dealSusongOpeningRound({ seed: 'e68'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  room.currentRound.flowerStates.A = {
+    ...room.currentRound.flowerStates.A,
+    status: 'not_piao',
+    openingFlowers: 0,
+    drawnFlowers: 0,
+    meldFlowers: 0,
+    countedFlowers: 0,
+    pendingFlowerDiscards: 0,
+    pendingFlowerReplacements: 0
+  };
+  room.applyAction('A', { action: 'discard', args: { tileId: 'dots-6-3' } });
+  room.applyAction('B', 'pass');
+  room.applyAction('C', 'pass');
+  const beforeSettlement = room.persistenceSnapshot();
+  const result = room.applyAction('D', 'hu');
+
+  assert.equal(result.settlement.discarderNoFlower, true);
+  assert.equal(result.settlement.wins[0].tier, 'one_bamboo');
+  assert.equal(result.settlement.wins[0].cappedByNoFlowerDiscarder, true);
+  assert.equal(result.settlement.transfers[0].trace[2].cappedByNoFlowerDiscarder, true);
+  const forged = structuredClone(result.event);
+  forged.payload.settlement.discarderNoFlower = false;
+  forged.payload.settlement.wins[0].cappedByNoFlowerDiscarder = false;
+  forged.payload.settlement.transfers[0].trace[2].cappedByNoFlowerDiscarder = false;
+  assert.throws(
+    () => Room.fromSnapshot(beforeSettlement).applyPersistedEvent(forged),
     error => error.code === 'INVALID_ACTION'
   );
 });

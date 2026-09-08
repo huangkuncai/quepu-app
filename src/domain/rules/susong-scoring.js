@@ -120,6 +120,7 @@ export function scoreSusongWin({
   zengByPlayer,
   patterns = [],
   gangWinCount = 0,
+  discarderNoFlower = false,
   sanxiPairs = []
 } = {}) {
   const config = normalizeSusongConfig(configInput);
@@ -136,13 +137,18 @@ export function scoreSusongWin({
   if (!decision.allowed) {
     throw new TypeError(`win is not allowed: ${decision.reason}`);
   }
+  if (typeof discarderNoFlower !== 'boolean'
+    || (winSource !== 'discard' && discarderNoFlower)) {
+    throw new TypeError('discarderNoFlower must be false unless the win source is discard');
+  }
 
   const regularPayers = winSource === 'self_draw'
     ? players.filter(playerId => playerId !== winner)
     : [member(discarderId, players, 'discarderId')];
   if (regularPayers.includes(winner)) throw new TypeError('winnerId cannot also be a payer');
 
-  const tier = decision.tier;
+  const cappedByNoFlowerDiscarder = winSource === 'discard' && discarderNoFlower;
+  const tier = cappedByNoFlowerDiscarder ? 'one_bamboo' : decision.tier;
   const baseScore = config.scoreTiers[TIER_INDEX[tier]];
   const relations = normalizeSanxiPairs(sanxiPairs, players);
   const sanxiPayers = players.filter(playerId =>
@@ -170,6 +176,7 @@ export function scoreSusongWin({
           stage: 'piao',
           status: decision.piao ? 'piao' : 'not_piao',
           cappedByNoFlowerSelfDraw: decision.cappedByNoFlowerSelfDraw,
+          cappedByNoFlowerDiscarder,
           value: 0
         },
         { stage: 'flower_tier', tier, value: baseScore, subtotal: beforeSanxi },
@@ -204,6 +211,7 @@ export function scoreSusongWin({
     selfDrawPromoted: false,
     piao: decision.piao,
     cappedByNoFlowerSelfDraw: decision.cappedByNoFlowerSelfDraw === true,
+    cappedByNoFlowerDiscarder,
     patterns: normalizedPatterns,
     gangWinCount,
     sanxiPairs: normalizedSanxiPairList(sanxiPairs, players),
@@ -217,6 +225,11 @@ export function scoreSusongRound(input = {}) {
   const players = normalizePlayers(input.playerIds);
   const config = normalizeSusongConfig(input.config);
   const outcome = input.outcome ?? input.winSource;
+  const discarderNoFlower = input.discarderNoFlower ?? false;
+  if (typeof discarderNoFlower !== 'boolean'
+    || (outcome !== 'discard' && discarderNoFlower)) {
+    throw new TypeError('discarderNoFlower must be false unless the outcome is discard');
+  }
   if (outcome === 'draw') {
     const configuredSanxiPairs = normalizedSanxiPairList(input.sanxiPairs ?? [], players);
     return deepFreeze({
@@ -225,6 +238,7 @@ export function scoreSusongRound(input = {}) {
       outcome: 'draw',
       winnerIds: [],
       discarderId: null,
+      discarderNoFlower: false,
       sanxiPairs: configuredSanxiPairs,
       releasedSanxiPairs: [],
       flowerAwardCountByPlayer: Object.fromEntries(players.map(playerId => [playerId, 0])),
@@ -269,6 +283,7 @@ export function scoreSusongRound(input = {}) {
     zengByPlayer: input.zengByPlayer,
     patterns: winner.patterns ?? [],
     gangWinCount: winner.gangWinCount ?? 0,
+    discarderNoFlower,
     sanxiPairs: appliedSanxiPairs
   }));
   const flowerAwardCountByPlayer = normalizeFlowerAwardCounts(
@@ -315,6 +330,7 @@ export function scoreSusongRound(input = {}) {
     outcome,
     winnerIds,
     discarderId,
+    discarderNoFlower,
     sanxiPairs: appliedSanxiPairs,
     releasedSanxiPairs,
     flowerAwardCountByPlayer,
@@ -324,6 +340,7 @@ export function scoreSusongRound(input = {}) {
       tier: win.settledTier,
       piao: win.piao,
       cappedByNoFlowerSelfDraw: win.cappedByNoFlowerSelfDraw,
+      cappedByNoFlowerDiscarder: win.cappedByNoFlowerDiscarder,
       patterns: [...win.patterns],
       gangWinCount: win.gangWinCount
     })),
@@ -337,6 +354,7 @@ export function validateSusongSettlementAudit({
   config: configInput,
   playerIds,
   zengByPlayer,
+  expectedDiscarderNoFlower,
   settlement
 } = {}) {
   const config = normalizeSusongConfig(configInput);
@@ -357,8 +375,18 @@ export function validateSusongSettlementAudit({
     || settlement.wins.length !== winnerIds.length) {
     throw new TypeError('settlement winners are inconsistent');
   }
+  const discarderNoFlower = settlement.discarderNoFlower === true;
+  if ((settlement.discarderNoFlower !== undefined
+      && typeof settlement.discarderNoFlower !== 'boolean')
+    || (settlement.outcome !== 'discard' && discarderNoFlower)
+    || (expectedDiscarderNoFlower !== undefined
+      && (typeof expectedDiscarderNoFlower !== 'boolean'
+        || expectedDiscarderNoFlower !== discarderNoFlower))) {
+    throw new TypeError('settlement no-flower discarder state is inconsistent');
+  }
   const tierByWinner = new Map();
   const piaoByWinner = new Map();
+  const noFlowerDiscarderCapByWinner = new Map();
   for (const [index, win] of settlement.wins.entries()) {
     if (!win || typeof win !== 'object' || Array.isArray(win)) {
       throw new TypeError(`settlement.wins.${index} is invalid`);
@@ -368,6 +396,10 @@ export function validateSusongSettlementAudit({
       || (win.piao !== undefined && typeof win.piao !== 'boolean')
       || (win.cappedByNoFlowerSelfDraw !== undefined
         && typeof win.cappedByNoFlowerSelfDraw !== 'boolean')
+      || (win.cappedByNoFlowerDiscarder !== undefined
+        && typeof win.cappedByNoFlowerDiscarder !== 'boolean')
+      || (win.cappedByNoFlowerDiscarder === true) !== discarderNoFlower
+      || (discarderNoFlower && win.tier !== 'one_bamboo')
       || (win.patterns !== undefined && (!Array.isArray(win.patterns)
         || win.patterns.some(pattern => typeof pattern !== 'string')))
       || (win.gangWinCount !== undefined
@@ -376,6 +408,7 @@ export function validateSusongSettlementAudit({
     }
     tierByWinner.set(winnerId, win.tier);
     piaoByWinner.set(winnerId, win.piao);
+    noFlowerDiscarderCapByWinner.set(winnerId, win.cappedByNoFlowerDiscarder === true);
   }
   const hasSanxiMetadata = settlement.sanxiPairs !== undefined
     || settlement.releasedSanxiPairs !== undefined;
@@ -522,6 +555,10 @@ export function validateSusongSettlementAudit({
       || trace[1].count !== zeng[payerId] || trace[1].unit !== config.zeng
       || trace[1].value !== payerZeng
       || !['piao', 'not_piao'].includes(trace[2].status) || trace[2].value !== 0
+      || (trace[2].cappedByNoFlowerDiscarder !== undefined
+        && typeof trace[2].cappedByNoFlowerDiscarder !== 'boolean')
+      || (trace[2].cappedByNoFlowerDiscarder === true)
+        !== noFlowerDiscarderCapByWinner.get(winnerId)
       || (piaoByWinner.get(winnerId) !== undefined
         && (trace[2].status === 'piao') !== piaoByWinner.get(winnerId))
       || trace[3].tier !== tier || trace[3].value !== baseScore

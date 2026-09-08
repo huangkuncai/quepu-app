@@ -44,6 +44,7 @@ for (const fixture of cases) {
       playerIds,
       outcome: fixture.outcome,
       discarderId: fixture.discarderId,
+      discarderNoFlower: fixture.discarderNoFlower ?? false,
       winners: fixture.winners.map(([winnerId, flowers]) => ({
         winnerId,
         flowerState: flowerState(flowers)

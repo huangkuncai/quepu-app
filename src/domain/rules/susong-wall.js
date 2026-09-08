@@ -14,7 +14,7 @@ const WINDS = Object.freeze(['east', 'south', 'west', 'north']);
 const DRAGONS = Object.freeze(['red_dragon', 'green_dragon', 'white_dragon']);
 let tileById;
 
-/** Build the physical 144-tile candidate wall with stable, unique tile IDs. */
+/** Build the confirmed physical 144-tile wall with stable, unique tile IDs. */
 export function buildSusongTileSet() {
   const tiles = [];
   for (const suit of SUITS) {
@@ -277,7 +277,7 @@ export function publicSusongWallState(dealt) {
   });
 }
 
-/** Draw one replacement tile from the versioned candidate tail. */
+/** Draw one replacement tile from the versioned wall tail. */
 export function drawSusongReplacementTile(remainingWall, { reserveTiles = 14 } = {}) {
   if (!Array.isArray(remainingWall)) throw new TypeError('remainingWall must be an array');
   if (!Number.isInteger(reserveTiles) || reserveTiles < 0) {

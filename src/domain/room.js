@@ -4,6 +4,7 @@ import {
   createSusongFlowerState,
   evaluateSusongWin,
   flowerUnitsForMeld,
+  isSusongNoFlowerState,
   recordSusongFlowerDraw,
   recordSusongMeldFlowers,
   resolveSusongFlowers,
@@ -350,7 +351,8 @@ export class Room {
       ?? snapshot.deadlinePolicy
       ?? snapshot.config?.deadlinePolicy;
     if (snapshot.ruleId === 'susong_v1'
-      && [SUSONG_RULE_VERSION, '8931-apk-baseline.4'].includes(snapshot.ruleVersion)
+      && [SUSONG_RULE_VERSION, '8931-apk-baseline.5', '8931-apk-baseline.4']
+        .includes(snapshot.ruleVersion)
       && configuredDeadlinePolicy !== undefined) {
       configuredDeadlinePolicy = {
         ...configuredDeadlinePolicy,
@@ -1378,6 +1380,9 @@ export class Room {
         playerIds,
         outcome,
         discarderId,
+        discarderNoFlower: outcome === 'discard'
+          && this.ruleVersion === SUSONG_RULE_VERSION
+          && isSusongNoFlowerState(this.currentRound.flowerStates[discarderId]),
         winners: winners.map(winner => ({
           winnerId: winner.playerId,
           flowerState: clone(this.currentRound.flowerStates[winner.playerId]),
@@ -2153,6 +2158,12 @@ export class Room {
             config: this.ruleSnapshot.config,
             playerIds: this._orderedPlayers().map(player => player.id),
             zengByPlayer: Object.fromEntries(this.zengByPlayer),
+            expectedDiscarderNoFlower: this.ruleVersion === SUSONG_RULE_VERSION
+              && result.outcome === 'discard'
+              ? isSusongNoFlowerState(
+                this.currentRound?.flowerStates?.[result.discarderId]
+              )
+              : undefined,
             settlement: result
           });
         } catch (cause) {
@@ -2687,6 +2698,12 @@ export class Room {
           config: this.ruleSnapshot.config,
           playerIds: this._orderedPlayers().map(player => player.id),
           zengByPlayer: Object.fromEntries(this.zengByPlayer),
+          expectedDiscarderNoFlower: this.ruleVersion === SUSONG_RULE_VERSION
+            && this.currentRound.settlement.outcome === 'discard'
+            ? isSusongNoFlowerState(
+              this.currentRound.flowerStates?.[this.currentRound.settlement.discarderId]
+            )
+            : undefined,
           settlement: this.currentRound.settlement
         });
       } catch (cause) {
@@ -3102,6 +3119,12 @@ export class Room {
               config: this.ruleSnapshot.config,
               playerIds: this._orderedPlayers().map(player => player.id),
               zengByPlayer: Object.fromEntries(this.zengByPlayer),
+              expectedDiscarderNoFlower: this.ruleVersion === SUSONG_RULE_VERSION
+                && payload.settlement?.outcome === 'discard'
+                ? isSusongNoFlowerState(
+                  this.currentRound?.flowerStates?.[payload.settlement.discarderId]
+                )
+                : undefined,
               settlement: payload.settlement
             });
           } catch (cause) {

@@ -47,7 +47,13 @@ test('A self-draw with four flowers stays small and settles each zeng relation',
   assert.deepEqual(settlement.transfers[0].trace, [
     { stage: 'winner_zeng', count: 2, unit: 2, value: 4 },
     { stage: 'payer_zeng', count: 3, unit: 2, value: 6 },
-    { stage: 'piao', status: 'not_piao', cappedByNoFlowerSelfDraw: false, value: 0 },
+    {
+      stage: 'piao',
+      status: 'not_piao',
+      cappedByNoFlowerSelfDraw: false,
+      cappedByNoFlowerDiscarder: false,
+      value: 0
+    },
     { stage: 'flower_tier', tier: 'small', value: 5, subtotal: 15 },
     { stage: 'sanxi', multiplier: 1, regularShare: 1, sanxiShare: 0, value: 15 }
   ]);
@@ -259,6 +265,61 @@ test('no-flower self-draw remains at the cap tier', () => {
   assert.deepEqual(settlement.deltaByPlayer, { A: 24, B: -8, C: -8, D: -8 });
 });
 
+test('a no-flower discarder promotes every legal winner to one-bamboo', () => {
+  const input = {
+    config,
+    playerIds: players,
+    outcome: 'discard',
+    discarderId: 'D',
+    discarderNoFlower: true,
+    winners: [
+      { winnerId: 'A', flowerState: flowerState(1) },
+      { winnerId: 'B', flowerState: flowerState(5) }
+    ],
+    zengByPlayer: { A: 2, B: 3, C: 1, D: 5 }
+  };
+  const settlement = scoreSusongRound(input);
+
+  assert.equal(settlement.discarderNoFlower, true);
+  assert.deepEqual(settlement.wins.map(win => win.tier), ['one_bamboo', 'one_bamboo']);
+  assert.deepEqual(
+    settlement.wins.map(win => win.cappedByNoFlowerDiscarder),
+    [true, true]
+  );
+  assert.deepEqual(settlement.transfers.map(transfer => transfer.amount), [22, 24]);
+  assert.deepEqual(settlement.deltaByPlayer, { A: 22, B: 24, C: 0, D: -46 });
+  assert.equal(validateSusongSettlementAudit({
+    config,
+    playerIds: players,
+    zengByPlayer: input.zengByPlayer,
+    expectedDiscarderNoFlower: true,
+    settlement
+  }), true);
+  assert.throws(
+    () => validateSusongSettlementAudit({
+      config,
+      playerIds: players,
+      zengByPlayer: input.zengByPlayer,
+      expectedDiscarderNoFlower: false,
+      settlement
+    }),
+    /no-flower discarder state/
+  );
+  assert.throws(
+    () => scoreSusongWin({
+      config,
+      playerIds: players,
+      winnerId: 'A',
+      winSource: 'discard',
+      discarderId: 'D',
+      discarderNoFlower: true,
+      flowerState: flowerState(0),
+      zengByPlayer: { A: 0, B: 0, C: 0, D: 0 }
+    }),
+    /NO_FLOWER_SELF_DRAW_ONLY/
+  );
+});
+
 test('discard win charges only the discarder', () => {
   const settlement = scoreSusongRound({
     config,
@@ -335,9 +396,11 @@ test('persisted score audit rejects reordered or arithmetically forged traces', 
   );
 
   const priorSummaryShape = structuredClone(settlement);
+  delete priorSummaryShape.discarderNoFlower;
   for (const win of priorSummaryShape.wins) {
     delete win.piao;
     delete win.cappedByNoFlowerSelfDraw;
+    delete win.cappedByNoFlowerDiscarder;
     delete win.patterns;
     delete win.gangWinCount;
   }
