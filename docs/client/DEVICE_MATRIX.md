@@ -51,7 +51,7 @@ G1 只有 1 台每个平台的最小集合时，结论范围限于这些设备�
 
 | deviceId | 厂商/型号 | RAM/SoC | Android 版本/API | ROM | GMS/HMS | 网络 | 安装/升级 | 后台/回收 | WSS/弱网 | 结果/缺陷 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `EMU-API37-01` | Android Studio `Medium_Phone` Emulator | 4 GB / ARM64 | Android API 37 | Google Play image | GMS | Mac host dev WS | debug APK install/replace PASS | 未验 | 登录/online PASS | 仅模拟器开发证据；[截图](evidence/POC-20260907-01/android-emulator-wss-lobby.png) |
+| `EMU-API37-01` | Android Studio `Medium_Phone` Emulator | 4 GB / ARM64 | Android API 37 | Google Play image | GMS | Mac host dev WSS/REST | debug APK install/replace PASS | 前后台待完整矩阵 | 登录、客服提交、横屏输入法布局 PASS | 仅模拟器开发证据；[截图](evidence/POC-20260907-01/android-emulator-wss-lobby.png) |
 
 覆盖要求：
 
@@ -64,7 +64,8 @@ G1 只有 1 台每个平台的最小集合时，结论范围限于这些设备�
 
 | deviceId | 型号/屏幕 | iOS/iPadOS 版本 | CPU/存储 | 网络 | TestFlight 安装/升级 | 后台/锁屏 | WSS/弱网 | 安全区/无障碍 | 结果/缺陷 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` |
+| `IOS-SIM-01` | Simulator（辅助） | iOS 26.5 SDK | Apple Silicon | 本机 | N/A | N/A | N/A | N/A | `BLOCKED`：Xcode 未安装任何 Simulator Runtime，`simctl` 无可用 destination；不替代真机 |
+| `TBD` | iPhone 真机 | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` |
 
 覆盖要求：
 

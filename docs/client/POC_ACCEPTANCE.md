@@ -157,5 +157,6 @@ artifacts/client-poc/<runId>/
 | `POC-20260907-01` | Flutter Android | `Medium_Phone` Emulator / API 37 | 2026-09-07 | `d054a91` + layout fix | debug APK 安装、横屏启动、dev WS 登录/在线、2400×1080 布局 | `PASS (EMULATOR ONLY)` | [大厅截图](evidence/POC-20260907-01/android-emulator-wss-lobby.png) | AI/DEV |
 | `POC-20260908-02` | Dart real WSS/REST harness | 4 个 host Dart 进程 | 2026-09-08 | 当前分支 | 房间版本/hash、私牌隔离、替换恢复、同会话客服创建/查询 | `PASS (LOOPBACK ONLY)` | `npm run verify:client-real` | AI/DEV |
 | `POC-20260908-03` | Flutter Android | `Medium_Phone` Emulator / API 37 | 2026-09-08 | `d159696` + keyboard layout fix | 配置版 APK 安装、横屏、WSS 登录、客服 REST 提交、输入法紧凑布局 | `PASS (EMULATOR ONLY)` | 本机运行日志与截图；Flutter 30/30 | AI/DEV |
+| `POC-20260908-04` | Flutter iOS | 本机 Xcode | 2026-09-08 | `fe82b4a` | Simulator/device no-sign 编译预检 | `BLOCKED` | iOS SDK 存在但无 Simulator Runtime、真机 destination 或签名；xcodebuild 无 destination | AI/DEV |
 
 当前本机证据（不替代真机记录）：Flutter 30/30、analyze、Android debug APK 构建通过；Android API 37 Emulator 已完成开发 WSS 登录和客服 REST 提交，实测发现并修复横屏输入法导致的溢出。真实 Node loopback 四客户端已完成房间全流程、私牌隔离、断线替换恢复和同会话客服 REST。当前未连接 production/staging，也未完成 Android/iOS 四真机弱网和签名验收；`G1_BLOCKED` 保持不变，鸿蒙暂缓。
