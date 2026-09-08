@@ -5,6 +5,26 @@ import 'package:susong_protocol_client/protocol.dart';
 import 'package:susong_app/src/fake_transport.dart';
 
 void main() {
+  test('session authorization is scoped to the request callback', () async {
+    final client = ClientSessionController(
+      transport: FakeTransport(),
+      deviceId: 'auth-adapter-device',
+      platform: 'android',
+    );
+    expect(
+      () => client.runAuthorized((_) async => true),
+      throwsA(isA<StateError>()),
+    );
+    await client.login('13800000000', '000000');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final authorized = await client.runAuthorized((token) async {
+      expect(token, isNotEmpty);
+      return true;
+    });
+    expect(authorized, isTrue);
+    await client.dispose();
+  });
+
   test(
     'game action forwards only the selected server candidate arguments',
     () async {

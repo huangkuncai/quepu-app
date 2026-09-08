@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'client.dart';
 import 'support.dart';
 
 class SupportApiException implements Exception {
@@ -33,12 +34,23 @@ class IoRestTransport {
 
   SupportApiTransport get call => _send;
 
-  Future<Map<String, dynamic>> _send(
-    String method,
-    String path,
-    Map<String, dynamic> body,
-    String idempotencyKey,
-  ) async {
+  /// Binds REST authorization to a live protocol session. The token is read
+  /// for each request so refresh/logout cannot leave this adapter with stale
+  /// credentials, and UI widgets never receive the raw token.
+  SupportApiTransport forSession(ClientSessionController session) =>
+      (method, path, body, idempotencyKey) => session.runAuthorized(
+            (token) => _send(
+              method,
+              path,
+              body,
+              idempotencyKey,
+              authorizationToken: token,
+            ),
+          );
+
+  Future<Map<String, dynamic>> _send(String method, String path,
+      Map<String, dynamic> body, String idempotencyKey,
+      {String? authorizationToken}) async {
     final uri =
         baseUri.resolve(path.startsWith('/') ? path.substring(1) : path);
     final request = await _client.openUrl(method, uri);
@@ -46,9 +58,10 @@ class IoRestTransport {
     request.headers.set('accept', 'application/json');
     request.headers.set('x-request-id', idempotencyKey);
     request.headers.set('idempotency-key', idempotencyKey);
-    if (accessToken != null && accessToken!.trim().isNotEmpty) {
-      request.headers.set(
-          HttpHeaders.authorizationHeader, 'Bearer ${accessToken!.trim()}');
+    final token = authorizationToken ?? accessToken;
+    if (token != null && token.trim().isNotEmpty) {
+      request.headers
+          .set(HttpHeaders.authorizationHeader, 'Bearer ${token.trim()}');
     }
     if (method != 'GET' && method != 'HEAD') request.write(jsonEncode(body));
     final response = await request.close();

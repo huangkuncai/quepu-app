@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-08（真实 Node WSS 四客户端建房、同步、私牌隔离与替换客户端重连验收通过；Node 227/227、Flutter 26/26）
+> 最近更新：2026-09-08（真实 Node WSS 四客户端与同会话客服 REST 联调通过；Node 227/227、Flutter 30/30）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -42,7 +42,7 @@
 | API | OpenAPI/AsyncAPI、JSON Schema 和 Node 校验器已建立；WSS 已接入 RoomActor、ACK/广播/订阅/重连，REST/BFF fake-staging 纵切已完成并纳入 YAML/ref/状态码契约检查 | 以 schema 为唯一协议源，继续扩 REST/WSS |
 | 客户端 | 已有 Dart 协议/连接核心、原生 `dart:io` transport 和横屏 Flutter 壳；真实 Node WSS 四客户端已完成建房、准备、发牌、同版 hash、私牌隔离与断线替换恢复；尚无 Android/iOS 真机签名包 | 继续 CL-201 弱网/真实设备、平台生命周期和签名验证 |
 | 数据 | PostgreSQL migrations、Redis Compose/health、repository contract 和 MemoryRepository 已建立；运行时仍为单进程内存 | 本地开发环境可复现，生产接入 PG/Redis 仍待后续任务 |
-| 测试 | 当前 227 个 Node 测试通过；Dart 协议/原生 transport、fake 与真实 WSS 四客户端夹具通过；Flutter 26/26；`verify:real` 与 `verify:multi-instance` 均通过 | 继续增加真实进程滚动重启、弱网和平台级故障测试 |
+| 测试 | 当前 227 个 Node 测试通过；Dart 协议/原生 transport、真实 WSS/REST 夹具通过；Flutter 30/30；`verify:real` 与 `verify:multi-instance` 均通过 | 继续增加真实进程滚动重启、弱网和平台级故障测试 |
 | 仓库 | 当前实际路径为 `宿松app.migrated-backup`；分支 `codex/be-101-protocol`，尚无提交 | 后续补充分支/提交策略，不清理未跟踪文件 |
 
 ### 1.3 时间假设
@@ -312,7 +312,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | CL-203 | 重连 UI | BE-204 | 连接状态、同步中、维护、版本冲突和手动重试 | 前后台/杀进程回前台可恢复 | AI + CL | DONE（Flutter 本机 POC；真实设备前后台/杀进程验收属于 G1） |
 | QA-201 | 四客户端验收脚本 | 全部 I2 | 自动化/录屏脚本和事件对比器 | 顺序、版本、快照 hash、私有字段检查通过 | AI + QA | DONE（基础故障矩阵） |
 | BE-207 | 客服纯文本 MVP | BE-103、DEC-010（渠道可先 TBD） | 工单创建/列表/详情/回复/关闭、房间号关联、基础审计 | 大厅/俱乐部/牌桌入口可用；纯文本首版不被外部渠道阻塞 | AI | DONE（内存/fake-staging；无附件/外部渠道） |
-| CL-204 | 客服纯文本入口 | BE-207 | 三端客服入口、工单表单、状态和失败重试 | 未登录可看 FAQ/入口；登录后可提交并查询自己的工单 | AI + CL | IN_PROGRESS（共享 Dart SupportApi、原生 IoRestTransport 与 Flutter 注入已通过；真实端到端/三端适配待） |
+| CL-204 | 客服纯文本入口 | BE-207 | 三端客服入口、工单表单、状态和失败重试 | 未登录可看 FAQ/入口；登录后可提交并查询自己的工单 | AI + CL | IN_PROGRESS（真实 loopback 端到端已通过：WSS 会话令牌按请求注入 REST，创建并查询本人工单；Android/iOS 真机适配待） |
 
 ### I2 十个工作日建议节奏
 
@@ -536,19 +536,19 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 宿松规则 | IN_PROGRESS | `.5` 已实现花奖/多重三西、庄家跳牌取 14 张直接先出、过圈超时、红黑花分组及新增动作限制 | 继续补充尚未枚举的特殊牌型/罕见并发 golden cases |
 | Club/Floor | BLOCKED | 依赖 DEC-003～006 | G2 + schema |
 | Diamond | BLOCKED | 依赖 DEC-008～009 | 计费决策会 |
-| History/Support | IN_PROGRESS | BE-207 纯文本工单 REST 已完成并通过 2 个集成用例；CL-204 共享 Dart SupportApi 与 Flutter 注入已完成，真实 REST/三端联调待 | G3 |
+| History/Support | IN_PROGRESS | BE-207 纯文本工单 REST 已完成；CL-204 Flutter 运行时配置、同会话鉴权和真实 loopback 创建/查询已通过，Android/iOS 真机待 | G3 |
 | 三端发布 | TODO | 等 G1 POC | G4/G5 |
 
 ### 15.2 每次工作结束更新
 
 ```text
 日期：2026-09-04
-本次完成：真实 Node WSS 四客户端完成建房、输入房号加入、准备、发牌、同版 snapshotHash、私牌隔离和替换客户端断线恢复；修复服务端审计 history 与协议事件 replay 的边界及新控制器 roomId 恢复；Flutter 26/26。
-未完成：BE-204 生产滚动重启、故障演练和长期最终一致性压测，CL-201 弱网/Android/iOS 真机验收、平台生命周期、CL-204 真实 REST 联调，生产级外部 Auth、真机/签名 POC 仍待执行
+本次完成：真实 Node WSS 四客户端完成房间版本/hash、私牌隔离与替换恢复；Flutter 配置并使用真实开发 REST，以同一会话创建/查询客服工单；Node 227/227、Flutter 30/30。
+未完成：BE-204 生产滚动重启、故障演练和长期最终一致性压测，CL-201/204 弱网与 Android/iOS 真机验收、平台生命周期、生产级外部 Auth、真机/签名 POC 仍待执行
 新增限制：Flutter 壳已可在离线 FakeTransport 与可配置原生 WSS 之间切换；Android SDK、Xcode 和 CocoaPods 预检已通过，但尚无 Android/iOS 真机、签名和 WSS 证据，HarmonyOS 暂缓；DEVICE_MATRIX.md、POC_ACCEPTANCE.md 保持 PLANNED/TBD
 新增阻塞：BLOCKER-ID / owner / 截止
 需求或规则变更：DEC-ID / 影响范围
-下一步：完成 CL-204 真实 REST 客服联调，再做 CL-201 弱网/Android/iOS 真机验收；继续推进真实多进程滚动重启、备份恢复和最终一致性压测。维持 development/staging 边界，不开放真实钻石扣费
+下一步：执行 CL-201/204 Android/iOS 真机弱网、前后台和客服提交验收；继续推进真实多进程滚动重启、备份恢复和最终一致性压测。维持 development/staging 边界，不开放真实钻石扣费
 ```
 
 ### 15.3 变更控制
@@ -629,6 +629,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.62 | 2026-09-08 | 完成已确认规则纵切的阻塞审计：剩余不可猜测项收敛为 144 张精确牌组签字，以及 APK“无花果放冲即一索”是否由无花放炮者触发赢家升档；确认前维持 draft/fail-closed | [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md)；最近完整门禁 Node 223/223、Flutter 24/24 |
 | 0.1.63 | 2026-09-08 | 规则版本升至 `8931-apk-baseline.6`：正式采用现有 144 张牌组；无花果玩家放冲时，每个合法赢家独立按一索档结算，强飘/不强飘无花均适用，无花果赢家仍不能接炮；服务端从放炮者花状态派生并在恢复时防篡改 | 23 个 golden；`npm run check`（Node 227/227）；Flutter 24/24 |
 | 0.1.64 | 2026-09-08 | CL-201 真实 Node WSS 四客户端验收：建房/房号加入/准备/发牌、版本/hash 收敛、私牌隔离与替换客户端恢复；修复新控制器 roomId 恢复及审计 history 误作协议事件 replay；Flutter 增加房号加入对话框 | `npm run verify:client-real`；Flutter 26/26；Android/iOS 真机弱网仍待 |
+| 0.1.65 | 2026-09-08 | CL-204 真实客服 REST 联调：Flutter 支持 `SUSONG_REST_URL`，适配器从实时会话逐请求注入 token；`npm start` 同时开放开发 REST 8788；真实夹具创建并查询本人工单 | `npm run verify:client-real`；Node 227/227；Flutter 30/30；仍为 loopback memory/stub-auth |
 
 ## 16. 我们下一次具体做什么
 
@@ -641,7 +642,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 5. 已完成 BE-202：append-only event store、actor/fencing、snapshot/outbox 和持久化 commandId 结果；当前是可替换内存 adapter，PostgreSQL/Redis 只完成迁移/端口契约，尚未运行接入。
 6. 已完成 BE-203：WSS gateway 已接入 RoomActor，具备成功写入后 ACK/广播、订阅、私有事件过滤、背压、连接替换和重连宽限；BE-204 已完成内存 snapshot/delta、显式 deadline、presence overlay、PG/Redis adapter 契约、异步默认装配和持久化 deadline claim/lease 基础，`verify:real` 与 `verify:multi-instance` 已在真实本地 PG/Redis 上通过，继续做真实多进程滚动重启、故障演练、备份恢复和长期最终一致性压测。
 7. 已完成 BE-205：REST/BFF 与 WSS 共用 `RoomService`/RoomActor，提供 ETag/If-Match、`Idempotency-Key`、统一错误 envelope 和成员/鉴权边界；当前为内存/fake-staging，不代表生产 PG/Redis 或多实例能力。
-8. QA-201/BE-206 基础延迟、丢包、乱序、重复和重启故障矩阵已通过；CL-201 真实 Node WSS 四客户端已验证版本/hash、私牌隔离和重连收敛，下一步补弱网/设备验收；BE-207 纯文本客服 REST 已完成，CL-204 真实 REST 联调与 Android/iOS 适配待完成。SDK/真机未就绪前不得把 G1 标为通过。
+8. QA-201/BE-206 基础故障矩阵已通过；CL-201 真实 Node WSS 四客户端已验证版本/hash、私牌隔离和重连，CL-204 同会话客服 REST 已验证创建/查询；下一步补弱网与 Android/iOS 真机验收。SDK/真机未就绪前不得把 G1 标为通过。
 9. 已完成首版主要胡型、完整吃碰杠胡过、花奖、多重三西、无花果放冲和 23 个机器可执行 golden cases；签字与证据见 [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md)。
 
 如果用户尚未准备好规则或钻石决策，我们仍可完成 I1/I2 的协议、认证、fake rule、同步和客户端 POC；但相关功能会保持 `DRAFT/SANDBOX`，不会暗中采用截图默认值。

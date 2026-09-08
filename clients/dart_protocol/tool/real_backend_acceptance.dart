@@ -2,19 +2,33 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../lib/client.dart';
+import '../lib/io_rest_transport.dart';
 import '../lib/io_transport.dart';
 import '../lib/protocol.dart';
+import '../lib/support.dart';
 
 Future<void> main(List<String> args) async {
-  if (args.length != 1) {
+  if (args.isEmpty || args.length > 2) {
     throw ArgumentError(
-        'usage: dart run tool/real_backend_acceptance.dart ws://host:port');
+      'usage: dart run tool/real_backend_acceptance.dart '
+      'ws://host:port [http://host:port/api/v1]',
+    );
   }
-  final endpoint = Uri.parse(args.single);
+  final endpoint = Uri.parse(args.first);
   if (!endpoint.hasAuthority ||
       !const {'ws', 'wss'}.contains(endpoint.scheme)) {
     throw ArgumentError.value(
-        args.single, 'endpoint', 'must be an absolute ws/wss URL');
+        args.first, 'endpoint', 'must be an absolute ws/wss URL');
+  }
+  final restEndpoint = args.length == 2 ? Uri.parse(args[1]) : null;
+  if (restEndpoint != null &&
+      (!restEndpoint.hasAuthority ||
+          !const {'http', 'https'}.contains(restEndpoint.scheme))) {
+    throw ArgumentError.value(
+      args[1],
+      'restEndpoint',
+      'must be an absolute http/https URL',
+    );
   }
 
   final phones = List<String>.generate(4, (index) => '1380000010${index + 1}');
@@ -23,6 +37,7 @@ Future<void> main(List<String> args) async {
     (index) => _client(endpoint, 'real-device-${index + 1}'),
   );
   ClientSessionController? replacement;
+  IoRestTransport? restTransport;
 
   try {
     await Future.wait(List<Future<void>>.generate(
@@ -176,6 +191,24 @@ Future<void> main(List<String> args) async {
       'replacement client did not recover the same private hand',
     );
 
+    String? supportTicketId;
+    if (restEndpoint != null) {
+      restTransport = IoRestTransport(baseUrl: restEndpoint.toString());
+      final support = SupportApi(restTransport.forSession(clients.first));
+      final ticket = await support.createTicket(
+        subject: '真实客户端联调',
+        message: '验证 WSS 登录会话可安全调用客服 REST。',
+        roomId: roomId,
+        clientVersion: 'real-backend-acceptance',
+      );
+      final tickets = await support.listTickets();
+      _expect(
+        tickets.any((candidate) => candidate.id == ticket.id),
+        'created support ticket was not visible to its authenticated owner',
+      );
+      supportTicketId = ticket.id;
+    }
+
     print(jsonEncode({
       'status': 'ok',
       'fixture': 'CL-201-real-wss-four-client',
@@ -186,10 +219,13 @@ Future<void> main(List<String> args) async {
       'snapshotHash': replacementRoom['snapshotHash'],
       'roundStatus': replacementRoom['status'],
       'privateHandRecovered': true,
+      'supportRestAuthenticated': supportTicketId != null,
+      if (supportTicketId != null) 'supportTicketId': supportTicketId,
       'productionBoundary':
           'loopback development server with stub auth and memory persistence',
     }));
   } finally {
+    if (restTransport != null) await restTransport.close();
     if (replacement != null) await replacement.dispose();
     for (var index = 0; index < clients.length - 1; index += 1) {
       await clients[index].dispose();

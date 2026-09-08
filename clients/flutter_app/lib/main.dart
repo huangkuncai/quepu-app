@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:susong_protocol_client/client.dart';
+import 'package:susong_protocol_client/io_rest_transport.dart';
 import 'package:susong_protocol_client/protocol.dart';
 import 'package:susong_protocol_client/support.dart';
 
@@ -39,6 +40,8 @@ class _SusongAppState extends State<SusongApp> with WidgetsBindingObserver {
   late final ProtocolTransport _transport;
   late final ClientSessionController _client;
   late final AppRuntimeConfig _runtimeConfig;
+  IoRestTransport? _restTransport;
+  SupportApi? _supportApi;
 
   @override
   void initState() {
@@ -55,11 +58,18 @@ class _SusongAppState extends State<SusongApp> with WidgetsBindingObserver {
       deviceId: 'poc-device',
       platform: defaultTargetPlatform.name,
     );
+    _supportApi = widget.supportApi;
+    if (_supportApi == null && _runtimeConfig.hasRestBackend) {
+      _restTransport = _runtimeConfig.createRestTransport();
+      _supportApi = SupportApi(_restTransport!.forSession(_client));
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    final restTransport = _restTransport;
+    if (restTransport != null) unawaited(restTransport.close());
     _client.dispose();
     super.dispose();
   }
@@ -115,7 +125,7 @@ class _SusongAppState extends State<SusongApp> with WidgetsBindingObserver {
           return HomePage(
             client: _client,
             snapshot: snapshot,
-            supportApi: widget.supportApi,
+            supportApi: _supportApi,
           );
         },
       ),
@@ -2988,7 +2998,7 @@ class _SupportTabState extends State<SupportTab> {
                               color: Color(0xff8ee09e),
                             ),
                             SizedBox(width: 8),
-                            Text('已记录到演示工单'),
+                            Text('工单已提交'),
                           ],
                         ),
                       ),

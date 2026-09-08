@@ -87,7 +87,7 @@ void main() {
     await tester.enterText(find.byType(TextField), '无法进入房间');
     await tester.tap(find.text('提交工单'));
     await tester.pump();
-    expect(find.text('已记录到演示工单'), findsOneWidget);
+    expect(find.text('工单已提交'), findsOneWidget);
   });
 
   testWidgets('support tab uses the injected REST API port', (tester) async {
@@ -116,7 +116,7 @@ void main() {
     await tester.tap(find.text('提交工单'));
     await tester.pump();
     expect(calls, 1);
-    expect(find.text('已记录到演示工单'), findsOneWidget);
+    expect(find.text('工单已提交'), findsOneWidget);
   });
 
   testWidgets('room page renders seats and ready state', (tester) async {

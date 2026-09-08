@@ -18,19 +18,30 @@ const config = parseEnv({
 const app = await createRealtimeServerAsync({
   config,
   host: '127.0.0.1',
-  port: 0
+  port: 0,
+  http: true,
+  httpHost: '127.0.0.1',
+  httpPort: 0
 });
 
 try {
-  if (!app.wss.address()) await once(app.wss, 'listening');
+  await Promise.all([
+    app.wss.address() ? null : once(app.wss, 'listening'),
+    app.api.server.address() ? null : once(app.api.server, 'listening')
+  ]);
   const address = app.wss.address();
   if (!address || typeof address === 'string') {
     throw new Error('real client verifier could not resolve the WSS address');
   }
   const endpoint = `ws://127.0.0.1:${address.port}`;
+  const restAddress = app.api.server.address();
+  if (!restAddress || typeof restAddress === 'string') {
+    throw new Error('real client verifier could not resolve the REST address');
+  }
+  const restEndpoint = `http://127.0.0.1:${restAddress.port}/api/v1`;
   const child = spawn(
     'dart',
-    ['run', 'tool/real_backend_acceptance.dart', endpoint],
+    ['run', 'tool/real_backend_acceptance.dart', endpoint, restEndpoint],
     { cwd: dartRoot, stdio: 'inherit' }
   );
   const [code, signal] = await once(child, 'exit');

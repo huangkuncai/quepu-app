@@ -36,10 +36,10 @@
 当前仓库是可运行的服务端最小骨架，而不是完整 App：
 
 - `package.json`：Node.js `>=20`、ESM、`ws` 8.x、`pg` 8.x、`redis` 5.x；包含 lint/typecheck、协议/迁移校验、secret scan 和组合质量门。
-- `src/server.js`：单进程 WebSocket，内存 `rooms`/`clients`，默认端口 `8787`，已接入开发期 session Auth、输入校验、限流、心跳和错误/指标控制面。
+- `src/server.js`：单进程 WebSocket（默认 `8787`）与开发 REST（默认 `8788`），内存 `rooms`/`clients`，已接入开发期 session Auth、输入校验、限流、心跳和错误/指标控制面。
 - `src/domain/room.js`、`src/domain/room-actor.js` 与 `src/modules/realtime/gateway.js`：BE-201 通用 Room aggregate、BE-202 可替换 RoomActor 契约和 BE-203 WSS gateway 纵切，包含座位/房主/准备、生命周期状态、版本、规则快照、命令幂等、事件恢复、fencing、ACK/广播、订阅、私有事件过滤、背压、重连宽限和 durable recovery；BE-205 已增加共享 `RoomService` 与内存/fake-staging REST/BFF（ETag/If-Match/Idempotency-Key）；BE-204 已增加独立 presence overlay、durable room inventory、deadline claim/lease 和异步 PostgreSQL 启动装配，本地真实 adapter/双实例 smoke 已通过，生产滚动重启和故障演练仍未验收。
 - `src/domain/rules/susong.js`：`susong_v1` 占位规则注册表。
-- `clients/dart_protocol`：framework-neutral envelope/reducer、会话控制器、扩展房间命令同步和重连策略、原生 `dart:io` `IoWebSocketTransport`，以及可注入 REST transport 的纯文本 `SupportApi`；`clients/flutter_app` 默认使用 FakeTransport，也可配置真实开发 WSS，已接入房号加入、CL-201 房间桌面、CL-202 命令 outbox、CL-203 重连 UI和可注入 SupportApi 的客服表单。真实 Node + 四个 Dart WSS 客户端已完成建房、准备、发牌、私牌隔离和替换客户端恢复验收。
+- `clients/dart_protocol`：framework-neutral 协议/会话控制器、原生 WSS/REST transport 与纯文本 `SupportApi`；`clients/flutter_app` 可配置真实开发 WSS/REST，已接入房号加入、房间桌面、命令 outbox、重连 UI和客服表单。真实 Node + 四个 Dart WSS 客户端已完成房间/私牌/替换恢复验收，同一会话已完成客服工单创建与查询。
 - PostgreSQL migrations、Redis Compose/health、repository contract、BE-202 内存 event store/snapshot/outbox/lock、BE-204 PostgreSQL/Redis adapter、presence overlay、durable room inventory/deadline claim、BE-205 REST/BFF、BE-207 纯文本客服 REST、结构化日志、CI workflow 和基础 QA fixture 已建立；`npm run verify:real` 已在临时数据库中验证真实 PG/Redis adapter，`npm run verify:multi-instance` 已验证两个独立 PG pool/Redis client 的并发命令、连续事件/outbox 和最终 snapshotHash；正式外部 Auth、生产多进程滚动重启、后台、持久化客服仓储和完整麻将裁判仍未完成。
 - `npm test` 当前 108 个测试通过（含 BE-201～207、客服鉴权/隔离/幂等/审计、BE-204 重连/deadline/presence/重启恢复、双 actor 收敛/crash-gap 与 PostgreSQL/Redis adapter 契约、OpenAPI/AsyncAPI 契约、QA-201 故障矩阵和 BE-206 重启 fixture）；默认启动仍是内存，PostgreSQL 需通过 `createRealtimeServerAsync` 显式装载，生产滚动重启和长期一致性验证仍未完成。
 

@@ -207,6 +207,19 @@ class ClientSessionController {
   ProtocolTransport get transport => _transport;
   Map<String, dynamic>? get roomSnapshot => _room.snapshot;
 
+  /// Runs a native adapter operation with the current access token without
+  /// exposing session credentials as controller state to widgets or callers.
+  /// The callback must use the token only for the duration of the request.
+  Future<T> runAuthorized<T>(
+    Future<T> Function(String accessToken) operation,
+  ) {
+    final accessToken = _accessToken;
+    if (accessToken == null || accessToken.trim().isEmpty) {
+      return Future<T>.error(StateError('AUTH_REQUIRED'));
+    }
+    return operation(accessToken);
+  }
+
   /// A read-only view of queued envelopes, useful for diagnostics and tests.
   /// The returned maps are copies so callers cannot mutate an in-flight
   /// command and accidentally change its idempotency identity.

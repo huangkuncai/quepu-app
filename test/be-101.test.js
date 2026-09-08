@@ -19,6 +19,7 @@ test('environment schema applies safe defaults and coerces supported values', ()
     FEATURE_REAL_DIAMONDS: 'off'
   });
   assert.equal(config.PORT, 9000);
+  assert.equal(config.REST_PORT, 8788);
   assert.equal(config.FEATURE_REAL_RULES, true);
   assert.equal(config.FEATURE_REAL_DIAMONDS, false);
   assert.equal(config.WS_MAX_PAYLOAD_BYTES, 65536);

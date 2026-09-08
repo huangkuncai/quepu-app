@@ -39,9 +39,10 @@ AUTH_MODE=stub FEATURE_REAL_RULES=false FEATURE_REAL_DIAMONDS=false npm start
 cd clients/flutter_app
 flutter run -d <android-device-id> \
   --dart-define=SUSONG_ENV=local \
-  --dart-define=SUSONG_WSS_URL=ws://10.0.2.2:8787
+  --dart-define=SUSONG_WSS_URL=ws://10.0.2.2:8787 \
+  --dart-define=SUSONG_REST_URL=http://10.0.2.2:8788/api/v1
 ```
 
-`SUSONG_WSS_URL` 只接受绝对 `ws://`/`wss://` URL，登录页会显示当前环境与主机。大厅支持手工输入房号，另一实例不需要先持有本地房间快照。Android release 已声明网络权限，但明文 `ws://` 仅限隔离开发环境；staging/release 必须使用 `wss://`。这些代码不代表 Android/iOS 真机、证书链、平台安全存储、推送或签名已经通过。工具链和设备条件按 [DEVICE_MATRIX.md](DEVICE_MATRIX.md) 登记后，才能把 `CL-102/CL-103` 标为完成。
+`npm start` 同时监听开发 WSS `8787` 和 REST `8788`。`SUSONG_WSS_URL` 只接受绝对 `ws://`/`wss://`，`SUSONG_REST_URL` 只接受绝对 `http://`/`https://`；客服 Bearer token 由协议适配器逐请求读取，界面不持有原始令牌。Android 明文 HTTP/WS 仅限隔离 debug 环境；staging/release 必须使用 HTTPS/WSS。这些代码不代表 Android/iOS 真机、证书链、平台安全存储、推送或签名已经通过。
 
 这不是最终 Flutter App，也没有牌局裁判、计分、钻石扣费、充值、支付、提现或现金兑换能力。Android/iOS/HarmonyOS 包构建仍受 [DEVICE_MATRIX.md](DEVICE_MATRIX.md) 的 SDK、真机和签名条件约束。

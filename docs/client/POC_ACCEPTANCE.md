@@ -155,6 +155,6 @@ artifacts/client-poc/<runId>/
 | runId | 候选 | deviceId | 日期 | git SHA | 用例范围 | 结果 | 证据 | 复核人 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `POC-20260907-01` | Flutter Android | `Medium_Phone` Emulator / API 37 | 2026-09-07 | `d054a91` + layout fix | debug APK 安装、横屏启动、dev WS 登录/在线、2400×1080 布局 | `PASS (EMULATOR ONLY)` | [大厅截图](evidence/POC-20260907-01/android-emulator-wss-lobby.png) | AI/DEV |
-| `POC-20260908-02` | Dart real WSS harness | 4 个 host Dart 进程 | 2026-09-08 | 当前分支 | 建房/加入/准备/发牌、版本/hash、私牌隔离、替换客户端恢复 | `PASS (LOOPBACK ONLY)` | `npm run verify:client-real` | AI/DEV |
+| `POC-20260908-02` | Dart real WSS/REST harness | 4 个 host Dart 进程 | 2026-09-08 | 当前分支 | 房间版本/hash、私牌隔离、替换恢复、同会话客服创建/查询 | `PASS (LOOPBACK ONLY)` | `npm run verify:client-real` | AI/DEV |
 
-当前本机证据（不替代真机记录）：`clients/flutter_app` 执行 `flutter test` 26/26、`dart analyze` 和 Android debug APK 构建通过；Android API 37 Emulator 已经开发 WS 登录。真实 Node WSS loopback 四客户端已完成房间全流程、权威版本/hash、私牌隔离与断线替换恢复。当前未连接 production/staging WSS，也未完成 Android/iOS 四真机弱网和签名验收；`G1_BLOCKED` 保持不变，鸿蒙暂缓。
+当前本机证据（不替代真机记录）：`clients/flutter_app` 执行 `flutter test` 30/30、`dart analyze` 和 Android debug APK 构建通过；Android API 37 Emulator 已经开发 WS 登录。真实 Node loopback 四客户端已完成房间全流程、权威版本/hash、私牌隔离、断线替换恢复和同会话客服 REST 创建/查询。当前未连接 production/staging，也未完成 Android/iOS 四真机弱网和签名验收；`G1_BLOCKED` 保持不变，鸿蒙暂缓。

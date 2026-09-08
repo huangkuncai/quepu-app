@@ -52,9 +52,9 @@ npm run check      # 完整质量门（含协议、契约、迁移和测试）
 
 复制 `.env.example` 作为本地配置起点。`AUTH_MODE=stub`、`FEATURE_REAL_RULES=false` 和 `FEATURE_REAL_DIAMONDS=false` 仅用于开发/测试；开发期验证码为 `000000`，生产安全检查会拒绝 stub 身份和未完成的真实能力。模块边界和 ADR 见 [ADR-001](docs/architecture/ADR-001-modular-monolith.md) 与 [ADR-002](docs/architecture/ADR-002-auth-session.md)。
 
-WebSocket 默认监听 `8787`。新协议消息包括 `hello`、`login`、`auth`、`refresh`、`logout`、`ping`、`create_room`、`join_room`、`start_round`、`action`、`reconnect`；协议草案见 [docs/protocol](docs/protocol/README.md)。
+`npm start` 默认监听 WebSocket `8787` 和开发 REST `8788`。新协议消息包括 `hello`、`login`、`auth`、`refresh`、`logout`、`ping`、`create_room`、`join_room`、`start_round`、`action`、`reconnect`；协议草案见 [docs/protocol](docs/protocol/README.md)。
 
-BE-205 的房间 REST/BFF 与 WSS 共用 `RoomActor`，默认不额外监听 HTTP 端口；开发验收可显式开启：
+BE-205 的房间 REST/BFF 与 WSS 共用 `RoomActor`；工厂调用默认不监听 HTTP，CLI 开发启动由 `REST_PORT`（默认 `8788`）开启：
 
 ```js
 const app = createRealtimeServer({ http: true, httpPort: 8788 });
@@ -78,4 +78,4 @@ const app = await createRealtimeServerAsync({ config: loadConfig() });
 1. 请规则负责人验收已固化的 20 个宿松计分 golden cases，并用旧服样本补齐首局庄、补牌方向、花奖封顶和多三西关系边界。
 2. 将生产运行时切换到已实现的 PostgreSQL（用户、俱乐部、战绩、事件日志）+ Redis（在线状态/锁）适配器，并完成多进程故障演练。
 3. 增加 JWT 登录、俱乐部权限、后台钻石流水与审计日志。
-4. 完成 Flutter Android/iOS 真实客户端适配，并将客服纯文本 REST 接入真实客户端；鸿蒙按当前决定暂缓，严禁把牌局裁判逻辑放在客户端。
+4. 完成 Flutter Android/iOS 真机弱网、前后台和客服 REST 验收；鸿蒙按当前决定暂缓，严禁把牌局裁判逻辑放在客户端。

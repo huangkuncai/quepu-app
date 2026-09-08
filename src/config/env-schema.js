@@ -11,6 +11,7 @@ export const envSchema = Object.freeze({
   }),
   HOST: Object.freeze({ type: 'string', default: '127.0.0.1', minLength: 1 }),
   PORT: Object.freeze({ type: 'integer', default: 8787, min: 1, max: 65535 }),
+  REST_PORT: Object.freeze({ type: 'integer', default: 8788, min: 1, max: 65535 }),
   LOG_LEVEL: Object.freeze({
     type: 'enum',
     values: Object.freeze(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']),

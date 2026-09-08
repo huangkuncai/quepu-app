@@ -683,10 +683,19 @@ export async function createRealtimeServerAsync(options = {}) {
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (isMain) {
   const config = loadConfig();
-  createRealtimeServerAsync({ config }).then(app => {
+  createRealtimeServerAsync({
+    config,
+    http: true,
+    httpPort: config.REST_PORT,
+    httpHost: config.HOST
+  }).then(app => {
     app.wss.on('listening', () => {
       const address = app.wss.address();
       console.log(`Susong Mahjong server listening on ws://${address.address}:${address.port}`);
+    });
+    app.api.server.on('listening', () => {
+      const address = app.api.server.address();
+      console.log(`Susong Mahjong REST listening on http://${address.address}:${address.port}/api/v1`);
     });
   }).catch(error => {
     console.error(error);

@@ -14,7 +14,7 @@
 | 等待房与四方牌桌 | 四方座位、加入、准备/取消准备、房主开始、同步、连接状态 | Flutter controller/widget test |
 | 断线重连 | 断开、维护、同步、版本冲突及安全重试提示 | Flutter controller/widget test |
 | 战绩入口 | 空状态、积分非余额说明、房间版本展示 | Flutter widget smoke |
-| 客服 | 应用内纯文本工单，可注入真实 REST API | SupportApi/widget test |
+| 客服 | 应用内纯文本工单；运行时 REST 地址、同会话鉴权和真实创建/查询已接通 | SupportApi/widget test；`verify:client-real` |
 | 设置 | 音乐/音效开关、横屏说明、隐私权限边界、退出登录 | Flutter widget smoke |
 | 无客户端充值 | 只读“后台发放”提示，无充值、支付、提现、兑换、转赠按钮 | UI/依赖边界检查 |
 
@@ -28,7 +28,7 @@
 
 ## 下一实施顺序
 
-1. 接入 CL-204 真实开发 REST，将客服从注入测试端口接到同一会话鉴权。
+1. 在 Android/iOS 真机跑 CL-201 房间/重连与 CL-204 客服提交，登记 POC_ACCEPTANCE。
 2. 接入 `BE-401/402/403`：俱乐部申请/审批、楼层规则版本与从楼层开房。
 3. 接入 `BE-404/405/406` sandbox 账本，客户端只读展示。
 4. 接入 `BE-501` 战绩查询，完成 Android/iOS 双端真机 P0 回归。
