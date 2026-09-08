@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-08（BE-307 最新快照恢复也会重算权威结算迹线，不仅依赖 snapshotHash，Node 173/173、Flutter 23/23）
+> 最近更新：2026-09-08（BE-307 已增加持久房间批量双恢复验证器和机器可读 divergence 报告，Node 175/175、Flutter 23/23）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -341,7 +341,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | BE-304 | 动作合法性和优先级 | BE-303、DEC-RULE-002/007 | draw/discard/chi/peng/gang/hu/pass（以签字动作集为准） | 非回合/非法牌/过期动作拒绝；IN_PROGRESS（draw/discard、手牌归属、三家顺序响应/过牌、按玩家私有候选投影及权威吃/碰/明杠/暗杠/巴杠、抢杠胡、标准胡/七对/清一色/混一色/碰碰胡/全求人/天胡/地胡、自摸、点炮、必胡自动裁决和不必胡过圈均已实现；当前优先级为胡 > 碰/明杠 > 吃；待三西） |
 | BE-305 | 花/杠/增/飘/过圈状态 | DEC-RULE-005/006/007/009 | 玩家状态字段和事件 | 术语只使用已确认枚举；IN_PROGRESS（增、起手飘花选择、摸花、打/补花、碰风 1 花、普通/风牌明杠、暗杠及巴杠增量花数、杠后尾部连续补牌和可持久化过圈状态均已接入；过圈按 `turn-return-v1-provisional` 在本人实际摸牌或取得出牌权时解除，待旧服样本确认边界） |
 | BE-306 | 结算和两级积分账本 | DEC-RULE-004/005/008 | `RoundSettlement`、原因明细、累计战绩、零和/系统项策略 | 服务端重算；幂等；流局和多响样例通过；IN_PROGRESS（自摸、点炮、一冲二/三、流局、SYSTEM 写入、累计积分、重放/幂等和零和校验已实现；真实行牌现可直接触发服务端结算，三西识别仍保持关闭） |
-| BE-307 | 回放/确定性验证器 | BE-301~306 | 规则版本 + seed + event replay、snapshot hash | IN_PROGRESS（seed/私牌/牌墙重放和结算迹线防篡改已接入；待全局批量 divergence 工具） |
+| BE-307 | 回放/确定性验证器 | BE-301~306 | 规则版本 + seed + event replay、snapshot hash | IN_PROGRESS（seed/私牌/牌墙重放、结算迹线防篡改和持久房间批量双恢复 divergence 报告已接入；待调度化全量历史扫描） |
 | BE-308 | golden/property/fuzz tests | BE-301~307 | 至少 20 个签字 golden cases、属性测试和模糊测试 | IN_PROGRESS（已确认计分域 10,000 组自摸/点炮/一冲二三/花档/双方增/给定三西关系回放 0 divergence；待三西识别和正式规则 golden 签字） |
 | CL-301 | 牌桌牌面和动作面板 | BE-302/304 | 手牌、公共牌、花/杠、可行动作、deadline | DONE（只渲染服务端状态，不上传分数/牌墙；本人手牌、点选出牌、吃碰杠胡候选、公共弃牌/副露/花数/牌墙和 deadline 已按权威快照接入） |
 | CL-302 | 单局/整场结算页 | BE-306 | 每人 delta、原因、累计、规则版本 | IN_PROGRESS（单局页已只读渲染服务端结果与增→飘→花→三西迹线；整场汇总待 BE-501） |
@@ -611,6 +611,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.44 | 2026-09-08 | 新增 BE-308 确定性属性回放：固定 PRNG 种子生成 10,000 组已签计分输入，验证重算相等、四家零和和迹线逐项可审计；增加无花果自摸封顶属性 | `be-308-susong-properties.test.js`（2/2，10,000 组 0 divergence）；全量 Node 173/173 |
 | 0.1.45 | 2026-09-08 | 将 `scoreOrderVersion` 加入宿松规则定义和新房间不可变规则快照；建房过程始终使用服务端注册版本，忽略客户端伪造值 | `be-301-susong-rule.test.js`（12/12）；全量 Node 173/173 |
 | 0.1.46 | 2026-09-08 | 补齐最新持久快照恢复的结算防篡改：恢复时校验结算版本与冻结规则一致，并按配置/增分重算逐笔迹线；即使伪造者同时更新 snapshotHash 也会 fail-closed | `be-303-susong-wall.test.js` + `be-202-event-store.test.js`（45/45）；全量 Node 173/173 |
+| 0.1.47 | 2026-09-08 | 新增 BE-307 `verifyDurableRoomReplays`：枚举或指定持久房间，独立恢复两次后比对事件游标、snapshotHash 与完整快照；输出机器可读房间级报告，支持 `throwOnFailure` 阻断 CI | `be-307-room-replay-verifier.test.js`（2/2）；全量 Node 175/175 |
 
 ## 16. 我们下一次具体做什么
 
