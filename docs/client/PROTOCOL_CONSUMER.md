@@ -14,6 +14,10 @@
 cd clients/dart_protocol
 dart run tool/test.dart
 dart run tool/io_transport_test.dart
+
+# 仓库根目录：真实 Node + 四个 dart:io WSS 客户端
+cd ../..
+npm run verify:client-real
 ```
 
 Flutter 壳的 mock 联调与回归：
@@ -38,6 +42,6 @@ flutter run -d <android-device-id> \
   --dart-define=SUSONG_WSS_URL=ws://10.0.2.2:8787
 ```
 
-`SUSONG_WSS_URL` 只接受绝对 `ws://`/`wss://` URL，登录页会显示当前环境与主机。Android release 已声明网络权限，但明文 `ws://` 只在 debug manifest 开放；staging/release 必须使用 `wss://`。这些代码不代表 Android/iOS 真机、证书链、平台安全存储、推送或签名已经通过。工具链和设备条件按 [DEVICE_MATRIX.md](DEVICE_MATRIX.md) 登记后，才能把 `CL-102/CL-103` 标为完成。
+`SUSONG_WSS_URL` 只接受绝对 `ws://`/`wss://` URL，登录页会显示当前环境与主机。大厅支持手工输入房号，另一实例不需要先持有本地房间快照。Android release 已声明网络权限，但明文 `ws://` 仅限隔离开发环境；staging/release 必须使用 `wss://`。这些代码不代表 Android/iOS 真机、证书链、平台安全存储、推送或签名已经通过。工具链和设备条件按 [DEVICE_MATRIX.md](DEVICE_MATRIX.md) 登记后，才能把 `CL-102/CL-103` 标为完成。
 
 这不是最终 Flutter App，也没有牌局裁判、计分、钻石扣费、充值、支付、提现或现金兑换能力。Android/iOS/HarmonyOS 包构建仍受 [DEVICE_MATRIX.md](DEVICE_MATRIX.md) 的 SDK、真机和签名条件约束。

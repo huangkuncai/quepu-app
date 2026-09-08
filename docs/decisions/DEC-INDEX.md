@@ -84,7 +84,7 @@
 | `npm test` | 168 个 Node 测试通过 | 2026-09-07 | `npm run check` 通过；包含 BE-201～207、BE-301～306 牌墙/连续补花/权威摸出牌/响应窗口/完整吃碰杠胡过/不必胡过圈/标准胡及 APK 所列特殊胡型/点炮自摸/必胡自动结算/14 张流局/牌守恒/私密持久化/玩家脱敏、客服、deadline、多实例收敛、真实 adapter 契约、协议和故障矩阵；`verify:real` 与 `verify:multi-instance` 已覆盖真实本地 PG/Redis，生产滚动重启/故障演练仍待 |
 | 服务端启动 | `src/server.js` 可启动 WebSocket 8787（内存骨架） | 2026-08-28 | 仅开发/演示环境 |
 | 数据和认证 | PostgreSQL migrations、Redis Compose/health、repository contract/MemoryRepository、开发期 session/Auth 和审计接口已建立；正式 PG/Redis/外部 Auth 未接入 | 2026-08-28 | 单进程/内存实现；不得开放真实牌局/真实扣费 |
-| 客户端 | `clients/dart_protocol` 协议/连接核心、扩展命令同步、原生 `dart:io` `IoWebSocketTransport`、四客户端 fake 夹具和 `SupportApi`，以及 `clients/flutter_app` 横屏 Flutter 壳通过本机验证 | 2026-09-07 | `dart analyze`、协议/IO/multi-client/support 脚本、`flutter test`（21/21）和 Android debug APK 构建；房间桌面、命令 outbox、维护/版本冲突/前台恢复 UI、客服 REST 注入、服务端权威手牌/动作/公开牌桌及可配置原生 WSS 已接入；真实服务四客户端、Android/iOS 真机签名尚待验收，鸿蒙暂缓 |
+| 客户端 | Dart 协议/连接核心、原生 WSS、真实 Node 四客户端验收和横屏 Flutter 壳通过本机验证 | 2026-09-08 | `verify:client-real` 完成建房/加入/准备/发牌、版本/hash 收敛、私牌隔离与替换客户端恢复；Flutter 26/26；Android/iOS 真机弱网与签名尚待，鸿蒙暂缓 |
 | 房间/BE-201～205、BE-206/QA-201 | 通用 Room aggregate、内存 event store/RoomActor/fencing/snapshot/outbox、WSS gateway、重连与显式 deadline 基础、PostgreSQL/Redis adapter 契约与异步装配、presence overlay、durable room inventory、持久化 deadline claim/lease、共享 RoomService/REST/BFF 和 fake-rule 故障矩阵已覆盖状态、幂等、重启恢复、失败回滚、ACK/广播、私有事件过滤、连接替换、snapshot hash、弱网收敛和 stale deadline guard；`verify:real` 已覆盖临时数据库真实迁移/事件/快照恢复/deadline lease/Redis fencing，`verify:multi-instance` 已覆盖两个独立 actor/PG pool/Redis client 的并发写与最终 hash 收敛；业务仍为内存/fake-staging 纵切，生产滚动重启/故障演练未完成 | 2026-09-02 | `test/be-204-multi-instance.test.js`、`scripts/verify-multi-instance.mjs`、`npm run verify:real`；不代表生产房间服务或三端真机安装 |
 | 质量/安全 | lint、typecheck、协议/迁移校验、secret scan、依赖高危审计、Docker Compose 配置校验通过 | 2026-08-28 | ADR-003；控制端点和日志脱敏为开发基线 |
 | Git | 尚无提交；现有文件均需保留 | 2026-08-28 | 当前分支 `codex/be-101-protocol`；后续补充分支/提交策略 |
@@ -152,6 +152,7 @@
 | 2026-09-08 | AI/DEV | 补齐 `.5` 庄家跳牌后零行牌历史直接天胡的一索结算，确认无首次摸牌事件依赖 | DEC-RULE-003/008、BE-303/304/306 | `be-303-susong-wall.test.js`；Node 223/223 |
 | 2026-09-08 | AI/DEV | 完成已确认规则纵切阻塞审计；正式签字仅余 144 张精确构成及“无花果放冲即一索”的付款方触发语义 | DEC-RULE-001/008、BE-301/306/308 | [规则验收清单](../rules/SUSONG_RULE_ACCEPTANCE.md) 第 3 节；未确认前 fail-closed |
 | 2026-09-08 | USER/AI/DEV | 正式采用现有 144 张牌组；确认无花果放冲使每个合法赢家逐一按一索，强飘/不强飘无花均适用，无花果赢家仍不能接炮；规则升至 `.6` 并关闭规则阻塞 | DEC-RULE-001/008、BE-301/306/308 | `be-302-susong-scoring.test.js`、`be-303-susong-wall.test.js`、23 个 golden；Node 227/227 |
+| 2026-09-08 | AI/DEV | CL-201 真实 Node WSS 四客户端验收通过；Flutter 大厅支持输入房号加入，并修复审计 history replay 与新控制器 roomId 恢复边界 | CL-201、CL-203 | `npm run verify:client-real`；Flutter 26/26；仍属 loopback development 证据 |
 
 ## 8. 变更记录
 
@@ -217,6 +218,7 @@
 | 0.1.58 | 2026-09-08 | 登记 `.5` 庄家无首次摸牌的天胡完整纵切 | AI/DEV |
 | 0.1.59 | 2026-09-08 | 将剩余正式规则阻塞收敛为精确牌组签字与无花果放冲语义 | AI/DEV |
 | 0.1.60 | 2026-09-08 | 登记 144 张正式牌组与无花果放冲逐赢家一索，关闭 BLOCKER-G0-002 | USER/AI/DEV |
+| 0.1.61 | 2026-09-08 | 登记真实 Node WSS 四客户端同步、私牌隔离、替换重连及 Flutter 房号加入验收 | AI/DEV |
 
 ## 9. 用户回复模板（可只回复已确定项）
 

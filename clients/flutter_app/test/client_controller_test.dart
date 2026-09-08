@@ -69,6 +69,49 @@ void main() {
   });
 
   test(
+    'fresh controller adopts room id from an authoritative room sync',
+    () async {
+      final transport = FakeTransport();
+      final client = ClientSessionController(
+        transport: transport,
+        deviceId: 'replacement-device',
+        platform: 'android',
+      );
+      await client.login('13800000004', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      transport.inject({
+        'protocolVersion': '1.0',
+        'type': 'room_sync',
+        'eventId': newProtocolId(),
+        'roomId': 'recovered-room',
+        'roomVersion': 3,
+        'visibility': 'player',
+        'payload': {
+          'snapshot': {
+            'id': 'recovered-room',
+            'roomVersion': 3,
+            'version': 3,
+            'snapshotHash': 'authoritative-hash',
+          },
+          'events': const [],
+          'snapshotHash': 'authoritative-hash',
+          'fromRoomVersion': 0,
+          'toRoomVersion': 3,
+          'syncRequired': false,
+        },
+        'occurredAt': DateTime.now().toUtc().toIso8601String(),
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(client.snapshot.roomId, 'recovered-room');
+      expect(client.snapshot.roomVersion, 3);
+      expect(client.snapshot.syncRequired, isFalse);
+      await client.dispose();
+    },
+  );
+
+  test(
     'business commands are blocked until online and gaps request sync',
     () async {
       final transport = FakeTransport();

@@ -16,7 +16,7 @@ void main() {
     await tester.tap(find.text('进入大厅'));
     await tester.pump(const Duration(milliseconds: 180));
 
-    expect(find.text('创建演示房'), findsOneWidget);
+    expect(find.text('创建房间'), findsOneWidget);
     expect(find.text('还没有进行中的房间'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -31,11 +31,30 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
 
     expect(find.text('大厅'), findsWidgets);
-    expect(find.text('创建演示房'), findsOneWidget);
+    expect(find.text('创建房间'), findsOneWidget);
     expect(find.text('俱乐部'), findsOneWidget);
     expect(find.text('战绩'), findsOneWidget);
     expect(find.text('客服'), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
+  });
+
+  testWidgets('lobby joins a shared room by entered room code', (tester) async {
+    final transport = FakeTransport();
+    await tester.pumpWidget(SusongApp(transport: transport));
+    await tester.tap(find.text('进入大厅'));
+    await tester.pump(const Duration(milliseconds: 180));
+
+    await tester.tap(find.text('加入房间'));
+    await tester.pumpAndSettle();
+    expect(find.text('请输入房主分享的房号'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'demo-room');
+    await tester.tap(find.text('确认加入'));
+    await tester.pump(const Duration(milliseconds: 80));
+
+    final command = transport.sentMessages.lastWhere(
+      (message) => message['type'] == 'join_room',
+    );
+    expect(command['roomId'], 'demo-room');
   });
 
   testWidgets('P0 club exposes floors, desks and approval-only application', (
@@ -104,7 +123,7 @@ void main() {
     await tester.pumpWidget(const SusongApp());
     await tester.tap(find.text('进入大厅'));
     await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(find.text('创建演示房'));
+    await tester.tap(find.text('创建房间'));
     await tester.pumpAndSettle();
     expect(find.text('创建宿松麻将房'), findsOneWidget);
     expect(find.textContaining('小胡 / 大胡 / 大大胡 / 一索'), findsOneWidget);
@@ -138,7 +157,7 @@ void main() {
       await tester.pumpWidget(SusongApp(transport: transport));
       await tester.tap(find.text('进入大厅'));
       await tester.pump(const Duration(milliseconds: 180));
-      await tester.tap(find.text('创建演示房'));
+      await tester.tap(find.text('创建房间'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('确认创建'));
       await tester.pump(const Duration(milliseconds: 80));
@@ -236,7 +255,7 @@ void main() {
     await tester.pumpWidget(SusongApp(transport: transport));
     await tester.tap(find.text('进入大厅'));
     await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(find.text('创建演示房'));
+    await tester.tap(find.text('创建房间'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认创建'));
     await tester.pump(const Duration(milliseconds: 80));
@@ -360,7 +379,7 @@ void main() {
     await tester.pumpWidget(SusongApp(transport: transport));
     await tester.tap(find.text('进入大厅'));
     await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(find.text('创建演示房'));
+    await tester.tap(find.text('创建房间'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认创建'));
     await tester.pump(const Duration(milliseconds: 80));

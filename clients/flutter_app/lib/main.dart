@@ -702,6 +702,17 @@ class LobbyTab extends StatelessWidget {
     }
   }
 
+  Future<void> _showJoinRoom(BuildContext context) async {
+    final roomId = await showDialog<String>(
+      context: context,
+      builder: (context) =>
+          _JoinRoomDialog(initialRoomId: snapshot.roomId ?? ''),
+    );
+    if (roomId != null && context.mounted) {
+      await _run(() => client.joinRoom(roomId), context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = snapshot.roomSnapshot;
@@ -734,7 +745,7 @@ class LobbyTab extends StatelessWidget {
                         child: _LobbyActionCard(
                           color: const Color(0xffdf843b),
                           icon: Icons.add_box_outlined,
-                          title: '创建演示房',
+                          title: '创建房间',
                           subtitle: '宿松麻将 · 积分制',
                           onTap: connected
                               ? () => _showCreateRoom(context)
@@ -748,12 +759,9 @@ class LobbyTab extends StatelessWidget {
                           icon: Icons.login,
                           title: '加入房间',
                           subtitle: '输入或使用当前房号',
-                          onTap: snapshot.roomId == null
-                              ? null
-                              : () => _run(
-                                  () => client.joinRoom(snapshot.roomId!),
-                                  context,
-                                ),
+                          onTap: connected
+                              ? () => _showJoinRoom(context)
+                              : null,
                         ),
                       ),
                     ],
@@ -765,7 +773,7 @@ class LobbyTab extends StatelessWidget {
                       ? const _EmptyState(
                           icon: Icons.table_restaurant_outlined,
                           title: '还没有进行中的房间',
-                          message: '创建演示房后可验证多人同步与断线重连。',
+                          message: '创建房间后可邀请好友，并验证多人同步与断线重连。',
                         )
                       : _CurrentRoomCard(
                           client: client,
@@ -782,6 +790,60 @@ class LobbyTab extends StatelessWidget {
       ),
     );
   }
+}
+
+class _JoinRoomDialog extends StatefulWidget {
+  const _JoinRoomDialog({required this.initialRoomId});
+
+  final String initialRoomId;
+
+  @override
+  State<_JoinRoomDialog> createState() => _JoinRoomDialogState();
+}
+
+class _JoinRoomDialogState extends State<_JoinRoomDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialRoomId);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final roomId = _controller.text.trim();
+    if (roomId.isNotEmpty) Navigator.pop(context, roomId);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('加入房间'),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      maxLength: 64,
+      textInputAction: TextInputAction.done,
+      decoration: const InputDecoration(
+        labelText: '房号',
+        hintText: '请输入房主分享的房号',
+        prefixIcon: Icon(Icons.numbers),
+      ),
+      onSubmitted: (_) => _submit(),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('确认加入')),
+    ],
+  );
 }
 
 class _PromoPanel extends StatelessWidget {

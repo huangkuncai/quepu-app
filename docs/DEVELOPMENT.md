@@ -39,7 +39,7 @@
 - `src/server.js`：单进程 WebSocket，内存 `rooms`/`clients`，默认端口 `8787`，已接入开发期 session Auth、输入校验、限流、心跳和错误/指标控制面。
 - `src/domain/room.js`、`src/domain/room-actor.js` 与 `src/modules/realtime/gateway.js`：BE-201 通用 Room aggregate、BE-202 可替换 RoomActor 契约和 BE-203 WSS gateway 纵切，包含座位/房主/准备、生命周期状态、版本、规则快照、命令幂等、事件恢复、fencing、ACK/广播、订阅、私有事件过滤、背压、重连宽限和 durable recovery；BE-205 已增加共享 `RoomService` 与内存/fake-staging REST/BFF（ETag/If-Match/Idempotency-Key）；BE-204 已增加独立 presence overlay、durable room inventory、deadline claim/lease 和异步 PostgreSQL 启动装配，本地真实 adapter/双实例 smoke 已通过，生产滚动重启和故障演练仍未验收。
 - `src/domain/rules/susong.js`：`susong_v1` 占位规则注册表。
-- `clients/dart_protocol`：framework-neutral envelope/reducer、会话控制器、扩展房间命令同步和重连策略、原生 `dart:io` `IoWebSocketTransport`，以及可注入 REST transport 的纯文本 `SupportApi`；`clients/flutter_app` 是只连 FakeTransport 的本机 POC 壳，已接入 CL-201 房间桌面（座位、准备、公共状态、私牌占位和同步入口）、CL-202 命令 outbox、CL-203 连接/同步/维护/版本冲突/手动重试及前台恢复 UI，以及可注入 SupportApi 的客服表单。
+- `clients/dart_protocol`：framework-neutral envelope/reducer、会话控制器、扩展房间命令同步和重连策略、原生 `dart:io` `IoWebSocketTransport`，以及可注入 REST transport 的纯文本 `SupportApi`；`clients/flutter_app` 默认使用 FakeTransport，也可配置真实开发 WSS，已接入房号加入、CL-201 房间桌面、CL-202 命令 outbox、CL-203 重连 UI和可注入 SupportApi 的客服表单。真实 Node + 四个 Dart WSS 客户端已完成建房、准备、发牌、私牌隔离和替换客户端恢复验收。
 - PostgreSQL migrations、Redis Compose/health、repository contract、BE-202 内存 event store/snapshot/outbox/lock、BE-204 PostgreSQL/Redis adapter、presence overlay、durable room inventory/deadline claim、BE-205 REST/BFF、BE-207 纯文本客服 REST、结构化日志、CI workflow 和基础 QA fixture 已建立；`npm run verify:real` 已在临时数据库中验证真实 PG/Redis adapter，`npm run verify:multi-instance` 已验证两个独立 PG pool/Redis client 的并发命令、连续事件/outbox 和最终 snapshotHash；正式外部 Auth、生产多进程滚动重启、后台、持久化客服仓储和完整麻将裁判仍未完成。
 - `npm test` 当前 108 个测试通过（含 BE-201～207、客服鉴权/隔离/幂等/审计、BE-204 重连/deadline/presence/重启恢复、双 actor 收敛/crash-gap 与 PostgreSQL/Redis adapter 契约、OpenAPI/AsyncAPI 契约、QA-201 故障矩阵和 BE-206 重启 fixture）；默认启动仍是内存，PostgreSQL 需通过 `createRealtimeServerAsync` 显式装载，生产滚动重启和长期一致性验证仍未完成。
 
@@ -670,7 +670,7 @@ lint/typecheck → server unit/property tests → protocol contract tests
 
 建议首批工程任务：
 
-1. 已将 WSS 房间命令接入 BE-202 `RoomActor`，统一持久化成功后的 ACK/广播；BE-204 已具备 snapshot/delta reconnect、`sync_required`、重连宽限、snapshot hash、显式 deadline、durable room inventory、`DeadlineStore` claim/lease、presence overlay 和异步 PostgreSQL/Redis 装配，Flutter POC 已完成 CL-202 outbox 与 CL-203 重连 UI；BE-207 纯文本客服 REST 已完成；`npm run verify:real`、`npm run verify:multi-instance` 已通过真实本地 PG/Redis smoke，下一步是生产滚动重启/故障演练、CL-201 真实 WSS/设备验收和 CL-204 REST 联调。
+1. 已将 WSS 房间命令接入 BE-202 `RoomActor`，统一持久化成功后的 ACK/广播；BE-204 已具备 snapshot/delta reconnect、`sync_required`、重连宽限、snapshot hash、显式 deadline、durable room inventory、`DeadlineStore` claim/lease、presence overlay 和异步 PostgreSQL/Redis 装配，Flutter POC 已完成 CL-202 outbox 与 CL-203 重连 UI；BE-207 纯文本客服 REST 已完成；`npm run verify:real`、`npm run verify:multi-instance` 和 `npm run verify:client-real` 已通过。下一步是生产滚动重启/故障演练、Android/iOS 真机 WSS 验收和 CL-204 REST 联调。
 2. 已建立 OpenAPI/AsyncAPI YAML 解析、引用、状态码和 wrapper 契约测试；后续继续生成 `packages/protocol` 各端模型。
 3. 完成 Auth、Club、Floor、Diamond Ledger 的数据库迁移。
 4. 与规则负责人完成 P0 规则确认及 golden cases。

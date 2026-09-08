@@ -980,21 +980,18 @@ class ClientSessionController {
       final events = event.payload['events'];
       if (events is List) {
         for (final raw in events) {
-          // The current Node skeleton's history entries are audit-shaped
-          // (`version/type/payload`) rather than protocol deltas. The snapshot
-          // remains authoritative; only apply entries that already carry a
-          // versioned event envelope so we never invent state from metadata.
-          if (raw is Map && raw['roomVersion'] is int) {
-            final candidate = Map<String, dynamic>.from(raw);
-            candidate['protocolVersion'] ??= protocolVersion;
-            candidate['type'] ??= 'room_event';
-            candidate['eventId'] ??= newProtocolId(_random);
-            candidate['roomVersion'] ??= raw['version'];
-            candidate['roomId'] ??= _snapshot.roomId;
-            candidate['payload'] ??= <String, dynamic>{};
-            candidate['occurredAt'] ??=
-                DateTime.now().toUtc().toIso8601String();
-            final parsed = EventEnvelope.fromJson(candidate);
+          // The Node store returns audit-shaped domain history
+          // (`version/type/payload`) beside a latest authoritative snapshot.
+          // It is not a protocol envelope and may contain persistence-only
+          // fields. Replay only entries that are already explicit room-event
+          // envelopes; never manufacture a wire event from audit metadata.
+          if (raw is Map &&
+              raw['protocolVersion'] is String &&
+              raw['type'] == 'room_event' &&
+              raw['roomVersion'] is int) {
+            final parsed = EventEnvelope.fromJson(
+              Map<String, dynamic>.from(raw),
+            );
             final result = _room.apply(parsed);
             if (result == ApplyResult.syncRequired) gapDetected = true;
           }
@@ -1008,6 +1005,7 @@ class ClientSessionController {
     final preserveManualConflict =
         _snapshot.lastErrorCode == 'VERSION_CONFLICT';
     _snapshot = _snapshot.copyWith(
+      roomId: event.roomId ?? _snapshot.roomId,
       roomVersion: _room.roomVersion,
       roomSnapshot: _room.snapshot,
       syncRequired: gapDetected || _room.syncRequired,
