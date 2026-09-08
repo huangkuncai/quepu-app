@@ -323,6 +323,14 @@ void main() {
     expect(find.text('-15'), findsOneWidget);
     expect(find.textContaining('玩家B → 演示玩家  15 分'), findsOneWidget);
     expect(find.textContaining('赢家增 4  →  付款家增 6'), findsOneWidget);
+    expect(find.text('开始下一局'), findsOneWidget);
+    await tester.tap(find.text('开始下一局'));
+    await tester.pump(const Duration(milliseconds: 30));
+    final nextRound = transport.sentMessages.lastWhere(
+      (message) => message['type'] == 'next_round',
+    );
+    expect(nextRound['payload'], {'autoDeal': false});
+    expect(nextRound['roomVersion'], 1);
     expect(tester.takeException(), isNull);
   });
 

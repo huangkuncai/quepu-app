@@ -1113,6 +1113,7 @@ class _RoomTable extends StatelessWidget {
         availableActions.isNotEmpty || availableReactions.isNotEmpty;
     if (settlement != null && (status == 'settling' || status == 'finished')) {
       return _RoomSettlementTable(
+        client: client,
         room: room,
         round: round!,
         settlement: settlement,
@@ -1380,6 +1381,7 @@ class _RoomTable extends StatelessWidget {
 
 class _RoomSettlementTable extends StatelessWidget {
   const _RoomSettlementTable({
+    required this.client,
     required this.room,
     required this.round,
     required this.settlement,
@@ -1387,6 +1389,7 @@ class _RoomSettlementTable extends StatelessWidget {
     required this.snapshot,
   });
 
+  final ClientSessionController client;
   final Map<String, dynamic> room;
   final Map<String, dynamic> round;
   final Map<String, dynamic> settlement;
@@ -1409,6 +1412,10 @@ class _RoomSettlementTable extends StatelessWidget {
       'draw' => '流局',
       _ => '已结算',
     };
+    final roomId = room['id']?.toString() ?? room['roomId']?.toString();
+    final roomStatus = room['status']?.toString();
+    final isOwner = room['ownerId']?.toString() == snapshot.userId;
+    final connected = snapshot.phase == ConnectionPhase.online;
     final orderedPlayers = [...players]
       ..sort(
         (left, right) => (_intValue(left['seat']) ?? 0).compareTo(
@@ -1444,13 +1451,44 @@ class _RoomSettlementTable extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Text(
-                                  '第 ${_intValue(round['roundNumber']) ?? '—'} 局积分',
-                                  style: const TextStyle(
-                                    color: Color(0xffffe4a3),
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '第 ${_intValue(round['roundNumber']) ?? '—'} 局积分',
+                                        style: const TextStyle(
+                                          color: Color(0xffffe4a3),
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                    if (roomStatus == 'settling' && isOwner)
+                                      FilledButton.icon(
+                                        onPressed:
+                                            connected &&
+                                                roomId != null &&
+                                                snapshot.pendingCommandCount ==
+                                                    0
+                                            ? () => _run(
+                                                () => client.nextRound(roomId),
+                                                context,
+                                              )
+                                            : null,
+                                        icon: const Icon(Icons.skip_next),
+                                        label: const Text('开始下一局'),
+                                      )
+                                    else
+                                      Text(
+                                        roomStatus == 'finished'
+                                            ? '本场已结束'
+                                            : '等待房主开始下一局',
+                                        style: const TextStyle(
+                                          color: Color(0xffaec8c1),
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                  ],
                                 ),
                                 const SizedBox(height: 8),
                                 Expanded(
@@ -1576,6 +1614,20 @@ class _RoomSettlementTable extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _run(
+    Future<String> Function() operation,
+    BuildContext context,
+  ) async {
+    try {
+      await operation();
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('下一局未发送，请检查连接状态')));
+      }
+    }
   }
 }
 

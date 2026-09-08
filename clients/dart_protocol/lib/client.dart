@@ -478,6 +478,7 @@ class ClientSessionController {
       'next_round',
       {'autoDeal': autoDeal},
       roomId: roomId,
+      roomVersion: _room.roomVersion < 0 ? null : _room.roomVersion,
     );
   }
 

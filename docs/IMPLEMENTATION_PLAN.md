@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-08（BE-303 已完成首个赢家坐庄/流局连庄及下一局服务端自动发牌，Node 179/179、Flutter 23/23）
+> 最近更新：2026-09-08（BE-303/CL-302 已完成跨局庄轮转、服务端自动发牌和房主“开始下一局”闭环，Node 179/179、Flutter 23/23）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -344,7 +344,7 @@ I2 使用确定性的 fake rule，不等待完整宿松计分；目标是证明�
 | BE-307 | 回放/确定性验证器 | BE-301~306 | 规则版本 + seed + event replay、snapshot hash | IN_PROGRESS（seed/私牌/牌墙重放、结算迹线防篡改和持久房间批量双恢复 divergence 报告已接入；待调度化全量历史扫描） |
 | BE-308 | golden/property/fuzz tests | BE-301~307 | 至少 20 个签字 golden cases、属性测试和模糊测试 | IN_PROGRESS（已确认计分域 10,000 组自摸/点炮/一冲二三/花档/双方增/给定三西关系回放 0 divergence；待三西识别和正式规则 golden 签字） |
 | CL-301 | 牌桌牌面和动作面板 | BE-302/304 | 手牌、公共牌、花/杠、可行动作、deadline | DONE（只渲染服务端状态，不上传分数/牌墙；本人手牌、点选出牌、吃碰杠胡候选、公共弃牌/副露/花数/牌墙和 deadline 已按权威快照接入） |
-| CL-302 | 单局/整场结算页 | BE-306 | 每人 delta、原因、累计、规则版本 | IN_PROGRESS（单局页已只读渲染服务端结果与增→飘→花→三西迹线；整场汇总待 BE-501） |
+| CL-302 | 单局/整场结算页 | BE-306 | 每人 delta、原因、累计、规则版本 | IN_PROGRESS（单局页已只读渲染服务端结果与增→飘→花→三西迹线；结算后房主可按当前 roomVersion 触发服务端下一局，其他成员只等待；整场汇总待 BE-501） |
 | QA-301 | 规则验收包 | DEC-RULE 全部 | 牌局输入、事件、预期分数和截图/日志 | 规则负责人签字，未签项不进 production flag |
 
 ### 8.2 规则实现硬门禁
@@ -614,6 +614,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.47 | 2026-09-08 | 新增 BE-307 `verifyDurableRoomReplays`：枚举或指定持久房间，独立恢复两次后比对事件游标、snapshotHash 与完整快照；输出机器可读房间级报告，支持 `throwOnFailure` 阻断 CI | `be-307-room-replay-verifier.test.js`（2/2）；全量 Node 175/175 |
 | 0.1.48 | 2026-09-08 | 扩充服务端赢家结算摘要：保留飘花状态、无花果自摸封顶、权威特殊胡型和杠开次数；CL-302 在结算页只读展示原因，不自行推导。迹线验证保留对同版旧摘要的恢复兼容 | 计分/牌局定向 51/51；`flutter test`（23/23）、`dart analyze` |
 | 0.1.49 | 2026-09-08 | 完成 BE-303 跨局庄轮转：非流局取服务端结算 `winnerIds` 的首位坐庄，流局沿用原庄；`ROUND_DEALING` 固化庄位并在事件重放时拒绝篡改，客户端不能通过下一局参数改庄；`RoomService` 将下一局选庄、开局和私密发牌串为一次服务端流程 | `be-303-susong-wall.test.js`（40/40，含持久化重试/重启）；`npm run check`（Node 179/179） |
+| 0.1.50 | 2026-09-08 | 完成 CL-302 下一局交互闭环：结算页仅房主在 `settling` 状态显示“开始下一局”，命令携带权威 `roomVersion` 并复用 outbox；非房主等待、整场结束不再开放按钮 | Flutter 23/23、Flutter/Dart analyze、Dart 协议/transport/四客户端/support 脚本通过 |
 
 ## 16. 我们下一次具体做什么
 
