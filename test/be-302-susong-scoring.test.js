@@ -150,6 +150,8 @@ test('no-flower self-draw remains at the cap tier', () => {
     zengByPlayer: { A: 0, B: 0, C: 0, D: 0 }
   });
   assert.equal(settlement.settledTier, 'one_bamboo');
+  assert.equal(settlement.cappedByNoFlowerSelfDraw, true);
+  assert.equal(settlement.piao, false);
   assert.deepEqual(settlement.deltaByPlayer, { A: 24, B: -8, C: -8, D: -8 });
 });
 
@@ -184,6 +186,7 @@ test('one discard can pay two or three independently classified winners', () => 
   });
   assert.deepEqual(settlement.winnerIds, ['A', 'B', 'C']);
   assert.deepEqual(settlement.wins.map(win => win.tier), ['small', 'big', 'double_big']);
+  assert.ok(settlement.wins.every(win => Array.isArray(win.patterns)));
   assert.deepEqual(settlement.transfers.map(item => item.amount), [19, 22, 19]);
   assert.deepEqual(settlement.deltaByPlayer, { A: 19, B: 22, C: 19, D: -60 });
 });
@@ -225,6 +228,18 @@ test('persisted score audit rejects reordered or arithmetically forged traces', 
   assert.throws(
     () => validateSusongSettlementAudit({ ...input, settlement: forged }),
     /trace arithmetic/
+  );
+
+  const priorSummaryShape = structuredClone(settlement);
+  for (const win of priorSummaryShape.wins) {
+    delete win.piao;
+    delete win.cappedByNoFlowerSelfDraw;
+    delete win.patterns;
+    delete win.gangWinCount;
+  }
+  assert.equal(
+    validateSusongSettlementAudit({ ...input, settlement: priorSummaryShape }),
+    true
   );
 });
 

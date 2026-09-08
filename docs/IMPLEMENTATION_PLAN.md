@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-08（BE-307 已增加持久房间批量双恢复验证器和机器可读 divergence 报告，Node 175/175、Flutter 23/23）
+> 最近更新：2026-09-08（BE-306/CL-302 结算已保留并展示服务端特殊胡型、杠开、花数和无花果封顶原因，Node 175/175、Flutter 23/23）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -612,6 +612,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.45 | 2026-09-08 | 将 `scoreOrderVersion` 加入宿松规则定义和新房间不可变规则快照；建房过程始终使用服务端注册版本，忽略客户端伪造值 | `be-301-susong-rule.test.js`（12/12）；全量 Node 173/173 |
 | 0.1.46 | 2026-09-08 | 补齐最新持久快照恢复的结算防篡改：恢复时校验结算版本与冻结规则一致，并按配置/增分重算逐笔迹线；即使伪造者同时更新 snapshotHash 也会 fail-closed | `be-303-susong-wall.test.js` + `be-202-event-store.test.js`（45/45）；全量 Node 173/173 |
 | 0.1.47 | 2026-09-08 | 新增 BE-307 `verifyDurableRoomReplays`：枚举或指定持久房间，独立恢复两次后比对事件游标、snapshotHash 与完整快照；输出机器可读房间级报告，支持 `throwOnFailure` 阻断 CI | `be-307-room-replay-verifier.test.js`（2/2）；全量 Node 175/175 |
+| 0.1.48 | 2026-09-08 | 扩充服务端赢家结算摘要：保留飘花状态、无花果自摸封顶、权威特殊胡型和杠开次数；CL-302 在结算页只读展示原因，不自行推导。迹线验证保留对同版旧摘要的恢复兼容 | 计分/牌局定向 51/51；`flutter test`（23/23）、`dart analyze` |
 
 ## 16. 我们下一次具体做什么
 

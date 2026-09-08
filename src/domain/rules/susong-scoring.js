@@ -38,7 +38,13 @@ export function scoreSusongWin({
   const players = normalizePlayers(playerIds);
   const winner = member(winnerId, players, 'winnerId');
   const zeng = normalizeZeng(zengByPlayer, players);
-  const decision = evaluateSusongWin({ flowerState, winSource, patterns, gangWinCount });
+  const normalizedPatterns = [...new Set(patterns)].sort();
+  const decision = evaluateSusongWin({
+    flowerState,
+    winSource,
+    patterns: normalizedPatterns,
+    gangWinCount
+  });
   if (!decision.allowed) {
     throw new TypeError(`win is not allowed: ${decision.reason}`);
   }
@@ -95,6 +101,10 @@ export function scoreSusongWin({
     classifiedTier: decision.tier,
     settledTier: tier,
     selfDrawPromoted: false,
+    piao: decision.piao,
+    cappedByNoFlowerSelfDraw: decision.cappedByNoFlowerSelfDraw === true,
+    patterns: normalizedPatterns,
+    gangWinCount,
     transfers,
     deltaByPlayer
   });
@@ -166,7 +176,11 @@ export function scoreSusongRound(input = {}) {
     wins: wins.map(win => ({
       winnerId: win.winnerId,
       flowerCount: win.flowerCount,
-      tier: win.settledTier
+      tier: win.settledTier,
+      piao: win.piao,
+      cappedByNoFlowerSelfDraw: win.cappedByNoFlowerSelfDraw,
+      patterns: [...win.patterns],
+      gangWinCount: win.gangWinCount
     })),
     transfers,
     deltaByPlayer
@@ -199,15 +213,24 @@ export function validateSusongSettlementAudit({
     throw new TypeError('settlement winners are inconsistent');
   }
   const tierByWinner = new Map();
+  const piaoByWinner = new Map();
   for (const [index, win] of settlement.wins.entries()) {
     if (!win || typeof win !== 'object' || Array.isArray(win)) {
       throw new TypeError(`settlement.wins.${index} is invalid`);
     }
     const winnerId = member(win.winnerId, players, 'winnerId');
-    if (winnerId !== winnerIds[index] || TIER_INDEX[win.tier] === undefined) {
+    if (winnerId !== winnerIds[index] || TIER_INDEX[win.tier] === undefined
+      || (win.piao !== undefined && typeof win.piao !== 'boolean')
+      || (win.cappedByNoFlowerSelfDraw !== undefined
+        && typeof win.cappedByNoFlowerSelfDraw !== 'boolean')
+      || (win.patterns !== undefined && (!Array.isArray(win.patterns)
+        || win.patterns.some(pattern => typeof pattern !== 'string')))
+      || (win.gangWinCount !== undefined
+        && (!Number.isInteger(win.gangWinCount) || win.gangWinCount < 0))) {
       throw new TypeError(`settlement.wins.${index} is inconsistent`);
     }
     tierByWinner.set(winnerId, win.tier);
+    piaoByWinner.set(winnerId, win.piao);
   }
   if (settlement.outcome === 'draw') {
     if (winnerIds.length !== 0 || settlement.transfers.length !== 0
@@ -263,6 +286,8 @@ export function validateSusongSettlementAudit({
       || trace[1].count !== zeng[payerId] || trace[1].unit !== config.zeng
       || trace[1].value !== payerZeng
       || !['piao', 'not_piao'].includes(trace[2].status) || trace[2].value !== 0
+      || (piaoByWinner.get(winnerId) !== undefined
+        && (trace[2].status === 'piao') !== piaoByWinner.get(winnerId))
       || trace[3].tier !== tier || trace[3].value !== baseScore
       || trace[3].subtotal !== subtotal
       || ![1, 2].includes(multiplier)

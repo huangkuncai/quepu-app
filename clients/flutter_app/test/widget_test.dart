@@ -290,6 +290,17 @@ void main() {
               'scoreAuthority': 'server',
               'scoreOrderVersion': 'zeng-piao-flower-sanxi-v1',
               'outcome': 'self_draw',
+              'wins': [
+                {
+                  'winnerId': 'poc-user',
+                  'flowerCount': 4,
+                  'tier': 'one_bamboo',
+                  'piao': false,
+                  'cappedByNoFlowerSelfDraw': false,
+                  'patterns': ['seven_pairs'],
+                  'gangWinCount': 1,
+                },
+              ],
               'deltaByPlayer': {'poc-user': 45, 'B': -15, 'C': -11, 'D': -19},
               'transfers': [
                 transfer('B', 15, 6),
@@ -307,6 +318,7 @@ void main() {
     expect(find.text('单局结算 · 自摸'), findsOneWidget);
     expect(find.text('服务端计分明细'), findsOneWidget);
     expect(find.text('zeng-piao-flower-sanxi-v1'), findsOneWidget);
+    expect(find.textContaining('演示玩家 一索/封顶 / 4 花 / 杠开×1 / 七对'), findsOneWidget);
     expect(find.text('+45'), findsOneWidget);
     expect(find.text('-15'), findsOneWidget);
     expect(find.textContaining('玩家B → 演示玩家  15 分'), findsOneWidget);

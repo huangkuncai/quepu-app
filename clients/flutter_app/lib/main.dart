@@ -1400,6 +1400,9 @@ class _RoomSettlementTable extends StatelessWidget {
     final transfers = settlement['transfers'] is List
         ? List<Object?>.from(settlement['transfers'] as List)
         : const <Object?>[];
+    final wins = settlement['wins'] is List
+        ? List<Object?>.from(settlement['wins'] as List)
+        : const <Object?>[];
     final outcome = switch (settlement['outcome']?.toString()) {
       'self_draw' => '自摸',
       'discard' => '点炮',
@@ -1519,6 +1522,27 @@ class _RoomSettlementTable extends StatelessWidget {
                                     fontSize: 11,
                                   ),
                                 ),
+                                if (wins.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    wins
+                                        .map(_dynamicMap)
+                                        .whereType<Map<String, dynamic>>()
+                                        .map(
+                                          (win) => _settlementWinReason(
+                                            win,
+                                            players,
+                                          ),
+                                        )
+                                        .join('  ·  '),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xffffd369),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 8),
                                 Expanded(
                                   child: transfers.isEmpty
@@ -1619,6 +1643,46 @@ String _settlementPlayerName(
 ) {
   final player = _findPlayer(players, playerId);
   return player == null ? (playerId ?? '—') : _playerName(player);
+}
+
+String _settlementWinReason(
+  Map<String, dynamic> win,
+  List<Map<String, dynamic>> players,
+) {
+  final player = _settlementPlayerName(players, win['winnerId']?.toString());
+  final tier =
+      const {
+        'small': '小胡',
+        'big': '大胡',
+        'double_big': '大大胡',
+        'one_bamboo': '一索/封顶',
+      }[win['tier']?.toString()] ??
+      win['tier']?.toString() ??
+      '胡牌';
+  final details = <String>[
+    '$player $tier',
+    '${_intValue(win['flowerCount']) ?? 0} 花',
+  ];
+  if (win['cappedByNoFlowerSelfDraw'] == true) details.add('无花果自摸封顶');
+  final gangWinCount = _intValue(win['gangWinCount']) ?? 0;
+  if (gangWinCount > 0) details.add('杠开×$gangWinCount');
+  details.addAll(
+    _stringValues(win['patterns']).map(
+      (pattern) =>
+          const {
+            'seven_pairs': '七对',
+            'pure_one_suit': '清一色',
+            'mixed_one_suit': '混一色',
+            'all_triplets': '碰碰胡',
+            'all_from_others': '全求人',
+            'heavenly_win': '天胡',
+            'earthly_win': '地胡',
+            'robbing_kong': '抢杠胡',
+          }[pattern] ??
+          pattern,
+    ),
+  );
+  return details.join(' / ');
 }
 
 class _RoundPublicBoard extends StatelessWidget {
