@@ -104,6 +104,56 @@ test('current rule deals the dealer 14 and starts directly in discard phase', ()
   assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
 });
 
+test('current dealer can settle a heavenly win without an opening draw event', () => {
+  const room = new Room({
+    id: 'current-heavenly-win-room',
+    ownerId: 'A',
+    ruleSnapshot: {
+      gameType: 'mahjong',
+      ruleId: 'susong_v1',
+      ruleVersion: SUSONG_RULE_VERSION,
+      config: {
+        rounds: 4,
+        scoreTiers: [1, 2, 3, 4],
+        zeng: 1,
+        piao: 'optional',
+        forcedHu: false
+      }
+    }
+  });
+  for (const playerId of players) room.join({ id: playerId });
+  for (const playerId of players) room.setReady(playerId);
+  room.start({ actorId: 'A' });
+  room.dealSusongOpeningRound({ seed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  room.beginPlaying({ actorId: 'A' });
+  room._privateRoundState.handsByPlayer.A = [
+    'characters-1-1', 'characters-2-1', 'characters-3-1',
+    'bamboo-1-1', 'bamboo-2-1', 'bamboo-3-1',
+    'dots-4-1', 'dots-5-1', 'dots-6-1',
+    'east-1', 'east-2', 'east-3', 'north-1', 'north-2'
+  ];
+  room.currentRound.wall.handCountsByPlayer.A = 14;
+  room.currentRound.flowerStates.A = {
+    ...room.currentRound.flowerStates.A,
+    status: 'not_piao',
+    openingFlowers: 1,
+    countedFlowers: 1
+  };
+
+  const viewer = room.snapshot({ viewerId: 'A' });
+  assert.deepEqual(room._privateRoundState.turnHistory, []);
+  assert.equal(viewer.round.availableActions.includes('self_draw'), true);
+  const result = room.applyAction('A', 'self_draw');
+
+  assert.equal(result.event.type, 'ROUND_SETTLING');
+  assert.equal(result.settlement.wins[0].tier, 'one_bamboo');
+  assert.equal(result.settlement.wins[0].patterns.includes('heavenly_win'), true);
+  assert.equal(room.events.some(event => event.type === 'SUSONG_TILE_DRAWN'), false);
+});
+
 test('wall and player validation rejects malformed authority input', () => {
   const wall = createSusongShuffledWall({ seed });
   assert.throws(
