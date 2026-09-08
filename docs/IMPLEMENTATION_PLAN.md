@@ -2,7 +2,7 @@
 
 > 计划版本：0.1.2-draft
 > 建立日期：2026-08-28
-> 最近更新：2026-09-08（BE-306 三西纵切及 BE-308 20 个计分 golden 已完成，Node 205/205、Flutter 24/24）
+> 最近更新：2026-09-08（规则纵切审计完成；三西与 20 个计分 golden 已落地，剩余六类边界待外部证据；Node 205/205、Flutter 24/24）
 > 计划状态：ACTIVE（I1 开发基线已建立；G0/G1 未闭合，尚未进入生产承诺）
 > 关联规格：[DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -533,7 +533,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | I1 | IN_PROGRESS | BE-101～BE-106 已完成（开发/单进程基线）；CL-101 已完成；CL-102 Flutter POC 与 CL-103 framework-neutral 核心/原生 transport 已完成本机验证；OPS-101 开发环境手册已完成；ArkUI/平台生命周期和真实设备仍待 | G2 预审 |
 | G1 | IN_PROGRESS | Android/iOS 工具链预检已通过，Android debug APK 已构建；Android/iOS 真机矩阵和发布签名仍待，鸿蒙暂缓 | Android/iOS 真机与签名验收 |
 | I2 | IN_PROGRESS | BE-201～BE-205 已完成（业务纵切仍为内存/fake-staging）；BE-204 PG/Redis adapter、presence overlay、异步启动装配、snapshot/delta、重连、显式 deadline 和 durable claim/lease 已完成，`verify:real` 与 `verify:multi-instance` 本地真实容器 smoke 通过，生产滚动重启/故障演练仍待；BE-207 纯文本客服 REST 已完成；CL-201 Flutter 房间桌面、四客户端 fake 验收夹具、CL-202 命令 outbox、CL-203 重连 UI 本机 POC 已完成；真实 WSS/设备验收和 CL-204 REST 联调待 | G3 实时纵切 |
-| 宿松规则 | IN_PROGRESS | 参考 APK 主流程及三西服务端识别、额外付款、一炮双响解除已编码；私密牌墙已接入持久化和按玩家脱敏视图；首局庄、补花方向、过圈边界、花奖封顶及多三西关系仍缺旧服样本 | 汇总至少 20 个签字 golden cases，补齐剩余旧服样本 |
+| 宿松规则 | BLOCKED | 巴杠/抢杠胡、过圈候选、三西权威结算和 20 个计分 golden 已编码；APK 只消费服务端下发结果，无法唯一恢复剩余规则 | 按 [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md) 提供首局庄、牌墙方向、过圈/超时、花奖封顶及多三西样本 |
 | Club/Floor | BLOCKED | 依赖 DEC-003～006 | G2 + schema |
 | Diamond | BLOCKED | 依赖 DEC-008～009 | 计费决策会 |
 | History/Support | IN_PROGRESS | BE-207 纯文本工单 REST 已完成并通过 2 个集成用例；CL-204 共享 Dart SupportApi 与 Flutter 注入已完成，真实 REST/三端联调待 | G3 |
@@ -618,6 +618,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.51 | 2026-09-08 | 完成起手花到正式行牌闭环：可直接处理的起手花由服务端发牌时解决；强飘玩家只提交飘/不飘与逐次打花选择；所有玩家状态解决后以 roundId 派生的幂等 SYSTEM 命令自动进入 `ROUND_PLAYING`，并发完成不会重复开打 | `be-303-susong-wall.test.js`（41/41）；`npm run check`（Node 180/180）；Flutter 24/24、`dart analyze` |
 | 0.1.52 | 2026-09-08 | 完成三西服务端纵切：单方累计吃碰同一对手 3 次建立双方关系；自摸额外份、关系内点炮双份、第三方点炮连带份，以及关系双方被同一炮同时胡时解除；结算/恢复按权威牌组审计，客户端只读展示解除原因 | `npm run check`（Node 184/184）；Flutter 24/24、`dart analyze` |
 | 0.1.53 | 2026-09-08 | 新增 20 个独立 JSON 计分 golden cases，覆盖花档、无花果、增分、多响和三西核心；每例校验档位、逐笔付款、四家 delta、解除关系及服务端审计 | `be-308-susong-golden.test.js`（21/21）；`npm run check`（Node 205/205） |
+| 0.1.54 | 2026-09-08 | 完成规则纵切收尾审计：逐项核验巴杠/抢杠胡、过圈、三西与 golden 证据；复核 APK 规则文本、protobuf 和客户端 Lua 字段，确认剩余六类边界必须由旧服样本或规则负责人决定 | [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md)；未决项保持 provisional/fail-closed |
 
 ## 16. 我们下一次具体做什么
 
@@ -631,7 +632,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 6. 已完成 BE-203：WSS gateway 已接入 RoomActor，具备成功写入后 ACK/广播、订阅、私有事件过滤、背压、连接替换和重连宽限；BE-204 已完成内存 snapshot/delta、显式 deadline、presence overlay、PG/Redis adapter 契约、异步默认装配和持久化 deadline claim/lease 基础，`verify:real` 与 `verify:multi-instance` 已在真实本地 PG/Redis 上通过，继续做真实多进程滚动重启、故障演练、备份恢复和长期最终一致性压测。
 7. 已完成 BE-205：REST/BFF 与 WSS 共用 `RoomService`/RoomActor，提供 ETag/If-Match、`Idempotency-Key`、统一错误 envelope 和成员/鉴权边界；当前为内存/fake-staging，不代表生产 PG/Redis 或多实例能力。
 8. QA-201/BE-206 基础延迟、丢包、乱序、重复和重启故障矩阵已通过；CL-201 四客户端 framework-neutral fake 夹具已验证版本/hash/重连收敛，下一步补真实 WSS/设备验收；BE-207 纯文本客服 REST 已完成，CL-204 真实 REST 联调与三端适配待完成。继续记录 DEC-011，SDK/真机未就绪前不得把 G1 标为通过。
-9. 已完成主要胡型、完整吃碰杠胡过和三西服务端纵切；下一步汇总至少 20 个签字 golden cases，并补首局庄、补牌方向、花奖封顶和多关系样本，未签字部分继续 fail-closed。
+9. 已完成主要胡型、完整吃碰杠胡过、三西服务端纵切和 20 个机器可执行 golden cases；规则纵切现停在 [规则验收清单](rules/SUSONG_RULE_ACCEPTANCE.md) 的六类外部证据，未确认部分继续 fail-closed。
 
 如果用户尚未准备好规则或钻石决策，我们仍可完成 I1/I2 的协议、认证、fake rule、同步和客户端 POC；但相关功能会保持 `DRAFT/SANDBOX`，不会暗中采用截图默认值。
 
