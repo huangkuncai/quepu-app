@@ -1367,7 +1367,7 @@ test('RoomService start immediately invokes authoritative Susong dealing', async
     requestId: 'service-start-request',
     roomVersion: restored.version
   });
-  assert.equal(result.room.status, 'dealing');
+  assert.equal(result.room.status, 'playing');
   assert.ok(result.room.round.wall.wallRemaining < 91);
   assert.ok([13, 14].includes(result.room.round.privateHand.length));
   assert.equal('privateRoundState' in result.room, false);
@@ -1410,11 +1410,51 @@ test('RoomService advances, assigns and deals the next Susong round atomically',
     requestId: 'service-next-round-request',
     roomVersion: room.version
   });
-  assert.equal(result.room.status, 'dealing');
+  assert.equal(result.room.status, 'playing');
   assert.equal(result.room.round.roundNumber, 2);
   assert.equal(result.room.round.dealerSeat, 2);
   assert.equal(result.room.round.wall.handCountsByPlayer.C, 14);
   assert.equal('privateRoundState' in result.room, false);
+});
+
+test('RoomService starts play when the final strong-piao opening flower is resolved', async () => {
+  const room = susongRoom('service-strong-piao-room', 'strong');
+  room.dealSusongOpeningRound({ seed, dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  const actor = { room, version: room.version };
+  const registry = {
+    get: roomId => roomId === room.id ? actor : null,
+    recover: async () => null,
+    dispatch: async (roomId, command, context) => {
+      const result = room.execute(command, context);
+      actor.version = room.version;
+      return result;
+    }
+  };
+  const service = new RoomService({ registry });
+  let commandSequence = 0;
+  const dispatch = (playerId, type, payload) => service.dispatch({
+    roomId: room.id,
+    principal: { userId: playerId, role: 'USER' },
+    type,
+    payload,
+    commandId: `strong-opening-${++commandSequence}`,
+    requestId: `strong-opening-request-${commandSequence}`,
+    roomVersion: room.version
+  });
+  for (const playerId of players) {
+    if (room.currentRound.flowerStates[playerId].status !== 'awaiting_piao_choice') continue;
+    await dispatch(playerId, 'choose_piao', { choosesPiao: true });
+    while (room.currentRound.flowerStates[playerId].pendingFlowerDiscards > 0) {
+      await dispatch(playerId, 'resolve_flower', { action: 'discard' });
+    }
+  }
+  assert.equal(room.status, 'playing');
+  assert.equal(room.turn, 'A');
+  assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.equal(room.events.filter(event => event.type === 'ROUND_PLAYING').length, 1);
 });
 
 test('durable next-round retries do not duplicate dealer or wall events', async () => {
@@ -1462,7 +1502,8 @@ test('durable next-round retries do not duplicate dealer or wall events', async 
   assert.deepEqual(eventsAfterFirst.map(event => event.type), [
     'NEXT_ROUND',
     'ROUND_DEALING',
-    'SUSONG_ROUND_DEALT'
+    'SUSONG_ROUND_DEALT',
+    'ROUND_PLAYING'
   ]);
   assert.equal(first.room.round.dealerSeat, 3);
 

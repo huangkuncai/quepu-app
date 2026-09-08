@@ -334,6 +334,72 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('strong-piao opening controls send only player choices', (
+    tester,
+  ) async {
+    final transport = FakeTransport();
+    await tester.pumpWidget(SusongApp(transport: transport));
+    await tester.tap(find.text('进入大厅'));
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.tap(find.text('创建演示房'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认创建'));
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.tap(find.text('进入牌桌'));
+    await tester.pumpAndSettle();
+
+    Map<String, dynamic> snapshot(Map<String, dynamic> flowerState) => {
+      'id': 'demo-room',
+      'roomId': 'demo-room',
+      'ownerId': 'poc-user',
+      'status': 'dealing',
+      'maxPlayers': 4,
+      'players': [
+        {'id': 'poc-user', 'displayName': '演示玩家', 'seat': 0, 'connected': true},
+      ],
+      'round': {
+        'roundNumber': 1,
+        'flowerStates': {'poc-user': flowerState},
+      },
+    };
+
+    void inject(int version, Map<String, dynamic> flowerState) {
+      transport.inject({
+        'protocolVersion': '1.0',
+        'type': 'room_event',
+        'eventId':
+            '33333333-3333-4333-8333-${version.toString().padLeft(12, '0')}',
+        'roomId': 'demo-room',
+        'roomVersion': version,
+        'payload': {'snapshot': snapshot(flowerState)},
+        'occurredAt': DateTime.now().toUtc().toIso8601String(),
+      });
+    }
+
+    inject(1, {'status': 'awaiting_piao_choice', 'pendingFlowerDiscards': 2});
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('选择飘花'), findsOneWidget);
+    expect(find.text('不飘·补花'), findsOneWidget);
+    await tester.tap(find.text('选择飘花'));
+    await tester.pump(const Duration(milliseconds: 30));
+    final choose = transport.sentMessages.lastWhere(
+      (message) => message['type'] == 'choose_piao',
+    );
+    expect(choose['payload'], {'choosesPiao': true});
+
+    inject(2, {'status': 'piao', 'pendingFlowerDiscards': 2});
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('打出花牌（剩 2）'), findsOneWidget);
+    await tester.tap(find.text('打出花牌（剩 2）'));
+    await tester.pump(const Duration(milliseconds: 30));
+    final discard = transport.sentMessages.lastWhere(
+      (message) => message['type'] == 'resolve_flower',
+    );
+    expect(discard['payload'], {'action': 'discard'});
+    expect(discard.containsKey('tileId'), isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('connection card exposes safe disconnect and maintenance retry', (
     tester,
   ) async {

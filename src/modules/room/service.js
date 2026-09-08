@@ -83,6 +83,14 @@ function stableSystemCommandId(namespace, sourceId) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+function susongOpeningResolved(room) {
+  const states = Object.values(room.currentRound?.flowerStates ?? {});
+  return states.length === room.players.size && states.length > 0 && states.every(state =>
+    state?.status !== 'awaiting_piao_choice'
+    && state?.pendingFlowerDiscards === 0
+    && state?.pendingFlowerReplacements === 0);
+}
+
 function roomSnapshot(room, viewerId) {
   return clone(room.snapshot({ viewerId }));
 }
@@ -319,6 +327,20 @@ export class RoomService {
         type: 'deal_susong_round',
         payload: {},
         commandId: stableSystemCommandId('susong:deal-next', command.commandId),
+        requestId: command.requestId,
+        roomVersion: result.roomVersion ?? actor.version
+      });
+    }
+    if (actor.room.ruleId === susongRule.id
+      && actor.room.status === 'dealing'
+      && susongOpeningResolved(actor.room)) {
+      result = await this._dispatchSusongSystem({
+        roomId: actor.room.id,
+        type: 'begin_playing',
+        payload: {},
+        // The round ID makes concurrent final flower resolutions converge on
+        // one durable transition instead of racing separate system commands.
+        commandId: stableSystemCommandId('susong:begin-playing', actor.room.roundId),
         requestId: command.requestId,
         roomVersion: result.roomVersion ?? actor.version
       });

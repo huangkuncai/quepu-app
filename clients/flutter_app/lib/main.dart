@@ -1106,6 +1106,13 @@ class _RoomTable extends StatelessWidget {
         players.where((player) => player['connected'] == true).length;
     final round = _dynamicMap(room['round']);
     final settlement = _dynamicMap(round?['settlement']);
+    final flowerStates = _dynamicMap(round?['flowerStates']);
+    final currentFlowerState = _dynamicMap(flowerStates?[snapshot.userId]);
+    final awaitsPiaoChoice =
+        status == 'dealing' &&
+        currentFlowerState?['status']?.toString() == 'awaiting_piao_choice';
+    final pendingFlowerDiscards =
+        _intValue(currentFlowerState?['pendingFlowerDiscards']) ?? 0;
     final privateHand = _stringValues(round?['privateHand']);
     final availableActions = _stringValues(round?['availableActions']);
     final availableReactions = _stringValues(round?['availableReactions']);
@@ -1298,6 +1305,52 @@ class _RoomTable extends StatelessWidget {
                                         : null,
                                     icon: const Icon(Icons.play_arrow),
                                     label: const Text('开始演示局'),
+                                  ),
+                                ],
+                                if (awaitsPiaoChoice) ...[
+                                  const SizedBox(height: 6),
+                                  FilledButton.icon(
+                                    onPressed: connected
+                                        ? () => _run(
+                                            () =>
+                                                client.choosePiao(roomId, true),
+                                            context,
+                                          )
+                                        : null,
+                                    icon: const Icon(Icons.local_florist),
+                                    label: const Text('选择飘花'),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  FilledButton.tonalIcon(
+                                    onPressed: connected
+                                        ? () => _run(
+                                            () => client.choosePiao(
+                                              roomId,
+                                              false,
+                                            ),
+                                            context,
+                                          )
+                                        : null,
+                                    icon: const Icon(Icons.layers_outlined),
+                                    label: const Text('不飘·补花'),
+                                  ),
+                                ] else if (status == 'dealing' &&
+                                    pendingFlowerDiscards > 0) ...[
+                                  const SizedBox(height: 6),
+                                  FilledButton.icon(
+                                    onPressed: connected
+                                        ? () => _run(
+                                            () => client.resolveFlower(
+                                              roomId,
+                                              'discard',
+                                            ),
+                                            context,
+                                          )
+                                        : null,
+                                    icon: const Icon(Icons.filter_vintage),
+                                    label: Text(
+                                      '打出花牌（剩 $pendingFlowerDiscards）',
+                                    ),
                                   ),
                                 ],
                                 if (hasAuthoritativeActions) ...[
