@@ -632,6 +632,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.65 | 2026-09-08 | CL-204 真实客服 REST 联调：Flutter 支持 `SUSONG_REST_URL`，适配器从实时会话逐请求注入 token；`npm start` 同时开放开发 REST 8788；真实夹具创建并查询本人工单 | `npm run verify:client-real`；Node 227/227；Flutter 30/30；仍为 loopback memory/stub-auth |
 | 0.1.66 | 2026-09-08 | Android API 37 Emulator 安装 WSS/REST 配置版 APK并完成登录、客服提交；修复横屏输入法压缩下顶部/导航及客服卡片溢出，提交结果改用不占布局的 SnackBar | Flutter 30/30、analyze、debug APK；仅 Emulator/dev HTTP，不替代真机/HTTPS |
 | 0.1.67 | 2026-09-09 | 修复演示牌桌玩家已加入/已准备但四座均显示空位：fake 快照正式分配座位与房主，客户端兼容嵌套及扁平座位快照；补齐 1386×686、DPR 1.5 横屏紧凑布局并消除中央牌桌/大厅房间卡溢出 | Flutter 30/30、Dart analyze、Node 227/227；真实服务端嵌套座位 fixture 与紧凑横屏回归通过 |
+| 0.1.68 | 2026-09-09 | 增加离线“机器人试玩”纵切：一键创建并进入四人牌桌，用户坐 1 号位，三名已准备机器人自动入座；展示 14 张手牌、牌墙、花数、副露、弃牌和 0 秒等待状态，用户出牌后三名机器人自动推进一轮 | Flutter 32/32、Dart analyze；能力严格限于 `FakeTransport` 视觉验收，不冒充服务端规则机器人或线上 AI |
 
 ## 16. 我们下一次具体做什么
 

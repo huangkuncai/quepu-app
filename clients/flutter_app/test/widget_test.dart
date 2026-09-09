@@ -57,6 +57,33 @@ void main() {
     expect(command['roomId'], 'demo-room');
   });
 
+  testWidgets('bot demo seats three robots and opens a playable table', (
+    tester,
+  ) async {
+    final transport = FakeTransport();
+    await tester.pumpWidget(SusongApp(transport: transport));
+    await tester.tap(find.text('进入大厅'));
+    await tester.pump(const Duration(milliseconds: 180));
+
+    expect(find.text('机器人试玩'), findsOneWidget);
+    await tester.tap(find.text('机器人试玩'));
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump(const Duration(milliseconds: 320));
+
+    expect(find.text('房间 demo-room'), findsOneWidget);
+    expect(find.text('演示玩家'), findsWidgets);
+    expect(find.text('小松机器人'), findsWidgets);
+    expect(find.text('小竹机器人'), findsWidgets);
+    expect(find.text('小菊机器人'), findsWidgets);
+    expect(find.text('进行中'), findsOneWidget);
+    expect(find.text('在线 4/4'), findsOneWidget);
+    expect(find.text('准备 4/4'), findsOneWidget);
+    expect(find.text('剩余 83 张'), findsOneWidget);
+    expect(find.text('1万'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('P0 club exposes floors, desks and approval-only application', (
     tester,
   ) async {

@@ -13,6 +13,7 @@ class FakeTransport implements ProtocolTransport {
   bool emitCommandAcks = true;
   int failNextSends = 0;
   bool _connected = false;
+  bool _botDemoPending = false;
   String? _roomId;
   int _roomVersion = 0;
   Map<String, dynamic> _room = _emptyRoom();
@@ -25,6 +26,13 @@ class FakeTransport implements ProtocolTransport {
 
   @override
   bool get isConnected => _connected;
+
+  /// Arms the next locally-created room as a four-seat visual bot demo.
+  /// This never crosses the protocol boundary and is unavailable to a real
+  /// backend, so production rooms cannot accidentally acquire fake players.
+  void enableBotDemo() {
+    _botDemoPending = true;
+  }
 
   @override
   Future<void> connect() async {
@@ -129,6 +137,15 @@ class FakeTransport implements ProtocolTransport {
             (payload['ruleConfig'] as Map?) ?? const <String, dynamic>{},
           ),
         );
+        if (_botDemoPending) {
+          _room = {
+            ..._room,
+            'demoMode': 'bots',
+            'players': _botPlayers(),
+            'connectedCount': 3,
+            'readyCount': 3,
+          };
+        }
         _history.clear();
         _emit(
           _event(
@@ -169,7 +186,11 @@ class FakeTransport implements ProtocolTransport {
         }
         _room = {
           ..._room,
-          'players': players,
+          'players': _botDemoPending
+              ? players
+                    .map((player) => {...player, 'ready': true})
+                    .toList(growable: false)
+              : players,
           'ownerId': _room['ownerId'] ?? 'poc-user',
           'connectedCount': players
               .where((player) => player['connected'] == true)
@@ -177,6 +198,17 @@ class FakeTransport implements ProtocolTransport {
           'version': _roomVersion,
           'roomVersion': _roomVersion,
         };
+        if (_botDemoPending) {
+          _room = {
+            ..._room,
+            'status': 'playing',
+            'readyCount': 4,
+            'turnPlayerId': 'poc-user',
+            'roundNumber': 1,
+            'round': _botDemoRound(),
+          };
+          _botDemoPending = false;
+        }
         _emitRoomEvent(requestId, commandId, 'PLAYER_JOINED');
       case 'ready':
         if (_roomId == null) {
@@ -220,6 +252,11 @@ class FakeTransport implements ProtocolTransport {
           return;
         }
         _roomVersion += 1;
+        if (_room['demoMode'] == 'bots' &&
+            payload['action'] == 'discard' &&
+            payload['args'] is Map) {
+          _advanceBotDemo((payload['args'] as Map)['tileId']?.toString());
+        }
         _room = {
           ..._room,
           'version': _roomVersion,
@@ -261,6 +298,48 @@ class FakeTransport implements ProtocolTransport {
     if (!_connected) return;
     _connected = false;
     _closed.add(null);
+  }
+
+  void _advanceBotDemo(String? tileId) {
+    if (tileId == null) return;
+    final round = Map<String, dynamic>.from(
+      (_room['round'] as Map?) ?? const <String, dynamic>{},
+    );
+    final hand = List<String>.from(
+      (round['privateHand'] as List?) ?? const <String>[],
+    );
+    if (!hand.remove(tileId)) return;
+    final discards = <String, dynamic>{
+      ...Map<String, dynamic>.from(
+        (round['discardsByPlayer'] as Map?) ?? const <String, dynamic>{},
+      ),
+    };
+    void appendDiscard(String playerId, String discarded) {
+      discards[playerId] = [
+        ...((discards[playerId] as List?) ?? const []),
+        discarded,
+      ];
+    }
+
+    appendDiscard('poc-user', tileId);
+    final turn = _roomVersion % 3;
+    appendDiscard('bot-east', _botDiscardFaces[turn]);
+    appendDiscard('bot-north', _botDiscardFaces[(turn + 1) % 3]);
+    appendDiscard('bot-west', _botDiscardFaces[(turn + 2) % 3]);
+    hand.add(_botDrawTiles[_roomVersion % _botDrawTiles.length]);
+    final wall = Map<String, dynamic>.from(
+      (round['wall'] as Map?) ?? const <String, dynamic>{},
+    );
+    final remaining = (wall['wallRemaining'] as int? ?? 83) - 4;
+    _room = {
+      ..._room,
+      'round': {
+        ...round,
+        'privateHand': hand,
+        'discardsByPlayer': discards,
+        'wall': {...wall, 'wallRemaining': remaining.clamp(14, 144)},
+      },
+    };
   }
 
   /// Test hook for the CL-203 maintenance banner.  A real gateway would send
@@ -415,4 +494,80 @@ class FakeTransport implements ProtocolTransport {
     'players': <Map<String, dynamic>>[],
     'scores': <String, dynamic>{},
   };
+
+  static List<Map<String, dynamic>> _botPlayers() => [
+    {
+      'id': 'bot-east',
+      'displayName': '小松机器人',
+      'seat': 1,
+      'ready': true,
+      'connected': true,
+    },
+    {
+      'id': 'bot-north',
+      'displayName': '小竹机器人',
+      'seat': 2,
+      'ready': true,
+      'connected': true,
+    },
+    {
+      'id': 'bot-west',
+      'displayName': '小菊机器人',
+      'seat': 3,
+      'ready': true,
+      'connected': true,
+    },
+  ];
+
+  static Map<String, dynamic> _botDemoRound() => {
+    'roundNumber': 1,
+    'turnPhase': 'discard',
+    'turnDeadlineAt': DateTime.now()
+        .subtract(const Duration(seconds: 1))
+        .toUtc()
+        .toIso8601String(),
+    'wall': {'wallRemaining': 83},
+    'discardsByPlayer': {
+      'poc-user': <String>[],
+      'bot-east': ['dots-9-4'],
+      'bot-north': ['south-3'],
+      'bot-west': ['characters-1-2'],
+    },
+    'meldsByPlayer': {
+      'bot-east': [
+        {
+          'action': 'peng',
+          'tileIds': ['dots-3-1', 'dots-3-2', 'dots-3-3'],
+        },
+      ],
+    },
+    'flowerStates': {
+      'poc-user': {'status': 'not_piao', 'countedFlowers': 1},
+      'bot-east': {'status': 'not_piao', 'countedFlowers': 2},
+      'bot-north': {'status': 'not_piao', 'countedFlowers': 0},
+      'bot-west': {'status': 'not_piao', 'countedFlowers': 3},
+    },
+    'privateHand': [
+      'characters-1-1',
+      'characters-2-1',
+      'characters-3-1',
+      'characters-5-1',
+      'characters-6-1',
+      'characters-7-1',
+      'bamboo-2-1',
+      'bamboo-3-1',
+      'bamboo-4-1',
+      'dots-6-1',
+      'dots-7-1',
+      'dots-8-1',
+      'red_dragon-1',
+      'red_dragon-2',
+    ],
+    'availableActions': ['discard'],
+    'availableReactions': <String>[],
+  };
+
+  static const _botDiscardFaces = ['east-4', 'white_dragon-3', 'bamboo-1-4'];
+
+  static const _botDrawTiles = ['dots-2-4', 'characters-9-4', 'green_dragon-4'];
 }

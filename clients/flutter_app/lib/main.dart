@@ -726,6 +726,39 @@ class LobbyTab extends StatelessWidget {
     }
   }
 
+  Future<void> _startBotDemo(BuildContext context) async {
+    final transport = client.transport;
+    if (transport is! FakeTransport) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('机器人试玩仅在离线演示模式开放')));
+      return;
+    }
+    transport.enableBotDemo();
+    try {
+      await client.createRoom(
+        ruleVersion: '8931-apk-baseline.6',
+        ruleConfig: const {
+          'rounds': 4,
+          'scoreTiers': [1, 2, 3, 4],
+          'zeng': 1,
+          'piao': 'optional',
+          'forcedHu': false,
+        },
+      );
+      await client.joinRoom('demo-room');
+      if (context.mounted) {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => RoomPage(client: client)),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('机器人房间创建失败，请重试')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final room = snapshot.roomSnapshot;
@@ -777,6 +810,20 @@ class LobbyTab extends StatelessWidget {
                               : null,
                         ),
                       ),
+                      if (client.transport is FakeTransport) ...[
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _LobbyActionCard(
+                            color: const Color(0xff397d9c),
+                            icon: Icons.smart_toy_outlined,
+                            title: '机器人试玩',
+                            subtitle: '3 位机器人 · 自动开局',
+                            onTap: connected
+                                ? () => _startBotDemo(context)
+                                : null,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

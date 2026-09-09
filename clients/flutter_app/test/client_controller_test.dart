@@ -88,6 +88,43 @@ void main() {
     await client.dispose();
   });
 
+  test('local bot demo enters play with four ready occupied seats', () async {
+    final transport = FakeTransport()..enableBotDemo();
+    final client = ClientSessionController(
+      transport: transport,
+      deviceId: 'bot-demo-device',
+      platform: 'android',
+    );
+
+    await client.login('13800000000', '000000');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await client.createRoom();
+    await client.joinRoom('demo-room');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    final room = client.snapshot.roomSnapshot!;
+    expect(room['status'], 'playing');
+    expect(room['readyCount'], 4);
+    expect(room['connectedCount'], 4);
+    expect((room['players'] as List), hasLength(4));
+    expect(((room['round'] as Map)['privateHand'] as List), hasLength(14));
+
+    await client.action(
+      'demo-room',
+      'discard',
+      args: const {'tileId': 'characters-1-1'},
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final advancedRound = client.snapshot.roomSnapshot!['round'] as Map;
+    expect((advancedRound['privateHand'] as List), hasLength(14));
+    expect(
+      (advancedRound['discardsByPlayer'] as Map)['poc-user'],
+      contains('characters-1-1'),
+    );
+    expect((advancedRound['wall'] as Map)['wallRemaining'], 79);
+    await client.dispose();
+  });
+
   test(
     'fresh controller adopts room id from an authoritative room sync',
     () async {
