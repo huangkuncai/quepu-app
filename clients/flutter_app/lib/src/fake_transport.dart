@@ -34,6 +34,49 @@ class FakeTransport implements ProtocolTransport {
     _botDemoPending = true;
   }
 
+  /// Selects the local player's opening zeng count in the offline bot demo.
+  Future<String> chooseBotDemoZeng(int count) async {
+    if (!_connected || _room['demoMode'] != 'bots' || count < 0 || count > 5) {
+      throw StateError('bot demo is not awaiting a zeng choice');
+    }
+    final round = Map<String, dynamic>.from(
+      (_room['round'] as Map?) ?? const <String, dynamic>{},
+    );
+    if (round['openingStage'] != 'choose_zeng') {
+      throw StateError('bot demo is not awaiting a zeng choice');
+    }
+    _roomVersion += 1;
+    final flowerStates = Map<String, dynamic>.from(
+      (round['flowerStates'] as Map?) ?? const <String, dynamic>{},
+    );
+    flowerStates['poc-user'] = {
+      ...Map<String, dynamic>.from(
+        (flowerStates['poc-user'] as Map?) ?? const <String, dynamic>{},
+      ),
+      'status': 'awaiting_piao_choice',
+    };
+    _room = {
+      ..._room,
+      'version': _roomVersion,
+      'roomVersion': _roomVersion,
+      'zengByPlayer': {
+        'poc-user': count,
+        'bot-east': 2,
+        'bot-north': 1,
+        'bot-west': 3,
+      },
+      'round': {
+        ...round,
+        'openingStage': 'choose_piao',
+        'flowerStates': flowerStates,
+      },
+    };
+    final requestId = newProtocolId();
+    final commandId = newProtocolId();
+    _emitRoomEvent(requestId, commandId, 'BOT_DEMO_ZENG_CHOSEN');
+    return commandId;
+  }
+
   @override
   Future<void> connect() async {
     _connected = true;
@@ -201,9 +244,9 @@ class FakeTransport implements ProtocolTransport {
         if (_botDemoPending) {
           _room = {
             ..._room,
-            'status': 'playing',
+            'status': 'dealing',
             'readyCount': 4,
-            'turnPlayerId': 'poc-user',
+            'turnPlayerId': null,
             'roundNumber': 1,
             'round': _botDemoRound(),
           };
@@ -246,6 +289,30 @@ class FakeTransport implements ProtocolTransport {
           'roomVersion': _roomVersion,
         };
         _emitRoomEvent(requestId, commandId, 'PLAYER_READY');
+      case 'choose_piao':
+        if (!_handleBotDemoPiao(payload['choosesPiao'] == true)) {
+          _emit(_error('INVALID_ACTION', '当前不能选择飘花', requestId, commandId));
+          return;
+        }
+        _roomVersion += 1;
+        _room = {
+          ..._room,
+          'version': _roomVersion,
+          'roomVersion': _roomVersion,
+        };
+        _emitRoomEvent(requestId, commandId, 'SUSONG_PIAO_CHOSEN');
+      case 'resolve_flower':
+        if (!_handleBotDemoFlower(payload['action']?.toString())) {
+          _emit(_error('INVALID_ACTION', '当前没有待处理的花牌', requestId, commandId));
+          return;
+        }
+        _roomVersion += 1;
+        _room = {
+          ..._room,
+          'version': _roomVersion,
+          'roomVersion': _roomVersion,
+        };
+        _emitRoomEvent(requestId, commandId, 'SUSONG_FLOWER_RESOLVED');
       case 'action':
         if (_roomId == null) {
           _emit(_error('ROOM_NOT_FOUND', '演示房间不存在', requestId, commandId));
@@ -326,20 +393,153 @@ class FakeTransport implements ProtocolTransport {
     appendDiscard('bot-east', _botDiscardFaces[turn]);
     appendDiscard('bot-north', _botDiscardFaces[(turn + 1) % 3]);
     appendDiscard('bot-west', _botDiscardFaces[(turn + 2) % 3]);
-    hand.add(_botDrawTiles[_roomVersion % _botDrawTiles.length]);
+    final drawnTile = _botDrawTiles[_roomVersion % _botDrawTiles.length];
     final wall = Map<String, dynamic>.from(
       (round['wall'] as Map?) ?? const <String, dynamic>{},
     );
-    final remaining = (wall['wallRemaining'] as int? ?? 83) - 4;
+    final flowerStates = Map<String, dynamic>.from(
+      (round['flowerStates'] as Map?) ?? const <String, dynamic>{},
+    );
+    final currentFlowerState = Map<String, dynamic>.from(
+      (flowerStates['poc-user'] as Map?) ?? const <String, dynamic>{},
+    );
+    var replacementDraws = 0;
+    if (_isBotDemoFlower(drawnTile) &&
+        currentFlowerState['status'] == 'not_piao') {
+      replacementDraws = 1;
+      hand.add(
+        _botReplacementTiles[_roomVersion % _botReplacementTiles.length],
+      );
+      flowerStates['poc-user'] = {
+        ...currentFlowerState,
+        'drawnFlowers': (currentFlowerState['drawnFlowers'] as int? ?? 0) + 1,
+        'countedFlowers':
+            (currentFlowerState['countedFlowers'] as int? ?? 0) + 1,
+      };
+    } else if (!_isBotDemoFlower(drawnTile)) {
+      hand.add(drawnTile);
+    }
+    final remaining =
+        (wall['wallRemaining'] as int? ?? 83) - 4 - replacementDraws;
     _room = {
       ..._room,
       'round': {
         ...round,
         'privateHand': hand,
         'discardsByPlayer': discards,
+        'flowerStates': flowerStates,
         'wall': {...wall, 'wallRemaining': remaining.clamp(14, 144)},
       },
     };
+  }
+
+  bool _handleBotDemoPiao(bool choosesPiao) {
+    if (_room['demoMode'] != 'bots' || _room['status'] != 'dealing') {
+      return false;
+    }
+    final round = Map<String, dynamic>.from(
+      (_room['round'] as Map?) ?? const <String, dynamic>{},
+    );
+    if (round['openingStage'] != 'choose_piao') return false;
+    final flowerStates = Map<String, dynamic>.from(
+      (round['flowerStates'] as Map?) ?? const <String, dynamic>{},
+    );
+    final current = Map<String, dynamic>.from(
+      (flowerStates['poc-user'] as Map?) ?? const <String, dynamic>{},
+    );
+    final openingFlowers = current['openingFlowers'] as int? ?? 0;
+    if (choosesPiao) {
+      flowerStates['poc-user'] = {
+        ...current,
+        'status': 'piao',
+        'countedFlowers': 0,
+        'pendingFlowerDiscards': openingFlowers,
+        'pendingFlowerReplacements': 0,
+      };
+      _room = {
+        ..._room,
+        'round': {
+          ...round,
+          'openingStage': 'discard_piao_flowers',
+          'flowerStates': flowerStates,
+        },
+      };
+      return true;
+    }
+
+    final hand = List<String>.from(
+      (round['privateHand'] as List?) ?? const <String>[],
+    );
+    final removed = hand.where(_isBotDemoFlower).toList(growable: false);
+    hand.removeWhere(_isBotDemoFlower);
+    hand.addAll(_botReplacementTiles.take(removed.length));
+    final wall = Map<String, dynamic>.from(
+      (round['wall'] as Map?) ?? const <String, dynamic>{},
+    );
+    final remaining = (wall['wallRemaining'] as int? ?? 83) - removed.length;
+    flowerStates['poc-user'] = {
+      ...current,
+      'status': 'not_piao',
+      'countedFlowers': removed.length,
+      'pendingFlowerDiscards': 0,
+      'pendingFlowerReplacements': 0,
+    };
+    _room = {
+      ..._room,
+      'status': 'playing',
+      'turnPlayerId': 'poc-user',
+      'round': {
+        ...round,
+        'openingStage': null,
+        'turnPhase': 'discard',
+        'privateHand': hand,
+        'availableActions': ['discard'],
+        'flowerStates': flowerStates,
+        'wall': {...wall, 'wallRemaining': remaining.clamp(14, 144)},
+      },
+    };
+    return true;
+  }
+
+  bool _handleBotDemoFlower(String? action) {
+    if (_room['demoMode'] != 'bots' || action != 'discard') return false;
+    final round = Map<String, dynamic>.from(
+      (_room['round'] as Map?) ?? const <String, dynamic>{},
+    );
+    if (round['openingStage'] != 'discard_piao_flowers') return false;
+    final flowerStates = Map<String, dynamic>.from(
+      (round['flowerStates'] as Map?) ?? const <String, dynamic>{},
+    );
+    final current = Map<String, dynamic>.from(
+      (flowerStates['poc-user'] as Map?) ?? const <String, dynamic>{},
+    );
+    final pending = current['pendingFlowerDiscards'] as int? ?? 0;
+    if (pending <= 0) return false;
+    final hand = List<String>.from(
+      (round['privateHand'] as List?) ?? const <String>[],
+    );
+    final flowerIndex = hand.indexWhere(_isBotDemoFlower);
+    if (flowerIndex < 0) return false;
+    hand.removeAt(flowerIndex);
+    final nextPending = pending - 1;
+    flowerStates['poc-user'] = {
+      ...current,
+      'pendingFlowerDiscards': nextPending,
+    };
+    _room = {
+      ..._room,
+      'status': nextPending == 0 ? 'playing' : 'dealing',
+      'turnPlayerId': nextPending == 0 ? 'poc-user' : null,
+      'round': {
+        ...round,
+        'openingStage': nextPending == 0 ? null : 'discard_piao_flowers',
+        'turnPhase': nextPending == 0 ? 'discard' : null,
+        'privateHand': hand,
+        'availableActions': nextPending == 0 ? ['discard'] : <String>[],
+        'flowerStates': flowerStates,
+      },
+    };
+    return true;
   }
 
   /// Test hook for the CL-203 maintenance banner.  A real gateway would send
@@ -521,7 +721,8 @@ class FakeTransport implements ProtocolTransport {
 
   static Map<String, dynamic> _botDemoRound() => {
     'roundNumber': 1,
-    'turnPhase': 'discard',
+    'openingStage': 'choose_zeng',
+    'turnPhase': null,
     'turnDeadlineAt': DateTime.now()
         .subtract(const Duration(seconds: 1))
         .toUtc()
@@ -542,7 +743,13 @@ class FakeTransport implements ProtocolTransport {
       ],
     },
     'flowerStates': {
-      'poc-user': {'status': 'not_piao', 'countedFlowers': 1},
+      'poc-user': {
+        'status': 'awaiting_zeng_choice',
+        'openingFlowers': 5,
+        'countedFlowers': 0,
+        'pendingFlowerDiscards': 5,
+        'pendingFlowerReplacements': 0,
+      },
       'bot-east': {'status': 'not_piao', 'countedFlowers': 2},
       'bot-north': {'status': 'not_piao', 'countedFlowers': 0},
       'bot-west': {'status': 'not_piao', 'countedFlowers': 3},
@@ -556,18 +763,34 @@ class FakeTransport implements ProtocolTransport {
       'characters-7-1',
       'bamboo-2-1',
       'bamboo-3-1',
-      'bamboo-4-1',
       'dots-6-1',
-      'dots-7-1',
-      'dots-8-1',
       'red_dragon-1',
-      'red_dragon-2',
+      'green_dragon-1',
+      'white_dragon-1',
+      'red_flower-1',
+      'black_flower-1',
     ],
-    'availableActions': ['discard'],
+    'availableActions': <String>[],
     'availableReactions': <String>[],
   };
 
   static const _botDiscardFaces = ['east-4', 'white_dragon-3', 'bamboo-1-4'];
 
   static const _botDrawTiles = ['dots-2-4', 'characters-9-4', 'green_dragon-4'];
+
+  static const _botReplacementTiles = [
+    'dots-1-2',
+    'dots-2-2',
+    'dots-3-2',
+    'bamboo-7-2',
+    'characters-9-2',
+  ];
+
+  static bool _isBotDemoFlower(String tileId) => const {
+    'red_dragon',
+    'green_dragon',
+    'white_dragon',
+    'red_flower',
+    'black_flower',
+  }.contains(tileId.replaceFirst(RegExp(r'-\d+$'), ''));
 }

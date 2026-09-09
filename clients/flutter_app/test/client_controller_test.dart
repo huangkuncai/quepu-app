@@ -4,6 +4,14 @@ import 'package:susong_protocol_client/protocol.dart';
 
 import 'package:susong_app/src/fake_transport.dart';
 
+bool _isReplacementFlower(String tileId) => const {
+  'red_dragon',
+  'green_dragon',
+  'white_dragon',
+  'red_flower',
+  'black_flower',
+}.contains(tileId.replaceFirst(RegExp(r'-\d+$'), ''));
+
 void main() {
   test('session authorization is scoped to the request callback', () async {
     final client = ClientSessionController(
@@ -88,42 +96,86 @@ void main() {
     await client.dispose();
   });
 
-  test('local bot demo enters play with four ready occupied seats', () async {
-    final transport = FakeTransport()..enableBotDemo();
-    final client = ClientSessionController(
-      transport: transport,
-      deviceId: 'bot-demo-device',
-      platform: 'android',
-    );
+  test(
+    'local bot demo runs zeng, piao and automatic flower replacement',
+    () async {
+      final transport = FakeTransport()..enableBotDemo();
+      final client = ClientSessionController(
+        transport: transport,
+        deviceId: 'bot-demo-device',
+        platform: 'android',
+      );
 
-    await client.login('13800000000', '000000');
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-    await client.createRoom();
-    await client.joinRoom('demo-room');
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.login('13800000000', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.createRoom();
+      await client.joinRoom('demo-room');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
 
-    final room = client.snapshot.roomSnapshot!;
-    expect(room['status'], 'playing');
-    expect(room['readyCount'], 4);
-    expect(room['connectedCount'], 4);
-    expect((room['players'] as List), hasLength(4));
-    expect(((room['round'] as Map)['privateHand'] as List), hasLength(14));
+      var room = client.snapshot.roomSnapshot!;
+      expect(room['status'], 'dealing');
+      expect(room['readyCount'], 4);
+      expect(room['connectedCount'], 4);
+      expect((room['players'] as List), hasLength(4));
+      expect(((room['round'] as Map)['privateHand'] as List), hasLength(14));
+      expect((room['round'] as Map)['openingStage'], 'choose_zeng');
 
-    await client.action(
-      'demo-room',
-      'discard',
-      args: const {'tileId': 'characters-1-1'},
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-    final advancedRound = client.snapshot.roomSnapshot!['round'] as Map;
-    expect((advancedRound['privateHand'] as List), hasLength(14));
-    expect(
-      (advancedRound['discardsByPlayer'] as Map)['poc-user'],
-      contains('characters-1-1'),
-    );
-    expect((advancedRound['wall'] as Map)['wallRemaining'], 79);
-    await client.dispose();
-  });
+      await transport.chooseBotDemoZeng(2);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      room = client.snapshot.roomSnapshot!;
+      expect((room['zengByPlayer'] as Map)['poc-user'], 2);
+      expect((room['round'] as Map)['openingStage'], 'choose_piao');
+
+      await client.choosePiao('demo-room', false);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      room = client.snapshot.roomSnapshot!;
+      expect(room['status'], 'playing');
+      final openedRound = room['round'] as Map;
+      final openedHand = List<String>.from(openedRound['privateHand'] as List);
+      expect(openedHand, hasLength(14));
+      expect(openedHand.any(_isReplacementFlower), isFalse);
+      expect(
+        ((openedRound['flowerStates'] as Map)['poc-user']
+            as Map)['countedFlowers'],
+        5,
+      );
+      expect((openedRound['wall'] as Map)['wallRemaining'], 78);
+
+      await client.action(
+        'demo-room',
+        'discard',
+        args: const {'tileId': 'characters-1-1'},
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      final advancedRound = client.snapshot.roomSnapshot!['round'] as Map;
+      expect((advancedRound['privateHand'] as List), hasLength(14));
+      expect(
+        (advancedRound['discardsByPlayer'] as Map)['poc-user'],
+        contains('characters-1-1'),
+      );
+      expect((advancedRound['wall'] as Map)['wallRemaining'], 74);
+
+      await client.action(
+        'demo-room',
+        'discard',
+        args: const {'tileId': 'characters-2-1'},
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      final flowerDrawRound = client.snapshot.roomSnapshot!['round'] as Map;
+      final flowerDrawHand = List<String>.from(
+        flowerDrawRound['privateHand'] as List,
+      );
+      expect(flowerDrawHand, hasLength(14));
+      expect(flowerDrawHand.any(_isReplacementFlower), isFalse);
+      expect(
+        ((flowerDrawRound['flowerStates'] as Map)['poc-user']
+            as Map)['countedFlowers'],
+        6,
+      );
+      expect((flowerDrawRound['wall'] as Map)['wallRemaining'], 69);
+      await client.dispose();
+    },
+  );
 
   test(
     'fresh controller adopts room id from an authoritative room sync',

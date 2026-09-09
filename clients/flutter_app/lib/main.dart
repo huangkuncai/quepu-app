@@ -1229,12 +1229,17 @@ class _RoomTable extends StatelessWidget {
         _positiveInt(room['connectedCount']) ??
         players.where((player) => player['connected'] == true).length;
     final round = _dynamicMap(room['round']);
+    final openingStage = round?['openingStage']?.toString();
     final settlement = _dynamicMap(round?['settlement']);
     final flowerStates = _dynamicMap(round?['flowerStates']);
     final currentFlowerState = _dynamicMap(flowerStates?[snapshot.userId]);
     final awaitsPiaoChoice =
         status == 'dealing' &&
         currentFlowerState?['status']?.toString() == 'awaiting_piao_choice';
+    final awaitsBotZengChoice =
+        status == 'dealing' &&
+        openingStage == 'choose_zeng' &&
+        client.transport is FakeTransport;
     final pendingFlowerDiscards =
         _intValue(currentFlowerState?['pendingFlowerDiscards']) ?? 0;
     final privateHand = _stringValues(round?['privateHand']);
@@ -1278,7 +1283,15 @@ class _RoomTable extends StatelessWidget {
           icon: const Icon(Icons.play_arrow, size: 17),
           label: const Text('开始'),
         ),
-      if (awaitsPiaoChoice) ...[
+      if (awaitsBotZengChoice)
+        _BotZengChoice(
+          enabled: connected,
+          onSelected: (count) => _run(
+            () => (client.transport as FakeTransport).chooseBotDemoZeng(count),
+            context,
+          ),
+        )
+      else if (awaitsPiaoChoice) ...[
         FilledButton.icon(
           onPressed: connected
               ? () => _run(() => client.choosePiao(roomId, true), context)
@@ -1365,6 +1378,54 @@ class _RoomTable extends StatelessWidget {
       }
     }
   }
+}
+
+class _BotZengChoice extends StatelessWidget {
+  const _BotZengChoice({required this.enabled, required this.onSelected});
+
+  final bool enabled;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xe6203c35),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: const Color(0xffffd369)),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '先选择出增数量',
+            style: TextStyle(
+              color: Color(0xffffd369),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Wrap(
+            spacing: 5,
+            children: List.generate(6, (count) {
+              return FilledButton.tonal(
+                onPressed: enabled ? () => onSelected(count) : null,
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  minimumSize: const Size(42, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: Text(count == 0 ? '不出增' : '增$count'),
+              );
+            }),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _MahjongTableSurface extends StatelessWidget {
