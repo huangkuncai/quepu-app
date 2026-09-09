@@ -81,24 +81,31 @@ void main() {
     expect(find.text('小松机器人'), findsWidgets);
     expect(find.text('小竹机器人'), findsWidgets);
     expect(find.text('小菊机器人'), findsWidgets);
-    expect(find.text('发牌中'), findsOneWidget);
+    expect(find.text('已准备'), findsWidgets);
     expect(find.text('在线 4/4'), findsOneWidget);
-    expect(find.text('准备 4/4'), findsNothing);
+    expect(find.text('准备 4/4'), findsOneWidget);
     expect(find.text('牌桌操作'), findsNothing);
-    expect(find.textContaining('对局中'), findsNWidgets(4));
+    expect(find.textContaining('已准备'), findsWidgets);
     expect(find.text('先选择出增数量'), findsOneWidget);
+    expect(find.text('开始'), findsNothing);
+    expect(find.bySemanticsLabel('1万'), findsNothing);
     expect(find.text('增2'), findsOneWidget);
     await tester.tap(find.text('增2'));
     await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('进行中'), findsOneWidget);
+    expect(find.text('庄'), findsOneWidget);
+    expect(find.textContaining('请选择飘花'), findsOneWidget);
     expect(find.text('飘花'), findsOneWidget);
     expect(find.text('不飘·补花'), findsOneWidget);
+    expect(find.text('过'), findsNothing);
     await tester.tap(find.text('不飘·补花'));
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('进行中'), findsOneWidget);
     expect(find.bySemanticsLabel('春'), findsWidgets);
-    expect(find.bySemanticsLabel('夏'), findsWidgets);
     expect(find.bySemanticsLabel('梅'), findsWidgets);
-    expect(find.bySemanticsLabel('竹'), findsWidgets);
+    expect(find.bySemanticsLabel('中'), findsWidgets);
+    expect(find.bySemanticsLabel('发'), findsWidgets);
+    expect(find.bySemanticsLabel('白'), findsWidgets);
     expect(find.text('请点击手牌出牌'), findsOneWidget);
     expect(find.text('剩余 78 张'), findsOneWidget);
     expect(find.bySemanticsLabel('1万'), findsWidgets);
@@ -463,13 +470,15 @@ void main() {
       'id': 'demo-room',
       'roomId': 'demo-room',
       'ownerId': 'poc-user',
-      'status': 'dealing',
+      'status': 'playing',
+      'turnPlayerId': 'poc-user',
       'maxPlayers': 4,
       'players': [
         {'id': 'poc-user', 'displayName': '演示玩家', 'seat': 0, 'connected': true},
       ],
       'round': {
         'roundNumber': 1,
+        'turnPhase': 'opening_choice',
         'flowerStates': {'poc-user': flowerState},
       },
     };

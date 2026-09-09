@@ -47,15 +47,7 @@ class FakeTransport implements ProtocolTransport {
       throw StateError('bot demo is not awaiting a zeng choice');
     }
     _roomVersion += 1;
-    final flowerStates = Map<String, dynamic>.from(
-      (round['flowerStates'] as Map?) ?? const <String, dynamic>{},
-    );
-    flowerStates['poc-user'] = {
-      ...Map<String, dynamic>.from(
-        (flowerStates['poc-user'] as Map?) ?? const <String, dynamic>{},
-      ),
-      'status': 'awaiting_piao_choice',
-    };
+    final dealtRound = _botDemoDealtRound();
     _room = {
       ..._room,
       'version': _roomVersion,
@@ -66,11 +58,9 @@ class FakeTransport implements ProtocolTransport {
         'bot-north': 1,
         'bot-west': 3,
       },
-      'round': {
-        ...round,
-        'openingStage': 'choose_piao',
-        'flowerStates': flowerStates,
-      },
+      'status': 'playing',
+      'turnPlayerId': 'poc-user',
+      'round': dealtRound,
     };
     final requestId = newProtocolId();
     final commandId = newProtocolId();
@@ -246,11 +236,11 @@ class FakeTransport implements ProtocolTransport {
         if (_botDemoPending) {
           _room = {
             ..._room,
-            'status': 'dealing',
+            'status': 'ready',
             'readyCount': 4,
             'turnPlayerId': null,
             'roundNumber': 1,
-            'round': _botDemoRound(),
+            'round': _botDemoPreStartRound(),
           };
           _botDemoPending = false;
         }
@@ -418,6 +408,25 @@ class FakeTransport implements ProtocolTransport {
         : isPengWindow
         ? <String>[if (matchingDots >= 3) 'exposed_kong', 'peng', 'pass']
         : <String>['pass'];
+    // The local discard lets the deterministic demo advance the three robot
+    // turns. Their piao decisions and flower replacements become public only
+    // now; they were intentionally hidden while only the dealer had the turn.
+    final flowerStates = Map<String, dynamic>.from(
+      (round['flowerStates'] as Map?) ?? const <String, dynamic>{},
+    );
+    final flowerTiles = Map<String, dynamic>.from(
+      (round['flowerTilesByPlayer'] as Map?) ?? const <String, dynamic>{},
+    );
+    flowerStates['bot-east'] = {'status': 'not_piao', 'countedFlowers': 2};
+    flowerStates['bot-north'] = {'status': 'not_piao', 'countedFlowers': 0};
+    flowerStates['bot-west'] = {'status': 'not_piao', 'countedFlowers': 3};
+    flowerTiles['bot-east'] = ['red_dragon', 'red_flower-2'];
+    flowerTiles['bot-north'] = <String>[];
+    flowerTiles['bot-west'] = [
+      'white_dragon',
+      'black_flower-3',
+      'green_dragon',
+    ];
     _room = {
       ..._room,
       'turnPlayerId': 'poc-user',
@@ -432,6 +441,8 @@ class FakeTransport implements ProtocolTransport {
         },
         'availableActions': <String>[],
         'availableReactions': reactions,
+        'flowerStates': flowerStates,
+        'flowerTilesByPlayer': flowerTiles,
         'reactionOptions': isChiWindow
             ? {
                 'chi': [
@@ -579,7 +590,7 @@ class FakeTransport implements ProtocolTransport {
   }
 
   bool _handleBotDemoPiao(bool choosesPiao) {
-    if (_room['demoMode'] != 'bots' || _room['status'] != 'dealing') {
+    if (_room['demoMode'] != 'bots' || _room['status'] != 'playing') {
       return false;
     }
     final round = Map<String, dynamic>.from(
@@ -609,6 +620,7 @@ class FakeTransport implements ProtocolTransport {
         'round': {
           ...round,
           'openingStage': 'discard_piao_flowers',
+          'turnPhase': 'opening_choice',
           'flowerStates': flowerStates,
         },
       };
@@ -687,12 +699,12 @@ class FakeTransport implements ProtocolTransport {
     ];
     _room = {
       ..._room,
-      'status': nextPending == 0 ? 'playing' : 'dealing',
-      'turnPlayerId': nextPending == 0 ? 'poc-user' : null,
+      'status': 'playing',
+      'turnPlayerId': 'poc-user',
       'round': {
         ...round,
         'openingStage': nextPending == 0 ? null : 'discard_piao_flowers',
-        'turnPhase': nextPending == 0 ? 'discard' : null,
+        'turnPhase': nextPending == 0 ? 'discard' : 'opening_choice',
         'privateHand': hand,
         'availableActions': nextPending == 0 ? ['discard'] : <String>[],
         'flowerStates': flowerStates,
@@ -879,46 +891,50 @@ class FakeTransport implements ProtocolTransport {
     },
   ];
 
-  static Map<String, dynamic> _botDemoRound() => {
+  static Map<String, dynamic> _botDemoPreStartRound() => {
     'roundNumber': 1,
     'openingStage': 'choose_zeng',
     'turnPhase': null,
+    'dealerSeat': null,
+    'privateHand': <String>[],
+    'availableActions': <String>[],
+    'availableReactions': <String>[],
+  };
+
+  static Map<String, dynamic> _botDemoDealtRound() => {
+    'roundNumber': 1,
+    'openingStage': 'choose_piao',
+    'turnPhase': 'opening_choice',
+    'dealerSeat': 0,
     'turnDeadlineAt': DateTime.now()
         .subtract(const Duration(seconds: 1))
         .toUtc()
         .toIso8601String(),
     'wall': {'wallRemaining': 83},
-    'discardsByPlayer': {
+    'discardsByPlayer': <String, dynamic>{
       'poc-user': <String>[],
-      'bot-east': ['dots-9-4'],
-      'bot-north': ['south-3'],
-      'bot-west': ['characters-1-2'],
+      'bot-east': <String>[],
+      'bot-north': <String>[],
+      'bot-west': <String>[],
     },
-    'meldsByPlayer': {
-      'bot-east': [
-        {
-          'action': 'peng',
-          'tileIds': ['dots-3-1', 'dots-3-2', 'dots-3-3'],
-        },
-      ],
-    },
+    'meldsByPlayer': <String, dynamic>{},
     'flowerStates': {
       'poc-user': {
-        'status': 'awaiting_zeng_choice',
+        'status': 'awaiting_piao_choice',
         'openingFlowers': 5,
         'countedFlowers': 0,
         'pendingFlowerDiscards': 5,
         'pendingFlowerReplacements': 0,
       },
-      'bot-east': {'status': 'not_piao', 'countedFlowers': 2},
-      'bot-north': {'status': 'not_piao', 'countedFlowers': 0},
-      'bot-west': {'status': 'not_piao', 'countedFlowers': 3},
+      'bot-east': {'status': 'not_activated', 'countedFlowers': 0},
+      'bot-north': {'status': 'not_activated', 'countedFlowers': 0},
+      'bot-west': {'status': 'not_activated', 'countedFlowers': 0},
     },
     'flowerTilesByPlayer': {
       'poc-user': <String>[],
-      'bot-east': ['red_dragon', 'red_flower-2'],
+      'bot-east': <String>[],
       'bot-north': <String>[],
-      'bot-west': ['white_dragon', 'black_flower-3', 'green_dragon'],
+      'bot-west': <String>[],
     },
     'privateHand': [
       'characters-1-1',

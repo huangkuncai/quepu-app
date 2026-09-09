@@ -113,11 +113,11 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 30));
 
       var room = client.snapshot.roomSnapshot!;
-      expect(room['status'], 'dealing');
+      expect(room['status'], 'ready');
       expect(room['readyCount'], 4);
       expect(room['connectedCount'], 4);
       expect((room['players'] as List), hasLength(4));
-      expect(((room['round'] as Map)['privateHand'] as List), hasLength(14));
+      expect(((room['round'] as Map)['privateHand'] as List), isEmpty);
       expect((room['round'] as Map)['openingStage'], 'choose_zeng');
 
       await transport.chooseBotDemoZeng(2);
@@ -125,6 +125,24 @@ void main() {
       room = client.snapshot.roomSnapshot!;
       expect((room['zengByPlayer'] as Map)['poc-user'], 2);
       expect((room['round'] as Map)['openingStage'], 'choose_piao');
+      expect(room['status'], 'playing');
+      expect(room['turnPlayerId'], 'poc-user');
+      final beforePiaoRound = room['round'] as Map;
+      final beforePiaoHand = List<String>.from(
+        beforePiaoRound['privateHand'] as List,
+      );
+      expect(beforePiaoHand, hasLength(14));
+      expect(beforePiaoHand.where(_isReplacementFlower), hasLength(5));
+      expect(
+        (beforePiaoRound['flowerTilesByPlayer'] as Map).values.expand(
+          (value) => value as List,
+        ),
+        isEmpty,
+      );
+      expect(
+        ((beforePiaoRound['flowerStates'] as Map)['bot-east'] as Map)['status'],
+        'not_activated',
+      );
 
       await client.choosePiao('demo-room', false);
       await Future<void>.delayed(const Duration(milliseconds: 30));
@@ -152,6 +170,10 @@ void main() {
       expect(
         (advancedRound['discardsByPlayer'] as Map)['poc-user'],
         contains('characters-1-1'),
+      );
+      expect(
+        (advancedRound['flowerTilesByPlayer'] as Map)['bot-east'],
+        isNotEmpty,
       );
       expect(advancedRound['turnPhase'], 'reaction');
       expect(advancedRound['availableReactions'], containsAll(['chi', 'pass']));

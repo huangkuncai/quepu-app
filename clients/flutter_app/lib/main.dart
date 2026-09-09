@@ -817,7 +817,7 @@ class LobbyTab extends StatelessWidget {
                             color: const Color(0xff397d9c),
                             icon: Icons.smart_toy_outlined,
                             title: '机器人',
-                            subtitle: '3 人 · 自动开局',
+                            subtitle: '3 人 · 出增后开局',
                             onTap: connected
                                 ? () => _startBotDemo(context)
                                 : null,
@@ -1215,10 +1215,13 @@ class _RoomTable extends StatelessWidget {
         room['ownerId'] == null ||
         room['ownerId']?.toString() == snapshot.userId;
     final canReady =
-        current != null && (status == 'waiting' || status == 'ready');
+        current != null &&
+        room['demoMode'] != 'bots' &&
+        (status == 'waiting' || status == 'ready');
     final canStart =
         current != null &&
         isOwner &&
+        room['demoMode'] != 'bots' &&
         (status == 'waiting' || status == 'ready');
     final connected = snapshot.phase == ConnectionPhase.online;
     final maxPlayers = _positiveInt(room['maxPlayers']) ?? seats.length;
@@ -1234,12 +1237,11 @@ class _RoomTable extends StatelessWidget {
     final flowerStates = _dynamicMap(round?['flowerStates']);
     final currentFlowerState = _dynamicMap(flowerStates?[snapshot.userId]);
     final awaitsPiaoChoice =
-        status == 'dealing' &&
+        status == 'playing' &&
+        room['turnPlayerId']?.toString() == snapshot.userId &&
         currentFlowerState?['status']?.toString() == 'awaiting_piao_choice';
     final awaitsBotZengChoice =
-        status == 'dealing' &&
-        openingStage == 'choose_zeng' &&
-        client.transport is FakeTransport;
+        openingStage == 'choose_zeng' && client.transport is FakeTransport;
     final pendingFlowerDiscards =
         _intValue(currentFlowerState?['pendingFlowerDiscards']) ?? 0;
     final privateHand = _stringValues(round?['privateHand']);
@@ -1306,7 +1308,9 @@ class _RoomTable extends StatelessWidget {
           icon: const Icon(Icons.layers_outlined, size: 17),
           label: const Text('不飘·补花'),
         ),
-      ] else if (status == 'dealing' && pendingFlowerDiscards > 0)
+      ] else if (status == 'playing' &&
+          room['turnPlayerId']?.toString() == snapshot.userId &&
+          pendingFlowerDiscards > 0)
         FilledButton.icon(
           onPressed: connected
               ? () =>
@@ -1323,7 +1327,7 @@ class _RoomTable extends StatelessWidget {
           connected: connected,
           run: (operation) => _run(operation, context),
         )
-      else if (status == 'playing')
+      else if (status == 'playing' && openingStage == null)
         OutlinedButton.icon(
           onPressed: connected
               ? () => _run(() => client.action(roomId, 'pass'), context)
@@ -1348,6 +1352,7 @@ class _RoomTable extends StatelessWidget {
             canDiscard: connected && availableActions.contains('discard'),
             controls: controls,
             ownerId: room['ownerId']?.toString(),
+            dealerSeat: _intValue(round?['dealerSeat']),
             onDiscard: (tileId) => _run(
               () => client.action(roomId, 'discard', args: {'tileId': tileId}),
               context,
@@ -1442,6 +1447,7 @@ class _MahjongTableSurface extends StatelessWidget {
     required this.canDiscard,
     required this.controls,
     required this.ownerId,
+    required this.dealerSeat,
     required this.onDiscard,
   });
 
@@ -1457,6 +1463,7 @@ class _MahjongTableSurface extends StatelessWidget {
   final bool canDiscard;
   final List<Widget> controls;
   final String? ownerId;
+  final int? dealerSeat;
   final ValueChanged<String> onDiscard;
 
   Map<String, dynamic>? _seat(int index) =>
@@ -1531,6 +1538,7 @@ class _MahjongTableSurface extends StatelessWidget {
                   player: _seat(2),
                   ownerId: ownerId,
                   playing: playing,
+                  isDealer: dealerSeat == 2,
                 ),
               ),
               Positioned(
@@ -1543,6 +1551,7 @@ class _MahjongTableSurface extends StatelessWidget {
                   player: _seat(3),
                   ownerId: ownerId,
                   playing: playing,
+                  isDealer: dealerSeat == 3,
                 ),
               ),
               Positioned(
@@ -1555,6 +1564,7 @@ class _MahjongTableSurface extends StatelessWidget {
                   player: _seat(1),
                   ownerId: ownerId,
                   playing: playing,
+                  isDealer: dealerSeat == 1,
                 ),
               ),
               Positioned(
@@ -1567,6 +1577,7 @@ class _MahjongTableSurface extends StatelessWidget {
                   player: _seat(0),
                   ownerId: ownerId,
                   playing: playing,
+                  isDealer: dealerSeat == 0,
                 ),
               ),
               Positioned(
@@ -2493,7 +2504,13 @@ class _TurnCountdownState extends State<_TurnCountdown> {
 }
 
 String _turnPhaseLabel(String phase) =>
-    const {'draw': '待摸牌', 'discard': '待出牌', 'reaction': '待响应'}[phase] ?? phase;
+    const {
+      'opening_choice': '请选择飘花',
+      'draw': '待摸牌',
+      'discard': '待出牌',
+      'reaction': '待响应',
+    }[phase] ??
+    phase;
 
 class _AuthoritativeActionButtons extends StatelessWidget {
   const _AuthoritativeActionButtons({
@@ -2808,12 +2825,14 @@ class _SeatTile extends StatelessWidget {
     required this.player,
     required this.ownerId,
     required this.playing,
+    this.isDealer = false,
   });
 
   final int seat;
   final Map<String, dynamic>? player;
   final String? ownerId;
   final bool playing;
+  final bool isDealer;
 
   @override
   Widget build(BuildContext context) {
@@ -2851,16 +2870,45 @@ class _SeatTile extends StatelessWidget {
                 ),
               ],
             ),
-            Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+            Row(
+              children: [
+                if (isDealer) ...[
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xffffd369),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 3),
+                      child: Text(
+                        '庄',
+                        style: TextStyle(
+                          color: Color(0xff573a00),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                ],
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
             ),
             Text(
               occupied
                   ? playing
-                        ? '对局中${isOwner ? ' · 房主' : ''}'
+                        ? '对局中${isDealer ? ' · 庄家' : ''}${isOwner ? ' · 房主' : ''}'
                         : '${ready ? '已准备' : '未准备'}${isOwner ? ' · 房主' : ''}'
                   : '空位',
               maxLines: 1,
