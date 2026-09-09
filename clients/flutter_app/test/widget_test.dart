@@ -470,15 +470,13 @@ void main() {
       'id': 'demo-room',
       'roomId': 'demo-room',
       'ownerId': 'poc-user',
-      'status': 'playing',
-      'turnPlayerId': 'poc-user',
+      'status': 'dealing',
       'maxPlayers': 4,
       'players': [
         {'id': 'poc-user', 'displayName': '演示玩家', 'seat': 0, 'connected': true},
       ],
       'round': {
         'roundNumber': 1,
-        'turnPhase': 'opening_choice',
         'flowerStates': {'poc-user': flowerState},
       },
     };

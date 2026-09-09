@@ -1210,18 +1210,19 @@ class _RoomTable extends StatelessWidget {
     final players = _roomPlayers(room);
     final current = _findPlayer(players, snapshot.userId);
     final status = room['status']?.toString() ?? 'waiting';
+    final isBotDemo = room['demoMode'] == 'bots';
     final ready = current?['ready'] == true;
     final isOwner =
         room['ownerId'] == null ||
         room['ownerId']?.toString() == snapshot.userId;
     final canReady =
         current != null &&
-        room['demoMode'] != 'bots' &&
+        !isBotDemo &&
         (status == 'waiting' || status == 'ready');
     final canStart =
         current != null &&
         isOwner &&
-        room['demoMode'] != 'bots' &&
+        !isBotDemo &&
         (status == 'waiting' || status == 'ready');
     final connected = snapshot.phase == ConnectionPhase.online;
     final maxPlayers = _positiveInt(room['maxPlayers']) ?? seats.length;
@@ -1237,9 +1238,11 @@ class _RoomTable extends StatelessWidget {
     final flowerStates = _dynamicMap(round?['flowerStates']);
     final currentFlowerState = _dynamicMap(flowerStates?[snapshot.userId]);
     final awaitsPiaoChoice =
-        status == 'playing' &&
-        room['turnPlayerId']?.toString() == snapshot.userId &&
-        currentFlowerState?['status']?.toString() == 'awaiting_piao_choice';
+        currentFlowerState?['status']?.toString() == 'awaiting_piao_choice' &&
+        (isBotDemo
+            ? status == 'playing' &&
+                  room['turnPlayerId']?.toString() == snapshot.userId
+            : status == 'dealing');
     final awaitsBotZengChoice =
         openingStage == 'choose_zeng' && client.transport is FakeTransport;
     final pendingFlowerDiscards =
@@ -1308,9 +1311,11 @@ class _RoomTable extends StatelessWidget {
           icon: const Icon(Icons.layers_outlined, size: 17),
           label: const Text('不飘·补花'),
         ),
-      ] else if (status == 'playing' &&
-          room['turnPlayerId']?.toString() == snapshot.userId &&
-          pendingFlowerDiscards > 0)
+      ] else if (pendingFlowerDiscards > 0 &&
+          (isBotDemo
+              ? status == 'playing' &&
+                    room['turnPlayerId']?.toString() == snapshot.userId
+              : status == 'dealing'))
         FilledButton.icon(
           onPressed: connected
               ? () =>
