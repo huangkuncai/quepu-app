@@ -631,6 +631,7 @@ BLOCKER-ID | 影响 REQ/RULE | 缺失决策/证据 | owner | 截止 | 临时降�
 | 0.1.64 | 2026-09-08 | CL-201 真实 Node WSS 四客户端验收：建房/房号加入/准备/发牌、版本/hash 收敛、私牌隔离与替换客户端恢复；修复新控制器 roomId 恢复及审计 history 误作协议事件 replay；Flutter 增加房号加入对话框 | `npm run verify:client-real`；Flutter 26/26；Android/iOS 真机弱网仍待 |
 | 0.1.65 | 2026-09-08 | CL-204 真实客服 REST 联调：Flutter 支持 `SUSONG_REST_URL`，适配器从实时会话逐请求注入 token；`npm start` 同时开放开发 REST 8788；真实夹具创建并查询本人工单 | `npm run verify:client-real`；Node 227/227；Flutter 30/30；仍为 loopback memory/stub-auth |
 | 0.1.66 | 2026-09-08 | Android API 37 Emulator 安装 WSS/REST 配置版 APK并完成登录、客服提交；修复横屏输入法压缩下顶部/导航及客服卡片溢出，提交结果改用不占布局的 SnackBar | Flutter 30/30、analyze、debug APK；仅 Emulator/dev HTTP，不替代真机/HTTPS |
+| 0.1.67 | 2026-09-09 | 修复演示牌桌玩家已加入/已准备但四座均显示空位：fake 快照正式分配座位与房主，客户端兼容嵌套及扁平座位快照；补齐 1386×686、DPR 1.5 横屏紧凑布局并消除中央牌桌/大厅房间卡溢出 | Flutter 30/30、Dart analyze、Node 227/227；真实服务端嵌套座位 fixture 与紧凑横屏回归通过 |
 
 ## 16. 我们下一次具体做什么
 

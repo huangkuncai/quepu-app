@@ -120,6 +120,11 @@ void main() {
   });
 
   testWidgets('room page renders seats and ready state', (tester) async {
+    tester.view.physicalSize = const Size(1386, 686);
+    tester.view.devicePixelRatio = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(const SusongApp());
     await tester.tap(find.text('进入大厅'));
     await tester.pump(const Duration(milliseconds: 180));
@@ -141,6 +146,8 @@ void main() {
 
     await tester.tap(find.text('加入房间'));
     await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('演示玩家'), findsOneWidget);
+    expect(find.text('空位'), findsNWidgets(3));
     expect(find.text('准备'), findsOneWidget);
     await tester.tap(find.text('准备'));
     await tester.pump(const Duration(milliseconds: 80));
@@ -148,6 +155,7 @@ void main() {
     await tester.drag(find.byType(ListView).last, const Offset(0, 420));
     await tester.pump();
     expect(find.text('准备 1/4'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -184,10 +192,23 @@ void main() {
               {
                 'id': 'poc-user',
                 'displayName': '演示玩家',
-                'seat': 0,
                 'ready': true,
                 'connected': true,
               },
+            ],
+            'seats': [
+              {
+                'seat': 0,
+                'player': {
+                  'id': 'poc-user',
+                  'displayName': '演示玩家',
+                  'ready': true,
+                  'connected': true,
+                },
+              },
+              {'seat': 1, 'player': null},
+              {'seat': 2, 'player': null},
+              {'seat': 3, 'player': null},
             ],
             'round': {
               'roundNumber': 2,
@@ -232,6 +253,7 @@ void main() {
       expect(find.text('剩余 63 张'), findsOneWidget);
       expect(find.textContaining('待出牌'), findsOneWidget);
       expect(find.textContaining('演示玩家 · 花 4'), findsOneWidget);
+      expect(find.text('空位'), findsNWidgets(3));
       expect(find.textContaining('副露 碰东东东'), findsOneWidget);
       expect(find.textContaining('弃牌 3筒 白'), findsOneWidget);
       await tester.pump(const Duration(seconds: 2));

@@ -152,15 +152,28 @@ class FakeTransport implements ProtocolTransport {
           (_room['players'] as List?) ?? const [],
         );
         if (!players.any((player) => player['id'] == 'poc-user')) {
+          final occupiedSeats = players
+              .map((player) => player['seat'])
+              .whereType<int>()
+              .toSet();
+          final seat = List<int>.generate(4, (index) => index).firstWhere(
+            (index) => !occupiedSeats.contains(index),
+            orElse: () => 0,
+          );
           players.add({
             'id': 'poc-user',
             'name': payload['name'] ?? '演示玩家',
+            'seat': seat,
             'connected': true,
           });
         }
         _room = {
           ..._room,
           'players': players,
+          'ownerId': _room['ownerId'] ?? 'poc-user',
+          'connectedCount': players
+              .where((player) => player['connected'] == true)
+              .length,
           'version': _roomVersion,
           'roomVersion': _roomVersion,
         };
@@ -395,6 +408,7 @@ class FakeTransport implements ProtocolTransport {
     },
     'totalRounds': ruleConfig['rounds'] ?? 4,
     'status': 'waiting',
+    'maxPlayers': 4,
     'version': 0,
     'roomVersion': 0,
     'turn': null,

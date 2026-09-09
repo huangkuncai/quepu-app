@@ -1007,7 +1007,7 @@ class _CurrentRoomCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(
     margin: EdgeInsets.zero,
     child: Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
           const CircleAvatar(
@@ -1921,70 +1921,89 @@ class _RoundPublicBoard extends StatelessWidget {
           _intValue(right['seat']) ?? 0,
         ),
       );
+    final roundLabel = roundNumber == null
+        ? _roomStatusLabel(status)
+        : '第 $roundNumber/${totalRounds ?? '—'} 局';
 
-    return Padding(
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        children: [
-          const Text(
-            '宿松麻将',
-            style: TextStyle(
-              fontSize: 20,
-              color: Color(0xffffe4a3),
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 10,
-            runSpacing: 2,
-            children: [
-              Text(
-                roundNumber == null
-                    ? _roomStatusLabel(status)
-                    : '第 $roundNumber/${totalRounds ?? '—'} 局',
-                style: const TextStyle(color: Color(0xffc6e0da)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxHeight < 80) {
+          return Center(
+            child: Text(
+              '宿松麻将 · $roundLabel',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 16,
+                color: Color(0xffffe4a3),
+                fontWeight: FontWeight.w900,
               ),
-              if (wall?['wallRemaining'] is int)
-                Text(
-                  '剩余 ${wall!['wallRemaining']} 张',
-                  style: const TextStyle(color: Color(0xffc6e0da)),
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            children: [
+              const Text(
+                '宿松麻将',
+                style: TextStyle(
+                  fontSize: 20,
+                  color: Color(0xffffe4a3),
+                  fontWeight: FontWeight.w900,
                 ),
-              if (phase != null)
-                _TurnCountdown(
-                  phase: phase,
-                  deadlineAt: state?['turnDeadlineAt']?.toString(),
+              ),
+              const SizedBox(height: 3),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 2,
+                children: [
+                  Text(
+                    roundLabel,
+                    style: const TextStyle(color: Color(0xffc6e0da)),
+                  ),
+                  if (wall?['wallRemaining'] is int)
+                    Text(
+                      '剩余 ${wall!['wallRemaining']} 张',
+                      style: const TextStyle(color: Color(0xffc6e0da)),
+                    ),
+                  if (phase != null)
+                    _TurnCountdown(
+                      phase: phase,
+                      deadlineAt: state?['turnDeadlineAt']?.toString(),
+                    ),
+                ],
+              ),
+              if (orderedPlayers.isNotEmpty) ...[
+                const SizedBox(height: 7),
+                Expanded(
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: orderedPlayers.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 4),
+                    itemBuilder: (context, index) {
+                      final player = orderedPlayers[index];
+                      final playerId =
+                          player['id']?.toString() ??
+                          player['playerId']?.toString();
+                      return _RoundPlayerPublicState(
+                        player: player,
+                        isTurn: playerId != null && playerId == turnPlayerId,
+                        discards: _stringValues(discards[playerId]),
+                        melds: melds[playerId] is List
+                            ? List<Object?>.from(melds[playerId] as List)
+                            : const [],
+                        flowerState: _dynamicMap(flowers[playerId]),
+                      );
+                    },
+                  ),
                 ),
+              ],
             ],
           ),
-          if (orderedPlayers.isNotEmpty) ...[
-            const SizedBox(height: 7),
-            Expanded(
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                itemCount: orderedPlayers.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 4),
-                itemBuilder: (context, index) {
-                  final player = orderedPlayers[index];
-                  final playerId =
-                      player['id']?.toString() ??
-                      player['playerId']?.toString();
-                  return _RoundPlayerPublicState(
-                    player: player,
-                    isTurn: playerId != null && playerId == turnPlayerId,
-                    discards: _stringValues(discards[playerId]),
-                    melds: melds[playerId] is List
-                        ? List<Object?>.from(melds[playerId] as List)
-                        : const [],
-                    flowerState: _dynamicMap(flowers[playerId]),
-                  );
-                },
-              ),
-            ),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -2425,17 +2444,24 @@ List<String> _stringValues(Object? value) => value is List
 
 List<Map<String, dynamic>?> _roomSeats(Map<String, dynamic> room) {
   final rawSeats = room['seats'];
-  if (rawSeats is List && rawSeats.isNotEmpty) {
-    return rawSeats
-        .map((raw) {
-          if (raw is! Map) return null;
-          final player = raw['player'];
-          return player is Map ? Map<String, dynamic>.from(player) : null;
-        })
-        .toList(growable: false);
-  }
-  final maxPlayers = _positiveInt(room['maxPlayers']) ?? 4;
+  final maxPlayers =
+      _positiveInt(room['maxPlayers']) ??
+      (rawSeats is List && rawSeats.isNotEmpty ? rawSeats.length : 4);
   final seats = List<Map<String, dynamic>?>.filled(maxPlayers, null);
+  if (rawSeats is List) {
+    for (var index = 0; index < rawSeats.length; index += 1) {
+      final raw = rawSeats[index];
+      if (raw is! Map) continue;
+      final seat = _intValue(raw['seat']) ?? index;
+      if (seat < 0 || seat >= seats.length) continue;
+      final nested = raw['player'];
+      if (nested is Map) {
+        seats[seat] = {...Map<String, dynamic>.from(nested), 'seat': seat};
+      } else if (raw['id'] != null || raw['playerId'] != null) {
+        seats[seat] = {...Map<String, dynamic>.from(raw), 'seat': seat};
+      }
+    }
+  }
   for (final player in _roomPlayers(room)) {
     final seat = player['seat'];
     if (seat is int && seat >= 0 && seat < seats.length) seats[seat] = player;
