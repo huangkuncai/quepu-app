@@ -60,13 +60,18 @@ void main() {
   testWidgets('bot demo seats three robots and opens a playable table', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(1542, 686);
+    tester.view.devicePixelRatio = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final transport = FakeTransport();
     await tester.pumpWidget(SusongApp(transport: transport));
     await tester.tap(find.text('进入大厅'));
     await tester.pump(const Duration(milliseconds: 180));
 
-    expect(find.text('机器人试玩'), findsOneWidget);
-    await tester.tap(find.text('机器人试玩'));
+    expect(find.text('机器人'), findsOneWidget);
+    await tester.tap(find.text('机器人'));
     await tester.pump(const Duration(milliseconds: 80));
     await tester.pump(const Duration(milliseconds: 80));
     await tester.pump(const Duration(milliseconds: 320));
@@ -78,9 +83,11 @@ void main() {
     expect(find.text('小菊机器人'), findsWidgets);
     expect(find.text('进行中'), findsOneWidget);
     expect(find.text('在线 4/4'), findsOneWidget);
-    expect(find.text('准备 4/4'), findsOneWidget);
+    expect(find.text('准备 4/4'), findsNothing);
+    expect(find.text('牌桌操作'), findsNothing);
+    expect(find.textContaining('对局中'), findsNWidgets(4));
     expect(find.text('剩余 83 张'), findsOneWidget);
-    expect(find.text('1万'), findsOneWidget);
+    expect(find.text('1万'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -167,8 +174,6 @@ void main() {
     expect(find.text('房间 demo-room'), findsOneWidget);
     expect(find.text('座位 1'), findsOneWidget);
     expect(find.text('座位 4'), findsOneWidget);
-    await tester.drag(find.byType(ListView).last, const Offset(0, -420));
-    await tester.pump();
     expect(find.text('加入房间'), findsOneWidget);
 
     await tester.tap(find.text('加入房间'));
@@ -179,8 +184,6 @@ void main() {
     await tester.tap(find.text('准备'));
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('取消准备'), findsOneWidget);
-    await tester.drag(find.byType(ListView).last, const Offset(0, 420));
-    await tester.pump();
     expect(find.text('准备 1/4'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -465,9 +468,9 @@ void main() {
 
     inject(1, {'status': 'awaiting_piao_choice', 'pendingFlowerDiscards': 2});
     await tester.pump(const Duration(milliseconds: 80));
-    expect(find.text('选择飘花'), findsOneWidget);
+    expect(find.text('飘花'), findsOneWidget);
     expect(find.text('不飘·补花'), findsOneWidget);
-    await tester.tap(find.text('选择飘花'));
+    await tester.tap(find.text('飘花'));
     await tester.pump(const Duration(milliseconds: 30));
     final choose = transport.sentMessages.lastWhere(
       (message) => message['type'] == 'choose_piao',
@@ -476,8 +479,8 @@ void main() {
 
     inject(2, {'status': 'piao', 'pendingFlowerDiscards': 2});
     await tester.pump(const Duration(milliseconds: 80));
-    expect(find.text('打出花牌（剩 2）'), findsOneWidget);
-    await tester.tap(find.text('打出花牌（剩 2）'));
+    expect(find.text('打花（2）'), findsOneWidget);
+    await tester.tap(find.text('打花（2）'));
     await tester.pump(const Duration(milliseconds: 30));
     final discard = transport.sentMessages.lastWhere(
       (message) => message['type'] == 'resolve_flower',

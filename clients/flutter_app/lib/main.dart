@@ -816,8 +816,8 @@ class LobbyTab extends StatelessWidget {
                           child: _LobbyActionCard(
                             color: const Color(0xff397d9c),
                             icon: Icons.smart_toy_outlined,
-                            title: '机器人试玩',
-                            subtitle: '3 位机器人 · 自动开局',
+                            title: '机器人',
+                            subtitle: '3 人 · 自动开局',
                             onTap: connected
                                 ? () => _startBotDemo(context)
                                 : null,
@@ -1012,8 +1012,10 @@ class _LobbyActionCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -1250,292 +1252,103 @@ class _RoomTable extends StatelessWidget {
         snapshot: snapshot,
       );
     }
-    return LayoutBuilder(
-      builder: (context, constraints) => ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          SizedBox(
-            height: constraints.maxHeight - 24,
-            child: Column(
-              children: [
-                _RoomStatusStrip(
-                  status: _roomStatusLabel(status),
-                  version: snapshot.roomVersion,
-                  connected: connectedCount,
-                  maxPlayers: maxPlayers,
-                  ready: readyCount,
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 150,
-                        child: _SeatTile(
-                          seat: 3,
-                          player: seats.length > 3 ? seats[3] : null,
-                          ownerId: room['ownerId']?.toString(),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              height: 92,
-                              child: _SeatTile(
-                                seat: 2,
-                                player: seats.length > 2 ? seats[2] : null,
-                                ownerId: room['ownerId']?.toString(),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Expanded(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: const RadialGradient(
-                                    colors: [
-                                      Color(0xff238b72),
-                                      Color(0xff075544),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(28),
-                                  border: Border.all(
-                                    color: const Color(0xffe6c25e),
-                                    width: 2,
-                                  ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.black38,
-                                      blurRadius: 12,
-                                    ),
-                                  ],
-                                ),
-                                child: _RoundPublicBoard(
-                                  room: room,
-                                  round: round,
-                                  players: players,
-                                  status: status,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            if (privateHand.isNotEmpty) ...[
-                              SizedBox(
-                                height: 62,
-                                child: ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: privateHand.length,
-                                  separatorBuilder: (_, _) =>
-                                      const SizedBox(width: 4),
-                                  itemBuilder: (context, index) {
-                                    final tileId = privateHand[index];
-                                    return _MahjongTile(
-                                      tileId: tileId,
-                                      enabled:
-                                          connected &&
-                                          availableActions.contains('discard'),
-                                      onTap: () => _run(
-                                        () => client.action(
-                                          roomId,
-                                          'discard',
-                                          args: {'tileId': tileId},
-                                        ),
-                                        context,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                            ],
-                            SizedBox(
-                              height: 92,
-                              child: _SeatTile(
-                                seat: 0,
-                                player: seats.isNotEmpty ? seats[0] : null,
-                                ownerId: room['ownerId']?.toString(),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      SizedBox(
-                        width: 150,
-                        child: _SeatTile(
-                          seat: 1,
-                          player: seats.length > 1 ? seats[1] : null,
-                          ownerId: room['ownerId']?.toString(),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 190,
-                        child: Card(
-                          margin: EdgeInsets.zero,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                const Text(
-                                  '牌桌操作',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                if (current == null)
-                                  FilledButton.icon(
-                                    onPressed: connected
-                                        ? () => _run(
-                                            () => client.joinRoom(roomId),
-                                            context,
-                                          )
-                                        : null,
-                                    icon: const Icon(Icons.person_add_alt_1),
-                                    label: const Text('加入房间'),
-                                  ),
-                                if (canReady)
-                                  FilledButton.tonalIcon(
-                                    onPressed: connected
-                                        ? () => _run(
-                                            () => client.setReady(
-                                              roomId,
-                                              ready: !ready,
-                                            ),
-                                            context,
-                                          )
-                                        : null,
-                                    icon: Icon(
-                                      ready
-                                          ? Icons.undo
-                                          : Icons.check_circle_outline,
-                                    ),
-                                    label: Text(ready ? '取消准备' : '准备'),
-                                  ),
-                                if (canStart) ...[
-                                  const SizedBox(height: 6),
-                                  FilledButton.icon(
-                                    onPressed: connected
-                                        ? () => _run(
-                                            () => client.startRound(roomId),
-                                            context,
-                                          )
-                                        : null,
-                                    icon: const Icon(Icons.play_arrow),
-                                    label: const Text('开始演示局'),
-                                  ),
-                                ],
-                                if (awaitsPiaoChoice) ...[
-                                  const SizedBox(height: 6),
-                                  FilledButton.icon(
-                                    onPressed: connected
-                                        ? () => _run(
-                                            () =>
-                                                client.choosePiao(roomId, true),
-                                            context,
-                                          )
-                                        : null,
-                                    icon: const Icon(Icons.local_florist),
-                                    label: const Text('选择飘花'),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  FilledButton.tonalIcon(
-                                    onPressed: connected
-                                        ? () => _run(
-                                            () => client.choosePiao(
-                                              roomId,
-                                              false,
-                                            ),
-                                            context,
-                                          )
-                                        : null,
-                                    icon: const Icon(Icons.layers_outlined),
-                                    label: const Text('不飘·补花'),
-                                  ),
-                                ] else if (status == 'dealing' &&
-                                    pendingFlowerDiscards > 0) ...[
-                                  const SizedBox(height: 6),
-                                  FilledButton.icon(
-                                    onPressed: connected
-                                        ? () => _run(
-                                            () => client.resolveFlower(
-                                              roomId,
-                                              'discard',
-                                            ),
-                                            context,
-                                          )
-                                        : null,
-                                    icon: const Icon(Icons.filter_vintage),
-                                    label: Text(
-                                      '打出花牌（剩 $pendingFlowerDiscards）',
-                                    ),
-                                  ),
-                                ],
-                                if (hasAuthoritativeActions) ...[
-                                  const SizedBox(height: 6),
-                                  _AuthoritativeActionButtons(
-                                    client: client,
-                                    roomId: roomId,
-                                    round: round!,
-                                    connected: connected,
-                                    run: (operation) =>
-                                        _run(operation, context),
-                                  ),
-                                ] else if (status == 'playing') ...[
-                                  const SizedBox(height: 6),
-                                  OutlinedButton.icon(
-                                    onPressed: connected
-                                        ? () => _run(
-                                            () => client.action(roomId, 'pass'),
-                                            context,
-                                          )
-                                        : null,
-                                    icon: const Icon(Icons.touch_app_outlined),
-                                    label: const Text('模拟动作'),
-                                  ),
-                                ],
-                                const SizedBox(height: 6),
-                                OutlinedButton.icon(
-                                  onPressed: connected
-                                      ? () => _run(
-                                          () => client.reconnectRoom(roomId),
-                                          context,
-                                        )
-                                      : null,
-                                  icon: const Icon(Icons.sync),
-                                  label: const Text('同步状态'),
-                                ),
-                                const Spacer(),
-                                const Divider(),
-                                Text(
-                                  privateHand.isEmpty
-                                      ? '等待服务端下发本人手牌'
-                                      : '手牌与动作均由服务端裁决',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Color(0xffaec8c1),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (snapshot.lastErrorMessage != null)
-                  _ErrorBanner(snapshot: snapshot),
-              ],
+    final controls = <Widget>[
+      if (current == null)
+        FilledButton.icon(
+          onPressed: connected
+              ? () => _run(() => client.joinRoom(roomId), context)
+              : null,
+          icon: const Icon(Icons.person_add_alt_1, size: 17),
+          label: const Text('加入房间'),
+        ),
+      if (canReady)
+        FilledButton.tonalIcon(
+          onPressed: connected
+              ? () =>
+                    _run(() => client.setReady(roomId, ready: !ready), context)
+              : null,
+          icon: Icon(ready ? Icons.undo : Icons.check_circle_outline, size: 17),
+          label: Text(ready ? '取消准备' : '准备'),
+        ),
+      if (canStart)
+        FilledButton.icon(
+          onPressed: connected
+              ? () => _run(() => client.startRound(roomId), context)
+              : null,
+          icon: const Icon(Icons.play_arrow, size: 17),
+          label: const Text('开始'),
+        ),
+      if (awaitsPiaoChoice) ...[
+        FilledButton.icon(
+          onPressed: connected
+              ? () => _run(() => client.choosePiao(roomId, true), context)
+              : null,
+          icon: const Icon(Icons.local_florist, size: 17),
+          label: const Text('飘花'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: connected
+              ? () => _run(() => client.choosePiao(roomId, false), context)
+              : null,
+          icon: const Icon(Icons.layers_outlined, size: 17),
+          label: const Text('不飘·补花'),
+        ),
+      ] else if (status == 'dealing' && pendingFlowerDiscards > 0)
+        FilledButton.icon(
+          onPressed: connected
+              ? () =>
+                    _run(() => client.resolveFlower(roomId, 'discard'), context)
+              : null,
+          icon: const Icon(Icons.filter_vintage, size: 17),
+          label: Text('打花（$pendingFlowerDiscards）'),
+        ),
+      if (hasAuthoritativeActions)
+        _AuthoritativeActionButtons(
+          client: client,
+          roomId: roomId,
+          round: round!,
+          connected: connected,
+          run: (operation) => _run(operation, context),
+        )
+      else if (status == 'playing')
+        OutlinedButton.icon(
+          onPressed: connected
+              ? () => _run(() => client.action(roomId, 'pass'), context)
+              : null,
+          icon: const Icon(Icons.touch_app_outlined, size: 17),
+          label: const Text('过'),
+        ),
+    ];
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: _MahjongTableSurface(
+            room: room,
+            round: round,
+            seats: seats,
+            status: status,
+            roomVersion: snapshot.roomVersion,
+            connectedCount: connectedCount,
+            maxPlayers: maxPlayers,
+            readyCount: readyCount,
+            privateHand: privateHand,
+            canDiscard: connected && availableActions.contains('discard'),
+            controls: controls,
+            ownerId: room['ownerId']?.toString(),
+            onDiscard: (tileId) => _run(
+              () => client.action(roomId, 'discard', args: {'tileId': tileId}),
+              context,
             ),
           ),
-        ],
-      ),
+        ),
+        if (snapshot.lastErrorMessage != null)
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 8,
+            child: _ErrorBanner(snapshot: snapshot),
+          ),
+      ],
     );
   }
 
@@ -1552,6 +1365,397 @@ class _RoomTable extends StatelessWidget {
       }
     }
   }
+}
+
+class _MahjongTableSurface extends StatelessWidget {
+  const _MahjongTableSurface({
+    required this.room,
+    required this.round,
+    required this.seats,
+    required this.status,
+    required this.roomVersion,
+    required this.connectedCount,
+    required this.maxPlayers,
+    required this.readyCount,
+    required this.privateHand,
+    required this.canDiscard,
+    required this.controls,
+    required this.ownerId,
+    required this.onDiscard,
+  });
+
+  final Map<String, dynamic> room;
+  final Map<String, dynamic>? round;
+  final List<Map<String, dynamic>?> seats;
+  final String status;
+  final int roomVersion;
+  final int connectedCount;
+  final int maxPlayers;
+  final int readyCount;
+  final List<String> privateHand;
+  final bool canDiscard;
+  final List<Widget> controls;
+  final String? ownerId;
+  final ValueChanged<String> onDiscard;
+
+  Map<String, dynamic>? _seat(int index) =>
+      index >= 0 && index < seats.length ? seats[index] : null;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      final height = constraints.maxHeight;
+      final compact = height < 390;
+      final badgeWidth = (width * 0.115).clamp(92.0, 122.0).toDouble();
+      final badgeHeight = compact ? 57.0 : 64.0;
+      final handHeight = compact ? 56.0 : 64.0;
+      final sideLaneWidth = (width * 0.17).clamp(135.0, 180.0).toDouble();
+      final sideTop = compact ? 108.0 : 126.0;
+      final sideBottom = handHeight + 18;
+      final playing = const {
+        'dealing',
+        'playing',
+        'settling',
+        'finished',
+      }.contains(status);
+
+      return ClipRect(
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment.center,
+              radius: 1.05,
+              colors: [Color(0xff188765), Color(0xff07503f)],
+            ),
+          ),
+          child: Stack(
+            children: [
+              const Positioned.fill(
+                child: IgnorePointer(
+                  child: Center(
+                    child: Opacity(
+                      opacity: 0.08,
+                      child: Icon(
+                        Icons.local_florist,
+                        size: 260,
+                        color: Color(0xffffe4a3),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 8,
+                top: 7,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: width * 0.38),
+                  child: _RoomStatusStrip(
+                    status: _roomStatusLabel(status),
+                    version: roomVersion,
+                    connected: connectedCount,
+                    maxPlayers: maxPlayers,
+                    ready: readyCount,
+                    showReady: !playing,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 6,
+                left: (width - badgeWidth) / 2,
+                width: badgeWidth,
+                height: badgeHeight,
+                child: _SeatTile(
+                  seat: 2,
+                  player: _seat(2),
+                  ownerId: ownerId,
+                  playing: playing,
+                ),
+              ),
+              Positioned(
+                left: 7,
+                top: (height - badgeHeight) * 0.43,
+                width: badgeWidth,
+                height: badgeHeight,
+                child: _SeatTile(
+                  seat: 3,
+                  player: _seat(3),
+                  ownerId: ownerId,
+                  playing: playing,
+                ),
+              ),
+              Positioned(
+                right: 7,
+                top: (height - badgeHeight) * 0.43,
+                width: badgeWidth,
+                height: badgeHeight,
+                child: _SeatTile(
+                  seat: 1,
+                  player: _seat(1),
+                  ownerId: ownerId,
+                  playing: playing,
+                ),
+              ),
+              Positioned(
+                left: 7,
+                bottom: 6,
+                width: badgeWidth,
+                height: badgeHeight,
+                child: _SeatTile(
+                  seat: 0,
+                  player: _seat(0),
+                  ownerId: ownerId,
+                  playing: playing,
+                ),
+              ),
+              Positioned(
+                top: badgeHeight + 9,
+                left: width * 0.29,
+                right: width * 0.29,
+                height: compact ? 53 : 62,
+                child: _PublicTilesLane(player: _seat(2), round: round),
+              ),
+              Positioned(
+                left: badgeWidth + 13,
+                top: sideTop,
+                bottom: sideBottom,
+                width: sideLaneWidth,
+                child: _PublicTilesLane(player: _seat(3), round: round),
+              ),
+              Positioned(
+                right: badgeWidth + 13,
+                top: sideTop,
+                bottom: sideBottom,
+                width: sideLaneWidth,
+                child: _PublicTilesLane(player: _seat(1), round: round),
+              ),
+              Positioned(
+                left: badgeWidth + 13,
+                bottom: handHeight + 5,
+                width: sideLaneWidth + 60,
+                height: compact ? 46 : 54,
+                child: _PublicTilesLane(player: _seat(0), round: round),
+              ),
+              Positioned(
+                left: width * 0.36,
+                right: width * 0.36,
+                top: height * 0.38,
+                height: compact ? 64 : 78,
+                child: _TableCenterMark(
+                  room: room,
+                  round: round,
+                  status: status,
+                ),
+              ),
+              if (controls.isNotEmpty)
+                Positioned(
+                  right: badgeWidth + 18,
+                  bottom: handHeight + 9,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: width * 0.42),
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 6,
+                      runSpacing: 5,
+                      children: controls,
+                    ),
+                  ),
+                ),
+              if (privateHand.isNotEmpty)
+                Positioned(
+                  left: badgeWidth + 15,
+                  right: 9,
+                  bottom: 5,
+                  height: handHeight,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: privateHand.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 3),
+                    itemBuilder: (context, index) {
+                      final tileId = privateHand[index];
+                      return _MahjongTile(
+                        tileId: tileId,
+                        enabled: canDiscard,
+                        onTap: () => onDiscard(tileId),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _TableCenterMark extends StatelessWidget {
+  const _TableCenterMark({
+    required this.room,
+    required this.round,
+    required this.status,
+  });
+
+  final Map<String, dynamic> room;
+  final Map<String, dynamic>? round;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final wall = _dynamicMap(round?['wall']);
+    final roundNumber = _intValue(
+      round?['roundNumber'] ?? round?['number'] ?? room['roundNumber'],
+    );
+    final totalRounds = _intValue(room['totalRounds']);
+    final phase = round?['turnPhase']?.toString();
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            roundNumber == null
+                ? _roomStatusLabel(status)
+                : '第 $roundNumber/${totalRounds ?? '—'} 局',
+            style: const TextStyle(
+              color: Color(0xffffe4a3),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if (wall?['wallRemaining'] is int)
+            Text(
+              '剩余 ${wall!['wallRemaining']} 张',
+              style: const TextStyle(color: Color(0xffd1e8e1), fontSize: 12),
+            ),
+          if (phase != null)
+            _TurnCountdown(
+              phase: phase,
+              deadlineAt: round?['turnDeadlineAt']?.toString(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PublicTilesLane extends StatelessWidget {
+  const _PublicTilesLane({required this.player, required this.round});
+
+  final Map<String, dynamic>? player;
+  final Map<String, dynamic>? round;
+
+  @override
+  Widget build(BuildContext context) {
+    final playerId =
+        player?['id']?.toString() ?? player?['playerId']?.toString();
+    if (playerId == null) return const SizedBox.shrink();
+    final discards = _dynamicMap(round?['discardsByPlayer']);
+    final melds = _dynamicMap(round?['meldsByPlayer']);
+    final flowers = _dynamicMap(round?['flowerStates']);
+    final flowerState = _dynamicMap(flowers?[playerId]);
+    final flowerCount = _intValue(flowerState?['countedFlowers']) ?? 0;
+    final meldValues = melds?[playerId] is List
+        ? List<Object?>.from(melds![playerId] as List)
+        : const <Object?>[];
+    final discardValues = _stringValues(discards?[playerId]);
+    final meldLabel = meldValues
+        .map(_dynamicMap)
+        .whereType<Map<String, dynamic>>()
+        .map((meld) {
+          final action = _gameActionLabel(meld['action']?.toString() ?? '副露');
+          final tiles = _stringValues(meld['tileIds'])
+              .map(_mahjongFaceLabel)
+              .join('');
+          return '$action$tiles';
+        })
+        .join(' / ');
+    final discardLabel = discardValues.map(_mahjongFaceLabel).join(' ');
+    return ClipRect(
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0x33000000),
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_playerName(player!)} · 花 $flowerCount',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xffffe4a3),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 10,
+                    ),
+                  ),
+                  if (meldLabel.isNotEmpty)
+                    Text(
+                      '副露 $meldLabel',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 9),
+                    ),
+                  if (discardLabel.isNotEmpty)
+                    Text(
+                      '弃牌 $discardLabel',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xffd8ebe6),
+                        fontSize: 9,
+                      ),
+                    ),
+                  if (discardValues.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Wrap(
+                      spacing: 2,
+                      runSpacing: 2,
+                      children: discardValues
+                          .map((tileId) => _MiniMahjongTile(tileId: tileId))
+                          .toList(growable: false),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniMahjongTile extends StatelessWidget {
+  const _MiniMahjongTile({required this.tileId});
+
+  final String tileId;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 24,
+    height: 30,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: const Color(0xfffff8df),
+      borderRadius: BorderRadius.circular(3),
+      border: Border.all(color: const Color(0xffb59a58), width: 0.7),
+    ),
+    child: Text(
+      _mahjongFaceLabel(tileId),
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        color: Color(0xff173b34),
+        fontSize: 9,
+        fontWeight: FontWeight.w900,
+      ),
+    ),
+  );
 }
 
 class _RoomSettlementTable extends StatelessWidget {
@@ -1614,6 +1818,7 @@ class _RoomSettlementTable extends StatelessWidget {
                   connected: _positiveInt(room['connectedCount']) ?? 0,
                   maxPlayers: _positiveInt(room['maxPlayers']) ?? 4,
                   ready: _positiveInt(room['readyCount']) ?? 0,
+                  showReady: false,
                 ),
                 const SizedBox(height: 10),
                 Expanded(
@@ -1936,6 +2141,9 @@ String _settlementWinReason(
   return details.join(' / ');
 }
 
+// Kept temporarily for settlement/replay layout comparison while the live
+// table uses the spatial lanes above.
+// ignore: unused_element
 class _RoundPublicBoard extends StatelessWidget {
   const _RoundPublicBoard({
     required this.room,
@@ -2355,6 +2563,7 @@ class _RoomStatusStrip extends StatelessWidget {
     required this.connected,
     required this.maxPlayers,
     required this.ready,
+    required this.showReady,
   });
 
   final String status;
@@ -2362,6 +2571,7 @@ class _RoomStatusStrip extends StatelessWidget {
   final int connected;
   final int maxPlayers;
   final int ready;
+  final bool showReady;
 
   @override
   Widget build(BuildContext context) {
@@ -2372,7 +2582,7 @@ class _RoomStatusStrip extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         child: Wrap(
           spacing: 18,
           runSpacing: 8,
@@ -2391,7 +2601,7 @@ class _RoomStatusStrip extends StatelessWidget {
             ),
             Text('版本 $version'),
             Text('在线 $connected/$maxPlayers'),
-            Text('准备 $ready/$maxPlayers'),
+            if (showReady) Text('准备 $ready/$maxPlayers'),
           ],
         ),
       ),
@@ -2404,11 +2614,13 @@ class _SeatTile extends StatelessWidget {
     required this.seat,
     required this.player,
     required this.ownerId,
+    required this.playing,
   });
 
   final int seat;
   final Map<String, dynamic>? player;
   final String? ownerId;
+  final bool playing;
 
   @override
   Widget build(BuildContext context) {
@@ -2417,55 +2629,56 @@ class _SeatTile extends StatelessWidget {
     final online = player?['connected'] == true;
     final ready = player?['ready'] == true;
     final isOwner = occupied && player!['id']?.toString() == ownerId;
-    return Card(
-      margin: EdgeInsets.zero,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xcc103f37),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: isOwner ? const Color(0xffffd369) : const Color(0x5579b7a7),
+        ),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 5)],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Row(
               children: [
                 Text(
                   '座位 ${seat + 1}',
-                  style: Theme.of(context).textTheme.labelLarge,
+                  style: const TextStyle(fontSize: 9, color: Color(0xffb9d5ce)),
                 ),
                 const Spacer(),
                 Icon(
                   online ? Icons.wifi : Icons.wifi_off,
-                  size: 16,
-                  color: online ? Colors.green : Colors.grey,
+                  size: 12,
+                  color: online ? const Color(0xff69d7ae) : Colors.grey,
                 ),
               ],
             ),
-            const Spacer(),
             Text(
               name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
             ),
-            const SizedBox(height: 4),
-            if (occupied)
-              Row(
-                children: [
-                  Icon(
-                    ready ? Icons.check_circle : Icons.hourglass_empty,
-                    size: 15,
-                    color: ready ? Colors.green : Colors.grey,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(ready ? '已准备' : '未准备'),
-                  if (isOwner) ...[
-                    const SizedBox(width: 8),
-                    const Icon(Icons.star, size: 15),
-                    const SizedBox(width: 3),
-                    const Text('房主'),
-                  ],
-                ],
-              )
-            else
-              Text('空位', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              occupied
+                  ? playing
+                        ? '对局中${isOwner ? ' · 房主' : ''}'
+                        : '${ready ? '已准备' : '未准备'}${isOwner ? ' · 房主' : ''}'
+                  : '空位',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: occupied && (playing || ready)
+                    ? const Color(0xff8be0c4)
+                    : const Color(0xffa8beb8),
+                fontSize: 9,
+              ),
+            ),
           ],
         ),
       ),
