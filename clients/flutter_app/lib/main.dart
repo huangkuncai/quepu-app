@@ -2635,103 +2635,62 @@ class _MahjongFaceArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final face = _mahjongLogicalFace(tileId);
-    final suited = RegExp(r'^(characters|bamboo|dots)-(\d)$').firstMatch(face);
-    if (suited == null) {
-      final label =
-          const {
-            'east': '東',
-            'south': '南',
-            'west': '西',
-            'north': '北',
-            'red_dragon': '中',
-            'green_dragon': '發',
-            'white_dragon': '白',
-            'red_flower': '紅花',
-            'black_flower': '黑花',
-          }[face] ??
-          face;
-      final color = switch (face) {
-        'red_dragon' || 'red_flower' => const Color(0xffc6252d),
-        'green_dragon' || 'black_flower' => const Color(0xff08774f),
-        _ => const Color(0xff183f78),
-      };
-      return FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.w900,
-            fontSize: compact ? 10 : 23,
-            height: 0.95,
+    final code = _apkMahjongFaceCode(tileId);
+    if (code == null) return Text(_mahjongFaceLabel(tileId));
+    const root = 'assets/mahjong/apk_tiles';
+    return Stack(
+      fit: StackFit.expand,
+      alignment: Alignment.center,
+      children: [
+        Image.asset('$root/base.png', fit: BoxFit.fill),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            compact ? 4 : 6,
+            compact ? 3 : 5,
+            compact ? 4 : 6,
+            compact ? 5 : 8,
+          ),
+          child: Image.asset(
+            '$root/face_$code.png',
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
           ),
         ),
-      );
-    }
-
-    final suit = suited.group(1)!;
-    final rank = int.parse(suited.group(2)!);
-    if (suit == 'characters') {
-      const numerals = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            numerals[rank - 1],
-            style: TextStyle(
-              color: const Color(0xff183f78),
-              fontSize: compact ? 9 : 17,
-              height: 0.85,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          Text(
-            '萬',
-            style: TextStyle(
-              color: const Color(0xffc6252d),
-              fontSize: compact ? 9 : 16,
-              height: 0.85,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      );
-    }
-
-    final markSize = compact ? 3.0 : 6.0;
-    final marks = List<Widget>.generate(rank, (index) {
-      final color = index.isEven
-          ? const Color(0xff08774f)
-          : const Color(0xffc6252d);
-      return suit == 'dots'
-          ? Container(
-              width: markSize,
-              height: markSize,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: color, width: compact ? 0.8 : 1.2),
-              ),
-            )
-          : Container(
-              width: compact ? 2.2 : 4,
-              height: compact ? 6 : 10,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            );
-    });
-    return Center(
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        runAlignment: WrapAlignment.center,
-        spacing: compact ? 1 : 2,
-        runSpacing: compact ? 1 : 2,
-        children: marks,
-      ),
+      ],
     );
   }
+}
+
+int? _apkMahjongFaceCode(String tileId) {
+  final face = _mahjongLogicalFace(tileId);
+  final suited = RegExp(r'^(characters|bamboo|dots)-(\d)$').firstMatch(face);
+  if (suited != null) {
+    final rank = int.parse(suited.group(2)!);
+    return switch (suited.group(1)) {
+      'bamboo' => 10 + rank,
+      'dots' => 20 + rank,
+      'characters' => 30 + rank,
+      _ => null,
+    };
+  }
+  final honor = const {
+    'east': 41,
+    'south': 42,
+    'west': 43,
+    'north': 44,
+    'red_dragon': 45,
+    'green_dragon': 46,
+    'white_dragon': 47,
+  }[face];
+  if (honor != null) return honor;
+  final copy = int.tryParse(tileId.split('-').last);
+  if (face == 'red_flower') {
+    return const {1: 199, 2: 215, 3: 231, 4: 247}[copy] ?? 199;
+  }
+  if (face == 'black_flower') {
+    return const {1: 200, 2: 216, 3: 232, 4: 248}[copy] ?? 200;
+  }
+  return null;
 }
 
 String _gameActionLabel(String action) =>
@@ -2750,6 +2709,13 @@ String _gameActionLabel(String action) =>
 
 String _mahjongFaceLabel(String tileId) {
   final face = _mahjongLogicalFace(tileId);
+  final flowerCopy = int.tryParse(tileId.split('-').last);
+  if (face == 'red_flower') {
+    return const {1: '春', 2: '夏', 3: '秋', 4: '冬'}[flowerCopy] ?? '红花';
+  }
+  if (face == 'black_flower') {
+    return const {1: '梅', 2: '兰', 3: '竹', 4: '菊'}[flowerCopy] ?? '黑花';
+  }
   final suited = RegExp(r'^(characters|bamboo|dots)-(\d)$').firstMatch(face);
   if (suited != null) {
     final suffix = const {

@@ -508,7 +508,7 @@ class FakeTransport implements ProtocolTransport {
         };
         flowerTiles['poc-user'] = [
           ...((flowerTiles['poc-user'] as List?) ?? const []),
-          _botDemoFace(drawnTile),
+          _botDemoPublicFlower(drawnTile),
         ];
       } else if (!_isBotDemoFlower(drawnTile)) {
         hand.add(drawnTile);
@@ -632,7 +632,9 @@ class FakeTransport implements ProtocolTransport {
       'pendingFlowerDiscards': 0,
       'pendingFlowerReplacements': 0,
     };
-    flowerTiles['poc-user'] = removed.map(_botDemoFace).toList(growable: false);
+    flowerTiles['poc-user'] = removed
+        .map(_botDemoPublicFlower)
+        .toList(growable: false);
     _room = {
       ..._room,
       'status': 'playing',
@@ -681,7 +683,7 @@ class FakeTransport implements ProtocolTransport {
     };
     flowerTiles['poc-user'] = [
       ...((flowerTiles['poc-user'] as List?) ?? const []),
-      _botDemoFace(removedFlower),
+      _botDemoPublicFlower(removedFlower),
     ];
     _room = {
       ..._room,
@@ -914,9 +916,9 @@ class FakeTransport implements ProtocolTransport {
     },
     'flowerTilesByPlayer': {
       'poc-user': <String>[],
-      'bot-east': ['red_dragon', 'red_flower'],
+      'bot-east': ['red_dragon', 'red_flower-2'],
       'bot-north': <String>[],
-      'bot-west': ['white_dragon', 'black_flower', 'green_dragon'],
+      'bot-west': ['white_dragon', 'black_flower-3', 'green_dragon'],
     },
     'privateHand': [
       'characters-1-1',
@@ -960,6 +962,8 @@ class FakeTransport implements ProtocolTransport {
     'black_flower',
   }.contains(tileId.replaceFirst(RegExp(r'-\d+$'), ''));
 
-  static String _botDemoFace(String tileId) =>
-      tileId.replaceFirst(RegExp(r'-\d+$'), '');
+  static String _botDemoPublicFlower(String tileId) =>
+      RegExp(r'^(red|black)_flower-[1-4]$').hasMatch(tileId)
+      ? tileId
+      : tileId.replaceFirst(RegExp(r'-\d+$'), '');
 }

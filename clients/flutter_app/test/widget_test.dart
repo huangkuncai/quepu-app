@@ -95,8 +95,10 @@ void main() {
     await tester.tap(find.text('不飘·补花'));
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('进行中'), findsOneWidget);
-    expect(find.bySemanticsLabel('红花'), findsWidgets);
-    expect(find.bySemanticsLabel('黑花'), findsWidgets);
+    expect(find.bySemanticsLabel('春'), findsWidgets);
+    expect(find.bySemanticsLabel('夏'), findsWidgets);
+    expect(find.bySemanticsLabel('梅'), findsWidgets);
+    expect(find.bySemanticsLabel('竹'), findsWidgets);
     expect(find.text('请点击手牌出牌'), findsOneWidget);
     expect(find.text('剩余 78 张'), findsOneWidget);
     expect(find.bySemanticsLabel('1万'), findsWidgets);

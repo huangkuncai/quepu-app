@@ -96,7 +96,8 @@ test('current rule deals the dealer 14 and starts directly in discard phase', ()
     'red_dragon', 'green_dragon', 'white_dragon', 'red_flower', 'black_flower'
   ]);
   for (const playerId of players) {
-    assert.equal(publicFlowerTiles[playerId].every(face => allowedFlowerFaces.has(face)), true);
+    assert.equal(publicFlowerTiles[playerId].every(face =>
+      allowedFlowerFaces.has(face.replace(/^(red|black)_flower-[1-4]$/, '$1_flower'))), true);
     assert.equal(
       publicFlowerTiles[playerId].length,
       room._privateRoundState.resolvedFlowerTilesByPlayer[playerId].length

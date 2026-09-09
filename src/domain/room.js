@@ -2443,7 +2443,9 @@ export class Room {
       ? Object.fromEntries(players.map(player => [
           player.id,
           (this._privateRoundState.resolvedFlowerTilesByPlayer[player.id] ?? [])
-            .map(tileId => susongTileFace(tileId))
+            .map(tileId => /^(red|black)_flower-[1-4]$/.test(tileId)
+              ? tileId
+              : susongTileFace(tileId))
         ]))
       : null;
     const round = this.currentRound ? {

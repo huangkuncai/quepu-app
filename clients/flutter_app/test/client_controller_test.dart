@@ -198,8 +198,8 @@ void main() {
           'red_dragon',
           'green_dragon',
           'white_dragon',
-          'red_flower',
-          'black_flower',
+          'red_flower-1',
+          'black_flower-1',
         ]),
       );
       await client.dispose();
