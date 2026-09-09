@@ -148,18 +148,37 @@ void main() {
       );
       await Future<void>.delayed(const Duration(milliseconds: 30));
       final advancedRound = client.snapshot.roomSnapshot!['round'] as Map;
-      expect((advancedRound['privateHand'] as List), hasLength(14));
+      expect((advancedRound['privateHand'] as List), hasLength(13));
       expect(
         (advancedRound['discardsByPlayer'] as Map)['poc-user'],
         contains('characters-1-1'),
       );
-      expect((advancedRound['wall'] as Map)['wallRemaining'], 74);
+      expect(advancedRound['turnPhase'], 'reaction');
+      expect(advancedRound['availableReactions'], containsAll(['chi', 'pass']));
+      expect((advancedRound['reactionOptions'] as Map)['chi'], isNotEmpty);
+      expect((advancedRound['wall'] as Map)['wallRemaining'], 75);
+
+      await client.action('demo-room', 'pass');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      final afterChiPass = client.snapshot.roomSnapshot!['round'] as Map;
+      expect((afterChiPass['privateHand'] as List), hasLength(14));
+      expect(afterChiPass['availableActions'], contains('discard'));
+      expect((afterChiPass['wall'] as Map)['wallRemaining'], 74);
 
       await client.action(
         'demo-room',
         'discard',
         args: const {'tileId': 'characters-2-1'},
       );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      final pengRound = client.snapshot.roomSnapshot!['round'] as Map;
+      expect(
+        pengRound['availableReactions'],
+        containsAll(['exposed_kong', 'peng', 'pass']),
+      );
+      expect((pengRound['wall'] as Map)['wallRemaining'], 71);
+
+      await client.action('demo-room', 'pass');
       await Future<void>.delayed(const Duration(milliseconds: 30));
       final flowerDrawRound = client.snapshot.roomSnapshot!['round'] as Map;
       final flowerDrawHand = List<String>.from(
@@ -173,6 +192,16 @@ void main() {
         6,
       );
       expect((flowerDrawRound['wall'] as Map)['wallRemaining'], 69);
+      expect(
+        (flowerDrawRound['flowerTilesByPlayer'] as Map)['poc-user'],
+        containsAll([
+          'red_dragon',
+          'green_dragon',
+          'white_dragon',
+          'red_flower',
+          'black_flower',
+        ]),
+      );
       await client.dispose();
     },
   );

@@ -1600,6 +1600,34 @@ class _MahjongTableSurface extends StatelessWidget {
               Positioned(
                 left: width * 0.36,
                 right: width * 0.36,
+                top: badgeHeight + 76,
+                height: compact ? 54 : 64,
+                child: _DiscardRiver(player: _seat(2), round: round),
+              ),
+              Positioned(
+                left: badgeWidth + sideLaneWidth + 22,
+                top: height * 0.43,
+                width: width * 0.19,
+                height: compact ? 58 : 72,
+                child: _DiscardRiver(player: _seat(3), round: round),
+              ),
+              Positioned(
+                right: badgeWidth + sideLaneWidth + 22,
+                top: height * 0.43,
+                width: width * 0.19,
+                height: compact ? 58 : 72,
+                child: _DiscardRiver(player: _seat(1), round: round),
+              ),
+              Positioned(
+                left: width * 0.36,
+                right: width * 0.36,
+                bottom: handHeight + 62,
+                height: compact ? 54 : 64,
+                child: _DiscardRiver(player: _seat(0), round: round),
+              ),
+              Positioned(
+                left: width * 0.36,
+                right: width * 0.36,
                 top: height * 0.38,
                 height: compact ? 64 : 78,
                 child: _TableCenterMark(
@@ -1709,15 +1737,15 @@ class _PublicTilesLane extends StatelessWidget {
     final playerId =
         player?['id']?.toString() ?? player?['playerId']?.toString();
     if (playerId == null) return const SizedBox.shrink();
-    final discards = _dynamicMap(round?['discardsByPlayer']);
     final melds = _dynamicMap(round?['meldsByPlayer']);
     final flowers = _dynamicMap(round?['flowerStates']);
+    final flowerTiles = _dynamicMap(round?['flowerTilesByPlayer']);
     final flowerState = _dynamicMap(flowers?[playerId]);
     final flowerCount = _intValue(flowerState?['countedFlowers']) ?? 0;
     final meldValues = melds?[playerId] is List
         ? List<Object?>.from(melds![playerId] as List)
         : const <Object?>[];
-    final discardValues = _stringValues(discards?[playerId]);
+    final flowerTileValues = _stringValues(flowerTiles?[playerId]);
     final meldLabel = meldValues
         .map(_dynamicMap)
         .whereType<Map<String, dynamic>>()
@@ -1729,7 +1757,6 @@ class _PublicTilesLane extends StatelessWidget {
           return '$action$tiles';
         })
         .join(' / ');
-    final discardLabel = discardValues.map(_mahjongFaceLabel).join(' ');
     return ClipRect(
       child: Align(
         alignment: Alignment.topLeft,
@@ -1762,22 +1789,12 @@ class _PublicTilesLane extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 9),
                     ),
-                  if (discardLabel.isNotEmpty)
-                    Text(
-                      '弃牌 $discardLabel',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xffd8ebe6),
-                        fontSize: 9,
-                      ),
-                    ),
-                  if (discardValues.isNotEmpty) ...[
+                  if (flowerTileValues.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Wrap(
                       spacing: 2,
                       runSpacing: 2,
-                      children: discardValues
+                      children: flowerTileValues
                           .map((tileId) => _MiniMahjongTile(tileId: tileId))
                           .toList(growable: false),
                     ),
@@ -1792,10 +1809,42 @@ class _PublicTilesLane extends StatelessWidget {
   }
 }
 
+class _DiscardRiver extends StatelessWidget {
+  const _DiscardRiver({required this.player, required this.round});
+
+  final Map<String, dynamic>? player;
+  final Map<String, dynamic>? round;
+
+  @override
+  Widget build(BuildContext context) {
+    final playerId =
+        player?['id']?.toString() ?? player?['playerId']?.toString();
+    final discards = _dynamicMap(round?['discardsByPlayer']);
+    final tiles = _stringValues(discards?[playerId]);
+    if (playerId == null || tiles.isEmpty) return const SizedBox.shrink();
+    return Align(
+      alignment: Alignment.center,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 2,
+        runSpacing: 2,
+        children: [
+          for (var index = 0; index < tiles.length; index += 1)
+            _MiniMahjongTile(
+              tileId: tiles[index],
+              highlighted: index == tiles.length - 1,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MiniMahjongTile extends StatelessWidget {
-  const _MiniMahjongTile({required this.tileId});
+  const _MiniMahjongTile({required this.tileId, this.highlighted = false});
 
   final String tileId;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1805,16 +1854,15 @@ class _MiniMahjongTile extends StatelessWidget {
     decoration: BoxDecoration(
       color: const Color(0xfffff8df),
       borderRadius: BorderRadius.circular(3),
-      border: Border.all(color: const Color(0xffb59a58), width: 0.7),
-    ),
-    child: Text(
-      _mahjongFaceLabel(tileId),
-      textAlign: TextAlign.center,
-      style: const TextStyle(
-        color: Color(0xff173b34),
-        fontSize: 9,
-        fontWeight: FontWeight.w900,
+      border: Border.all(
+        color: highlighted ? const Color(0xffffd369) : const Color(0xffb59a58),
+        width: highlighted ? 1.5 : 0.7,
       ),
+    ),
+    child: Semantics(
+      label: _mahjongFaceLabel(tileId),
+      excludeSemantics: true,
+      child: _MahjongFaceArt(tileId: tileId, compact: true),
     ),
   );
 }
@@ -2565,17 +2613,125 @@ class _MahjongTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(7),
           border: Border.all(color: const Color(0xffb59a58)),
         ),
-        child: Text(
-          _mahjongFaceLabel(tileId),
-          style: const TextStyle(
-            color: Color(0xff173b34),
-            fontWeight: FontWeight.w900,
-            fontSize: 16,
+        child: Semantics(
+          label: _mahjongFaceLabel(tileId),
+          button: enabled,
+          excludeSemantics: true,
+          child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: _MahjongFaceArt(tileId: tileId),
           ),
         ),
       ),
     ),
   );
+}
+
+class _MahjongFaceArt extends StatelessWidget {
+  const _MahjongFaceArt({required this.tileId, this.compact = false});
+
+  final String tileId;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final face = _mahjongLogicalFace(tileId);
+    final suited = RegExp(r'^(characters|bamboo|dots)-(\d)$').firstMatch(face);
+    if (suited == null) {
+      final label =
+          const {
+            'east': '東',
+            'south': '南',
+            'west': '西',
+            'north': '北',
+            'red_dragon': '中',
+            'green_dragon': '發',
+            'white_dragon': '白',
+            'red_flower': '紅花',
+            'black_flower': '黑花',
+          }[face] ??
+          face;
+      final color = switch (face) {
+        'red_dragon' || 'red_flower' => const Color(0xffc6252d),
+        'green_dragon' || 'black_flower' => const Color(0xff08774f),
+        _ => const Color(0xff183f78),
+      };
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w900,
+            fontSize: compact ? 10 : 23,
+            height: 0.95,
+          ),
+        ),
+      );
+    }
+
+    final suit = suited.group(1)!;
+    final rank = int.parse(suited.group(2)!);
+    if (suit == 'characters') {
+      const numerals = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            numerals[rank - 1],
+            style: TextStyle(
+              color: const Color(0xff183f78),
+              fontSize: compact ? 9 : 17,
+              height: 0.85,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          Text(
+            '萬',
+            style: TextStyle(
+              color: const Color(0xffc6252d),
+              fontSize: compact ? 9 : 16,
+              height: 0.85,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      );
+    }
+
+    final markSize = compact ? 3.0 : 6.0;
+    final marks = List<Widget>.generate(rank, (index) {
+      final color = index.isEven
+          ? const Color(0xff08774f)
+          : const Color(0xffc6252d);
+      return suit == 'dots'
+          ? Container(
+              width: markSize,
+              height: markSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: color, width: compact ? 0.8 : 1.2),
+              ),
+            )
+          : Container(
+              width: compact ? 2.2 : 4,
+              height: compact ? 6 : 10,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            );
+    });
+    return Center(
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        runAlignment: WrapAlignment.center,
+        spacing: compact ? 1 : 2,
+        runSpacing: compact ? 1 : 2,
+        children: marks,
+      ),
+    );
+  }
 }
 
 String _gameActionLabel(String action) =>
@@ -2593,7 +2749,7 @@ String _gameActionLabel(String action) =>
     action;
 
 String _mahjongFaceLabel(String tileId) {
-  final face = tileId.replaceFirst(RegExp(r'-\d+$'), '');
+  final face = _mahjongLogicalFace(tileId);
   final suited = RegExp(r'^(characters|bamboo|dots)-(\d)$').firstMatch(face);
   if (suited != null) {
     final suffix = const {
@@ -2615,6 +2771,16 @@ String _mahjongFaceLabel(String tileId) {
         'black_flower': '黑花',
       }[face] ??
       face;
+}
+
+String _mahjongLogicalFace(String tileId) {
+  final suited = RegExp(r'^(characters|bamboo|dots)-([1-9])-\d+$')
+      .firstMatch(tileId);
+  if (suited != null) return '${suited.group(1)}-${suited.group(2)}';
+  final honor = RegExp(
+    r'^(east|south|west|north|red_dragon|green_dragon|white_dragon|red_flower|black_flower)-\d+$',
+  ).firstMatch(tileId);
+  return honor?.group(1) ?? tileId;
 }
 
 class _RoomStatusStrip extends StatelessWidget {

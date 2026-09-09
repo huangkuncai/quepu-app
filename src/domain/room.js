@@ -2437,11 +2437,21 @@ export class Room {
           meldsByPlayer: this.currentRound.meldsByPlayer
         })
       : null;
+    const publicFlowerTiles = this.currentRound
+      && this._privateRoundState?.roundId === this.roundId
+      && isRecord(this._privateRoundState.resolvedFlowerTilesByPlayer)
+      ? Object.fromEntries(players.map(player => [
+          player.id,
+          (this._privateRoundState.resolvedFlowerTilesByPlayer[player.id] ?? [])
+            .map(tileId => susongTileFace(tileId))
+        ]))
+      : null;
     const round = this.currentRound ? {
       ...this.currentRound,
       ...(derivedSanxiPairs ? {
         sanxiPairs: this.currentRound.settlement?.sanxiPairs ?? derivedSanxiPairs
       } : {}),
+      ...(publicFlowerTiles ? { flowerTilesByPlayer: publicFlowerTiles } : {}),
       ruleSnapshot: publicClone(this.ruleSnapshot)
     } : null;
     const base = {

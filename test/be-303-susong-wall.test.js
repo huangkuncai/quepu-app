@@ -91,6 +91,17 @@ test('current rule deals the dealer 14 and starts directly in discard phase', ()
     actorId: 'system:susong-rule-engine',
     actorRole: 'SYSTEM'
   });
+  const publicFlowerTiles = room.snapshot({ viewerId: 'A' }).round.flowerTilesByPlayer;
+  const allowedFlowerFaces = new Set([
+    'red_dragon', 'green_dragon', 'white_dragon', 'red_flower', 'black_flower'
+  ]);
+  for (const playerId of players) {
+    assert.equal(publicFlowerTiles[playerId].every(face => allowedFlowerFaces.has(face)), true);
+    assert.equal(
+      publicFlowerTiles[playerId].length,
+      room._privateRoundState.resolvedFlowerTilesByPlayer[playerId].length
+    );
+  }
   assert.deepEqual(room.currentRound.wall.handCountsByPlayer, { A: 14, B: 13, C: 13, D: 13 });
   const wallBefore = room.currentRound.wall.wallRemaining;
 

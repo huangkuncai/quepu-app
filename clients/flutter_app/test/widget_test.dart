@@ -95,11 +95,16 @@ void main() {
     await tester.tap(find.text('不飘·补花'));
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('进行中'), findsOneWidget);
-    expect(find.text('红花'), findsNothing);
-    expect(find.text('黑花'), findsNothing);
+    expect(find.bySemanticsLabel('红花'), findsWidgets);
+    expect(find.bySemanticsLabel('黑花'), findsWidgets);
     expect(find.text('请点击手牌出牌'), findsOneWidget);
     expect(find.text('剩余 78 张'), findsOneWidget);
-    expect(find.text('1万'), findsWidgets);
+    expect(find.bySemanticsLabel('1万'), findsWidgets);
+    await tester.tap(find.bySemanticsLabel('1万').last);
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.textContaining('吃 1万2万3万'), findsOneWidget);
+    expect(find.text('过'), findsOneWidget);
+    expect(find.textContaining('弃牌'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -288,8 +293,8 @@ void main() {
       });
       await tester.pump(const Duration(milliseconds: 80));
 
-      expect(find.text('1万'), findsOneWidget);
-      expect(find.text('9条'), findsOneWidget);
+      expect(find.bySemanticsLabel('1万'), findsWidgets);
+      expect(find.bySemanticsLabel('9条'), findsOneWidget);
       expect(find.text('暗杠 东'), findsOneWidget);
       expect(find.text('第 2/8 局'), findsOneWidget);
       expect(find.text('剩余 63 张'), findsOneWidget);
@@ -297,10 +302,12 @@ void main() {
       expect(find.textContaining('演示玩家 · 花 4'), findsOneWidget);
       expect(find.text('空位'), findsNWidgets(3));
       expect(find.textContaining('副露 碰东东东'), findsOneWidget);
-      expect(find.textContaining('弃牌 3筒 白'), findsOneWidget);
+      expect(find.bySemanticsLabel('3筒'), findsOneWidget);
+      expect(find.bySemanticsLabel('白'), findsOneWidget);
+      expect(find.textContaining('弃牌'), findsNothing);
       await tester.pump(const Duration(seconds: 2));
       expect(find.text('待出牌 0 秒'), findsOneWidget);
-      await tester.tap(find.text('1万'));
+      await tester.tap(find.bySemanticsLabel('1万').last);
       await tester.pump(const Duration(milliseconds: 30));
       final action = transport.sentMessages.lastWhere(
         (message) => message['type'] == 'action',
