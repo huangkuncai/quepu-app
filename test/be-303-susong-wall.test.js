@@ -1486,6 +1486,14 @@ test('a legal self-draw is privately projected and settled without client-author
   assert.deepEqual(result.settlement.winnerIds, ['D']);
   assert.equal(result.settlement.outcome, 'self_draw');
   assert.deepEqual(result.settlement.deltaByPlayer, { A: -2, B: -2, C: -2, D: 6 });
+  assert.deepEqual(Object.keys(result.settlement.revealedHandsByPlayer).sort(), ['A', 'B', 'C', 'D']);
+  assert.ok(Object.values(result.settlement.revealedHandsByPlayer)
+    .every(hand => Array.isArray(hand) && hand.length > 0));
+  assert.ok(Array.isArray(result.settlement.revealedRemainingWall));
+  assert.deepEqual(
+    room.snapshot({ viewerId: 'A' }).round.settlement.revealedHandsByPlayer,
+    result.settlement.revealedHandsByPlayer
+  );
   assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
 });
 

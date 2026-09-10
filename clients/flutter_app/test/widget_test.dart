@@ -94,7 +94,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('进行中'), findsOneWidget);
     expect(find.text('庄'), findsOneWidget);
-    expect(find.textContaining('请选择飘花'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('东南西北方位')), findsOneWidget);
     expect(find.text('飘花'), findsOneWidget);
     expect(find.text('不飘·补花'), findsOneWidget);
     expect(find.text('过'), findsNothing);
@@ -108,7 +108,7 @@ void main() {
     expect(find.bySemanticsLabel('白'), findsWidgets);
     expect(find.text('请点击手牌出牌'), findsOneWidget);
     expect(find.text('自摸'), findsOneWidget);
-    expect(find.text('剩余 78 张'), findsOneWidget);
+    expect(find.textContaining('剩余 78 张'), findsOneWidget);
     expect(find.bySemanticsLabel('暗牌'), findsNWidgets(39));
     expect(find.bySemanticsLabel('1万'), findsWidgets);
     expect(
@@ -121,6 +121,7 @@ void main() {
     );
     await tester.tap(find.bySemanticsLabel('1万').last);
     await tester.pump(const Duration(milliseconds: 80));
+    expect(find.bySemanticsLabel(RegExp('听牌提示')), findsOneWidget);
     expect(find.textContaining('吃 1万2万3万'), findsOneWidget);
     expect(find.text('碰·对家'), findsOneWidget);
     expect(find.text('吃·上家'), findsOneWidget);
@@ -318,9 +319,9 @@ void main() {
       expect(find.bySemanticsLabel('1万'), findsWidgets);
       expect(find.bySemanticsLabel('9条'), findsOneWidget);
       expect(find.text('暗杠 东'), findsOneWidget);
-      expect(find.text('第 2/8 局'), findsOneWidget);
-      expect(find.text('剩余 63 张'), findsOneWidget);
-      expect(find.textContaining('待出牌'), findsOneWidget);
+      expect(find.textContaining('第 2/8 局'), findsOneWidget);
+      expect(find.textContaining('剩余 63 张'), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('东南西北方位')), findsOneWidget);
       expect(find.textContaining('演示玩家  花4'), findsOneWidget);
       expect(find.text('空位'), findsNWidgets(3));
       expect(find.text('碰'), findsOneWidget);
@@ -329,7 +330,10 @@ void main() {
       expect(find.bySemanticsLabel('白'), findsOneWidget);
       expect(find.textContaining('弃牌'), findsNothing);
       await tester.pump(const Duration(seconds: 2));
-      expect(find.text('待出牌 0 秒'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(RegExp('东南西北方位 倒计时 0 秒')),
+        findsOneWidget,
+      );
       await tester.tap(find.bySemanticsLabel('1万').last);
       await tester.pump(const Duration(milliseconds: 30));
       final action = transport.sentMessages.lastWhere(
@@ -445,18 +449,15 @@ void main() {
     });
     await tester.pump(const Duration(milliseconds: 80));
 
-    expect(find.text('单局结算 · 自摸'), findsOneWidget);
-    expect(find.text('服务端计分明细'), findsOneWidget);
-    expect(find.text('zeng-piao-flower-sanxi-v1'), findsOneWidget);
-    expect(find.textContaining('演示玩家 一索/封顶 / 4 花 / 杠开×1 / 七对'), findsOneWidget);
+    expect(find.text('第 1 局结算 · 自摸'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('自己结算行')), findsOneWidget);
+    expect(find.text('自摸'), findsOneWidget);
+    expect(find.textContaining('4 朵花'), findsWidgets);
+    expect(find.textContaining('一索/封顶'), findsOneWidget);
     expect(find.text('+45'), findsOneWidget);
     expect(find.text('-15'), findsOneWidget);
-    expect(find.textContaining('玩家B → 演示玩家  15 分'), findsOneWidget);
-    expect(find.textContaining('赢家增 4  →  付款家增 6'), findsOneWidget);
-    expect(find.textContaining('花奖 · 玩家B → 演示玩家  12 分'), findsOneWidget);
-    expect(find.textContaining('花奖 ×2（第二档 6）'), findsOneWidget);
-    expect(find.text('开始下一局'), findsOneWidget);
-    await tester.tap(find.text('开始下一局'));
+    expect(find.text('继续游戏'), findsOneWidget);
+    await tester.tap(find.text('继续游戏'));
     await tester.pump(const Duration(milliseconds: 30));
     final nextRound = transport.sentMessages.lastWhere(
       (message) => message['type'] == 'next_round',
@@ -500,9 +501,10 @@ void main() {
       'occurredAt': DateTime.now().toUtc().toIso8601String(),
     });
     await tester.pump(const Duration(milliseconds: 80));
-    expect(find.text('全场结算 · 总计'), findsOneWidget);
-    expect(find.text('全场总计'), findsOneWidget);
-    expect(find.text('开始下一局'), findsNothing);
+    expect(find.text('牌局结束 · 1 局'), findsOneWidget);
+    expect(find.text('总成绩'), findsNWidgets(4));
+    expect(find.text('自摸次数'), findsNWidgets(4));
+    expect(find.text('继续游戏'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

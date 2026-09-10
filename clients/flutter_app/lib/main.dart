@@ -1490,6 +1490,16 @@ class _MahjongTableSurface extends StatelessWidget {
         growable: false,
       );
       final orderedPrivateHand = [...privateHand]..sort(_compareMahjongTileIds);
+      final localPlayerId = _seat(0)?['id']?.toString();
+      final meldsByPlayer = _dynamicMap(round?['meldsByPlayer']);
+      final localMelds =
+          localPlayerId != null && meldsByPlayer?[localPlayerId] is List
+          ? List<Object?>.from(meldsByPlayer![localPlayerId] as List).length
+          : 0;
+      final waitingFaces = _susongWaitingFaces(privateHand, localMelds);
+      final wallRemaining = _intValue(
+        _dynamicMap(round?['wall'])?['wallRemaining'],
+      );
       final playing = const {
         'dealing',
         'playing',
@@ -1537,6 +1547,16 @@ class _MahjongTableSurface extends StatelessWidget {
                   ),
                 ),
               ),
+              if (wallRemaining != null)
+                Positioned(
+                  left: 10,
+                  top: compact ? 45 : 51,
+                  child: _RemainingTilesBadge(
+                    remaining: wallRemaining,
+                    roundNumber: _intValue(round?['roundNumber']),
+                    totalRounds: _intValue(room['totalRounds']),
+                  ),
+                ),
               Positioned(
                 top: 6,
                 left: (width - badgeWidth) / 2,
@@ -1717,8 +1737,8 @@ class _MahjongTableSurface extends StatelessWidget {
               Positioned(
                 left: width * 0.43,
                 right: width * 0.43,
-                top: height * 0.38,
-                height: compact ? 64 : 78,
+                top: height * 0.35,
+                height: compact ? 82 : 92,
                 child: _TableCenterMark(
                   room: room,
                   round: round,
@@ -1738,6 +1758,12 @@ class _MahjongTableSurface extends StatelessWidget {
                       children: controls,
                     ),
                   ),
+                ),
+              if (waitingFaces.isNotEmpty)
+                Positioned(
+                  left: badgeWidth + sideLaneWidth + 82,
+                  bottom: handHeight + 8,
+                  child: _TingHint(waitingFaces: waitingFaces),
                 ),
               if (privateHand.isNotEmpty)
                 Positioned(
@@ -1780,39 +1806,182 @@ class _TableCenterMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final wall = _dynamicMap(round?['wall']);
-    final roundNumber = _intValue(
-      round?['roundNumber'] ?? round?['number'] ?? room['roundNumber'],
-    );
-    final totalRounds = _intValue(room['totalRounds']);
     final phase = round?['turnPhase']?.toString();
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            roundNumber == null
-                ? _roomStatusLabel(status)
-                : '第 $roundNumber/${totalRounds ?? '—'} 局',
-            style: const TextStyle(
-              color: Color(0xffffe4a3),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          if (wall?['wallRemaining'] is int)
-            Text(
-              '剩余 ${wall!['wallRemaining']} 张',
-              style: const TextStyle(color: Color(0xffd1e8e1), fontSize: 12),
-            ),
-          if (phase != null)
-            _TurnCountdown(
-              phase: phase,
-              deadlineAt: round?['turnDeadlineAt']?.toString(),
-            ),
-        ],
+      child: _WindCompass(
+        phase: phase ?? status,
+        deadlineAt: round?['turnDeadlineAt']?.toString(),
       ),
     );
   }
+}
+
+class _RemainingTilesBadge extends StatelessWidget {
+  const _RemainingTilesBadge({
+    required this.remaining,
+    required this.roundNumber,
+    required this.totalRounds,
+  });
+
+  final int remaining;
+  final int? roundNumber;
+  final int? totalRounds;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xd92b443d),
+      borderRadius: BorderRadius.circular(7),
+      border: Border.all(color: const Color(0x5577dfc1)),
+    ),
+    child: Text(
+      '第 ${roundNumber ?? '—'}/${totalRounds ?? '—'} 局  ·  剩余 $remaining 张',
+      style: const TextStyle(
+        color: Color(0xffffe4a3),
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
+}
+
+class _WindCompass extends StatefulWidget {
+  const _WindCompass({required this.phase, required this.deadlineAt});
+
+  final String phase;
+  final String? deadlineAt;
+
+  @override
+  State<_WindCompass> createState() => _WindCompassState();
+}
+
+class _WindCompassState extends State<_WindCompass> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _restart();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WindCompass oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.deadlineAt != widget.deadlineAt) _restart();
+  }
+
+  void _restart() {
+    _timer?.cancel();
+    if (DateTime.tryParse(widget.deadlineAt ?? '') == null) return;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final deadline = DateTime.tryParse(widget.deadlineAt ?? '');
+    final seconds = deadline?.difference(DateTime.now()).inSeconds.clamp(0, 99);
+    const windStyle = TextStyle(
+      color: Color(0xffffe4a3),
+      fontSize: 11,
+      fontWeight: FontWeight.w900,
+    );
+    return Semantics(
+      label: '东南西北方位 倒计时 ${seconds ?? 0} 秒',
+      child: Container(
+        width: 72,
+        height: 72,
+        decoration: BoxDecoration(
+          color: const Color(0xe620302c),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xffffd369), width: 1.2),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 5,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            const Positioned(top: 4, child: Text('东', style: windStyle)),
+            const Positioned(left: 6, child: Text('南', style: windStyle)),
+            const Positioned(right: 6, child: Text('西', style: windStyle)),
+            const Positioned(bottom: 4, child: Text('北', style: windStyle)),
+            Container(
+              width: 28,
+              height: 28,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: Color(0xff101a18),
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '${seconds ?? 0}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TingHint extends StatelessWidget {
+  const _TingHint({required this.waitingFaces});
+
+  final List<String> waitingFaces;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '听牌提示 ${waitingFaces.map(_mahjongFaceLabel).join('、')}',
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xd9213c35),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xffffd369)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            '听',
+            style: TextStyle(
+              color: Color(0xffffd369),
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(width: 5),
+          for (final face in waitingFaces.take(7)) ...[
+            _MiniMahjongTile(tileId: '$face-9'),
+            const SizedBox(width: 2),
+          ],
+          if (waitingFaces.length > 7)
+            Text(
+              '+${waitingFaces.length - 7}',
+              style: const TextStyle(color: Colors.white, fontSize: 10),
+            ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _PublicTilesLane extends StatelessWidget {
@@ -2185,6 +2354,39 @@ class _RoomSettlementTable extends StatelessWidget {
                 _intValue(right['seat']) ?? 0,
               ),
       );
+    final useReferenceSettlementLayout =
+        room['gameType']?.toString() != '__legacy_settlement_layout__';
+    if (useReferenceSettlementLayout) {
+      final canAdvance =
+          roomStatus == 'settling' &&
+          isOwner &&
+          connected &&
+          roomId != null &&
+          snapshot.pendingCommandCount == 0;
+      return isMatchFinished
+          ? _MatchSettlementView(
+              room: room,
+              round: round,
+              players: orderedPlayers,
+              scores: scores,
+              deltas: deltas,
+              snapshot: snapshot,
+            )
+          : _SingleRoundSettlementView(
+              room: room,
+              round: round,
+              settlement: settlement,
+              players: orderedPlayers,
+              deltas: deltas,
+              scores: scores,
+              outcome: outcome,
+              snapshot: snapshot,
+              buttonLabel: isFinalRound ? '查看总计' : '继续游戏',
+              onNext: canAdvance
+                  ? () => _run(() => client.nextRound(roomId), context)
+                  : null,
+            );
+    }
     return LayoutBuilder(
       builder: (context, constraints) => ListView(
         padding: const EdgeInsets.all(12),
@@ -2421,6 +2623,542 @@ class _RoomSettlementTable extends StatelessWidget {
       }
     }
   }
+}
+
+class _SingleRoundSettlementView extends StatelessWidget {
+  const _SingleRoundSettlementView({
+    required this.room,
+    required this.round,
+    required this.settlement,
+    required this.players,
+    required this.deltas,
+    required this.scores,
+    required this.outcome,
+    required this.snapshot,
+    required this.buttonLabel,
+    required this.onNext,
+  });
+
+  final Map<String, dynamic> room;
+  final Map<String, dynamic> round;
+  final Map<String, dynamic> settlement;
+  final List<Map<String, dynamic>> players;
+  final Map<String, dynamic> deltas;
+  final Map<String, dynamic> scores;
+  final String outcome;
+  final ClientSnapshot snapshot;
+  final String buttonLabel;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final wins = settlement['wins'] is List
+        ? List<Object?>.from(settlement['wins'] as List)
+              .map(_dynamicMap)
+              .whereType<Map<String, dynamic>>()
+              .toList(growable: false)
+        : const <Map<String, dynamic>>[];
+    final winners = {
+      ..._stringValues(settlement['winnerIds']),
+      ...wins.map((win) => win['winnerId']?.toString()).whereType<String>(),
+    };
+    final revealed =
+        _dynamicMap(settlement['revealedHandsByPlayer']) ?? const {};
+    final flowers = _dynamicMap(round['flowerStates']) ?? const {};
+    final flowerTiles = _dynamicMap(round['flowerTilesByPlayer']) ?? const {};
+    final melds = _dynamicMap(round['meldsByPlayer']) ?? const {};
+    final awards =
+        _dynamicMap(settlement['flowerAwardCountByPlayer']) ?? const {};
+    final zeng = _dynamicMap(room['zengByPlayer']) ?? const {};
+    final roundNumber = _intValue(round['roundNumber']);
+    return ColoredBox(
+      color: const Color(0xff345f55),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '第 ${roundNumber ?? '—'} 局结算 · $outcome',
+                      style: const TextStyle(
+                        color: Color(0xffffe4a3),
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '累计分已同步至服务端',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.72),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 7),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: players.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 5),
+                  itemBuilder: (context, index) {
+                    final player = players[index];
+                    final playerId =
+                        player['id']?.toString() ??
+                        player['playerId']?.toString() ??
+                        '';
+                    final isSelf = playerId == snapshot.userId;
+                    final isWinner = winners.contains(playerId);
+                    final win = wins.cast<Map<String, dynamic>?>().firstWhere(
+                      (item) => item?['winnerId']?.toString() == playerId,
+                      orElse: () => null,
+                    );
+                    final flowerState = _dynamicMap(flowers[playerId]);
+                    final flowerCount =
+                        _intValue(flowerState?['countedFlowers']) ??
+                        _intValue(win?['flowerCount']) ??
+                        0;
+                    final hand = _stringValues(revealed[playerId]);
+                    final playerMelds = melds[playerId] is List
+                        ? List<Object?>.from(melds[playerId] as List)
+                        : const <Object?>[];
+                    return _SettlementPlayerRow(
+                      player: player,
+                      isSelf: isSelf,
+                      isWinner: isWinner,
+                      outcomeBadge: isWinner
+                          ? (settlement['outcome'] == 'self_draw' ? '自摸' : '胡')
+                          : null,
+                      delta: _intValue(deltas[playerId]) ?? 0,
+                      total: _intValue(scores[playerId]) ?? 0,
+                      zeng: _intValue(zeng[playerId]) ?? 0,
+                      flowerCount: flowerCount,
+                      flowerAwardCount: _intValue(awards[playerId]) ?? 0,
+                      tier: win?['tier']?.toString(),
+                      hand: hand,
+                      melds: playerMelds,
+                      flowers: _stringValues(flowerTiles[playerId]),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 7),
+              if (onNext != null)
+                FilledButton.icon(
+                  onPressed: onNext,
+                  icon: const Icon(Icons.play_arrow),
+                  label: Text(buttonLabel),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xffffb51b),
+                    foregroundColor: const Color(0xff543100),
+                    minimumSize: const Size(190, 44),
+                  ),
+                )
+              else
+                const Text(
+                  '等待房主继续游戏',
+                  style: TextStyle(color: Color(0xffd3e6df)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettlementPlayerRow extends StatelessWidget {
+  const _SettlementPlayerRow({
+    required this.player,
+    required this.isSelf,
+    required this.isWinner,
+    required this.outcomeBadge,
+    required this.delta,
+    required this.total,
+    required this.zeng,
+    required this.flowerCount,
+    required this.flowerAwardCount,
+    required this.tier,
+    required this.hand,
+    required this.melds,
+    required this.flowers,
+  });
+
+  final Map<String, dynamic> player;
+  final bool isSelf;
+  final bool isWinner;
+  final String? outcomeBadge;
+  final int delta;
+  final int total;
+  final int zeng;
+  final int flowerCount;
+  final int flowerAwardCount;
+  final String? tier;
+  final List<String> hand;
+  final List<Object?> melds;
+  final List<String> flowers;
+
+  @override
+  Widget build(BuildContext context) {
+    final meldTiles = melds
+        .map(_dynamicMap)
+        .whereType<Map<String, dynamic>>()
+        .expand((meld) => _stringValues(meld['tileIds']))
+        .toList(growable: false);
+    final tierLabel =
+        const {
+          'small': '小胡',
+          'big': '大胡',
+          'double_big': '大大胡',
+          'one_bamboo': '一索/封顶',
+        }[tier] ??
+        '';
+    return Semantics(
+      label: isSelf ? '自己结算行' : '${_playerName(player)}结算行',
+      child: Container(
+        height: 91,
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelf ? const Color(0xffffd2c2) : const Color(0xfffff4d8),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: isWinner ? const Color(0xffffa726) : const Color(0xffc8b886),
+            width: isWinner ? 1.7 : 0.8,
+          ),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 84,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: const Color(0xff0d6b55),
+                    child: Text('${(_intValue(player['seat']) ?? 0) + 1}'),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _playerName(player),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isSelf
+                          ? const Color(0xffba3e2d)
+                          : const Color(0xff583d22),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '花奖 $flowerAwardCount  增 $zeng  $flowerCount 朵花${tierLabel.isEmpty ? '' : '  $tierLabel'}',
+                    style: const TextStyle(
+                      color: Color(0xff7a4d24),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Expanded(
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        for (final tile in meldTiles) ...[
+                          _MiniMahjongTile(tileId: tile),
+                          const SizedBox(width: 1),
+                        ],
+                        if (meldTiles.isNotEmpty) const SizedBox(width: 5),
+                        for (final tile in hand) ...[
+                          _MiniMahjongTile(tileId: tile),
+                          const SizedBox(width: 1),
+                        ],
+                        if (flowers.isNotEmpty) const SizedBox(width: 7),
+                        for (final tile in flowers) ...[
+                          _MiniFlowerTile(tileId: tile),
+                          const SizedBox(width: 1),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 74,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      delta > 0 ? '+$delta' : '$delta',
+                      style: TextStyle(
+                        color: delta >= 0
+                            ? const Color(0xffc8491d)
+                            : const Color(0xff176aa4),
+                        fontSize: 25,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      '总计 $total',
+                      style: const TextStyle(
+                        color: Color(0xff765b42),
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 62,
+              child: Center(
+                child: Text(
+                  outcomeBadge ?? '',
+                  style: const TextStyle(
+                    color: Color(0xff9f5b05),
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MatchSettlementView extends StatelessWidget {
+  const _MatchSettlementView({
+    required this.room,
+    required this.round,
+    required this.players,
+    required this.scores,
+    required this.deltas,
+    required this.snapshot,
+  });
+
+  final Map<String, dynamic> room;
+  final Map<String, dynamic> round;
+  final List<Map<String, dynamic>> players;
+  final Map<String, dynamic> scores;
+  final Map<String, dynamic> deltas;
+  final ClientSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = _dynamicMap(room['matchStatsByPlayer']) ?? const {};
+    final topScore = players
+        .map((player) => _intValue(scores[player['id']?.toString()]) ?? 0)
+        .fold<int>(-0x7fffffff, (best, score) => score > best ? score : best);
+    return ColoredBox(
+      color: const Color(0xff426c63),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            children: [
+              Text(
+                '牌局结束 · ${room['totalRounds'] ?? '—'} 局',
+                style: const TextStyle(
+                  color: Color(0xffffe8b0),
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var index = 0; index < players.length; index++) ...[
+                      if (index > 0) const SizedBox(width: 9),
+                      Expanded(
+                        child: _MatchPlayerCard(
+                          player: players[index],
+                          isSelf:
+                              players[index]['id']?.toString() ==
+                              snapshot.userId,
+                          isWinner:
+                              (_intValue(
+                                    scores[players[index]['id']?.toString()],
+                                  ) ??
+                                  0) ==
+                              topScore,
+                          score:
+                              _intValue(
+                                scores[players[index]['id']?.toString()],
+                              ) ??
+                              0,
+                          lastDelta:
+                              _intValue(
+                                deltas[players[index]['id']?.toString()],
+                              ) ??
+                              0,
+                          stats:
+                              _dynamicMap(
+                                stats[players[index]['id']?.toString()],
+                              ) ??
+                              const {},
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '房间号：${room['id'] ?? room['roomId'] ?? '—'}  ·  总成绩以服务端为准',
+                style: const TextStyle(color: Color(0xffe5f0ec), fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MatchPlayerCard extends StatelessWidget {
+  const _MatchPlayerCard({
+    required this.player,
+    required this.isSelf,
+    required this.isWinner,
+    required this.score,
+    required this.lastDelta,
+    required this.stats,
+  });
+
+  final Map<String, dynamic> player;
+  final bool isSelf;
+  final bool isWinner;
+  final int score;
+  final int lastDelta;
+  final Map<String, dynamic> stats;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: isSelf ? const Color(0xffffd5c9) : const Color(0xfffff6df),
+      borderRadius: BorderRadius.circular(11),
+      border: Border.all(
+        color: isWinner ? const Color(0xffffad19) : const Color(0xffccb98a),
+        width: isWinner ? 2 : 1,
+      ),
+    ),
+    child: Column(
+      children: [
+        CircleAvatar(
+          radius: 26,
+          backgroundColor: const Color(0xff16705b),
+          child: Text('${(_intValue(player['seat']) ?? 0) + 1}'),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          _playerName(player),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Color(0xff9f3928),
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        if (isWinner)
+          const Text(
+            '大赢家',
+            style: TextStyle(
+              color: Color(0xffd67a00),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        const Divider(),
+        _MatchStatLine(
+          label: '自摸次数',
+          value: _intValue(stats['selfDrawCount']) ?? 0,
+        ),
+        _MatchStatLine(
+          label: '接炮次数',
+          value: _intValue(stats['discardWinCount']) ?? 0,
+        ),
+        _MatchStatLine(
+          label: '放炮次数',
+          value: _intValue(stats['dealInCount']) ?? 0,
+        ),
+        _MatchStatLine(
+          label: '花奖个数',
+          value: _intValue(stats['flowerAwardCount']) ?? 0,
+        ),
+        const Spacer(),
+        Text(
+          '末局 ${lastDelta > 0 ? '+$lastDelta' : '$lastDelta'}',
+          style: const TextStyle(color: Color(0xff80674e), fontSize: 11),
+        ),
+        const Text(
+          '总成绩',
+          style: TextStyle(
+            color: Color(0xff8a4f20),
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Text(
+          score > 0 ? '+$score' : '$score',
+          style: TextStyle(
+            color: score >= 0
+                ? const Color(0xffd04a1a)
+                : const Color(0xff176aa4),
+            fontSize: 32,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MatchStatLine extends StatelessWidget {
+  const _MatchStatLine({required this.label, required this.value});
+
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(color: Color(0xff765333), fontSize: 12),
+          ),
+        ),
+        Text(
+          '$value',
+          style: const TextStyle(
+            color: Color(0xff765333),
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SettlementTransferCard extends StatelessWidget {
@@ -3038,6 +3776,94 @@ String _mahjongLogicalFace(String tileId) {
     r'^(east|south|west|north|red_dragon|green_dragon|white_dragon|red_flower|black_flower)-\d+$',
   ).firstMatch(tileId);
   return honor?.group(1) ?? tileId;
+}
+
+List<String> _susongWaitingFaces(List<String> hand, int meldCount) {
+  final faces = hand
+      .map(_mahjongLogicalFace)
+      .where(
+        (face) => !const {
+          'red_dragon',
+          'green_dragon',
+          'white_dragon',
+          'red_flower',
+          'black_flower',
+        }.contains(face),
+      )
+      .toList(growable: false);
+  if (meldCount < 0 ||
+      meldCount > 4 ||
+      faces.length != (4 - meldCount) * 3 + 1) {
+    return const [];
+  }
+  final candidates = <String>[
+    for (final family in const ['characters', 'bamboo', 'dots'])
+      for (var value = 1; value <= 9; value++) '$family-$value',
+    'east',
+    'south',
+    'west',
+    'north',
+  ];
+  final currentCounts = <String, int>{};
+  for (final face in faces) {
+    currentCounts[face] = (currentCounts[face] ?? 0) + 1;
+  }
+  return candidates
+      .where((candidate) {
+        if ((currentCounts[candidate] ?? 0) >= 4) return false;
+        return _isStandardWinningFaces([...faces, candidate], meldCount);
+      })
+      .toList(growable: false);
+}
+
+bool _isStandardWinningFaces(List<String> faces, int meldCount) {
+  if (faces.length != (4 - meldCount) * 3 + 2) return false;
+  final counts = <String, int>{};
+  for (final face in faces) {
+    counts[face] = (counts[face] ?? 0) + 1;
+  }
+  if (meldCount == 0 &&
+      counts.length == 7 &&
+      counts.values.every((count) => count == 2)) {
+    return true;
+  }
+  for (final pair in counts.keys.toList(growable: false)) {
+    if ((counts[pair] ?? 0) < 2) continue;
+    final remaining = Map<String, int>.from(counts);
+    remaining[pair] = remaining[pair]! - 2;
+    if (_consumeWinningMeldFaces(remaining)) return true;
+  }
+  return false;
+}
+
+bool _consumeWinningMeldFaces(Map<String, int> counts) {
+  String? face;
+  for (final candidate in counts.keys) {
+    if ((counts[candidate] ?? 0) > 0) {
+      face = candidate;
+      break;
+    }
+  }
+  if (face == null) return true;
+  if ((counts[face] ?? 0) >= 3) {
+    final triplet = Map<String, int>.from(counts);
+    triplet[face] = triplet[face]! - 3;
+    if (_consumeWinningMeldFaces(triplet)) return true;
+  }
+  final suited = RegExp(r'^(characters|bamboo|dots)-(\d)$').firstMatch(face);
+  final value = int.tryParse(suited?.group(2) ?? '');
+  if (suited != null && value != null && value <= 7) {
+    final next = '${suited.group(1)}-${value + 1}';
+    final after = '${suited.group(1)}-${value + 2}';
+    if ((counts[next] ?? 0) > 0 && (counts[after] ?? 0) > 0) {
+      final sequence = Map<String, int>.from(counts);
+      sequence[face] = sequence[face]! - 1;
+      sequence[next] = sequence[next]! - 1;
+      sequence[after] = sequence[after]! - 1;
+      if (_consumeWinningMeldFaces(sequence)) return true;
+    }
+  }
+  return false;
 }
 
 int _compareMahjongTileIds(String left, String right) {

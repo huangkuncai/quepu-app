@@ -180,6 +180,7 @@ class FakeTransport implements ProtocolTransport {
             'players': _botPlayers(),
             'connectedCount': 3,
             'readyCount': 3,
+            'matchStatsByPlayer': _emptyBotMatchStats(),
           };
         }
         _history.clear();
@@ -815,32 +816,89 @@ class FakeTransport implements ProtocolTransport {
     )).contains('self_draw')) {
       return false;
     }
-    const deltas = {
-      'poc-user': 15,
-      'bot-east': -5,
-      'bot-north': -5,
-      'bot-west': -5,
-    };
+    final config = Map<String, dynamic>.from(
+      (_room['ruleConfig'] as Map?) ?? const <String, dynamic>{},
+    );
+    final tiers = List<int>.from(
+      ((config['scoreTiers'] as List?) ?? const [1, 2, 3, 4]).map(
+        (value) => (value as num).toInt(),
+      ),
+    );
+    final zengUnit = (config['zeng'] as num?)?.toInt() ?? 1;
+    final zengByPlayer = Map<String, dynamic>.from(
+      (_room['zengByPlayer'] as Map?) ?? const <String, dynamic>{},
+    );
+    final flowerCount =
+        (((round['flowerStates'] as Map?)?['poc-user']
+                    as Map?)?['countedFlowers']
+                as num?)
+            ?.toInt() ??
+        0;
+    final tierIndex = flowerCount == 0
+        ? 3
+        : flowerCount <= 4
+        ? 0
+        : flowerCount <= 9
+        ? 1
+        : 2;
+    final tier = const ['small', 'big', 'double_big', 'one_bamboo'][tierIndex];
+    final tierValue = tiers[tierIndex.clamp(0, tiers.length - 1)];
+    final winnerZeng = (zengByPlayer['poc-user'] as num?)?.toInt() ?? 0;
     const scoreOrderVersion = 'zeng-piao-flower-sanxi-v1';
-    final transfers = ['bot-east', 'bot-north', 'bot-west']
-        .map(
-          (payerId) => {
-            'kind': 'win',
-            'from': payerId,
-            'to': 'poc-user',
-            'amount': 5,
-            'tier': 'small',
-            'scoreOrderVersion': scoreOrderVersion,
-            'trace': const [
-              {'stage': 'winner_zeng', 'value': 0},
-              {'stage': 'payer_zeng', 'value': 0},
-              {'stage': 'piao', 'status': 'not_piao', 'value': 0},
-              {'stage': 'flower_tier', 'value': 5},
-              {'stage': 'sanxi', 'multiplier': 1, 'value': 5},
-            ],
+    final deltas = <String, int>{
+      'poc-user': 0,
+      'bot-east': 0,
+      'bot-north': 0,
+      'bot-west': 0,
+    };
+    final transfers = ['bot-east', 'bot-north', 'bot-west'].map((payerId) {
+      final payerZeng = (zengByPlayer[payerId] as num?)?.toInt() ?? 0;
+      final amount = tierValue + winnerZeng * zengUnit + payerZeng * zengUnit;
+      deltas['poc-user'] = deltas['poc-user']! + amount;
+      deltas[payerId] = -amount;
+      return {
+        'kind': 'win',
+        'from': payerId,
+        'to': 'poc-user',
+        'amount': amount,
+        'tier': tier,
+        'scoreOrderVersion': scoreOrderVersion,
+        'trace': [
+          {
+            'stage': 'winner_zeng',
+            'count': winnerZeng,
+            'unit': zengUnit,
+            'value': winnerZeng * zengUnit,
           },
-        )
-        .toList();
+          {
+            'stage': 'payer_zeng',
+            'count': payerZeng,
+            'unit': zengUnit,
+            'value': payerZeng * zengUnit,
+          },
+          {
+            'stage': 'piao',
+            'status': 'not_piao',
+            'cappedByNoFlowerSelfDraw': false,
+            'cappedByNoFlowerDiscarder': false,
+            'value': 0,
+          },
+          {
+            'stage': 'flower_tier',
+            'tier': tier,
+            'value': tierValue,
+            'subtotal': amount,
+          },
+          {
+            'stage': 'sanxi',
+            'regularShare': 1,
+            'sanxiShare': 0,
+            'multiplier': 1,
+            'value': amount,
+          },
+        ],
+      };
+    }).toList();
     final previousScores = Map<String, dynamic>.from(
       (_room['scores'] as Map?) ?? const <String, dynamic>{},
     );
@@ -848,11 +906,26 @@ class FakeTransport implements ProtocolTransport {
       for (final entry in deltas.entries)
         entry.key: (previousScores[entry.key] as int? ?? 0) + entry.value,
     };
+    final matchStats = Map<String, dynamic>.from(
+      (_room['matchStatsByPlayer'] as Map?) ?? _emptyBotMatchStats(),
+    );
+    final winnerStats = Map<String, dynamic>.from(
+      (matchStats['poc-user'] as Map?) ?? const <String, dynamic>{},
+    );
+    matchStats['poc-user'] = {
+      ...winnerStats,
+      'selfDrawCount': (winnerStats['selfDrawCount'] as int? ?? 0) + 1,
+    };
+    final revealedHands = _botDemoSettlementHands(
+      round['roundNumber'] as int? ?? 1,
+      List<String>.from((round['privateHand'] as List?) ?? const <String>[]),
+    );
     _room = {
       ..._room,
       'status': 'settling',
       'turnPlayerId': null,
       'scores': cumulativeScores,
+      'matchStatsByPlayer': matchStats,
       'round': {
         ...round,
         'turnPhase': null,
@@ -861,20 +934,26 @@ class FakeTransport implements ProtocolTransport {
           'outcome': 'self_draw',
           'winnerIds': ['poc-user'],
           'deltaByPlayer': deltas,
+          'scoreAuthority': 'server',
           'scoreOrderVersion': scoreOrderVersion,
+          'flowerAwardCountByPlayer': {
+            'poc-user': 0,
+            'bot-east': 0,
+            'bot-north': 0,
+            'bot-west': 0,
+          },
+          'revealedHandsByPlayer': revealedHands,
           'wins': [
             {
               'winnerId': 'poc-user',
-              'tier': 'small',
-              'flowerCount':
-                  ((round['flowerStates'] as Map?)?['poc-user']
-                      as Map?)?['countedFlowers'] ??
-                  0,
+              'tier': tier,
+              'flowerCount': flowerCount,
               'piao': false,
               'gangWinCount': 0,
             },
           ],
           'transfers': transfers,
+          'sanxiPairs': <List<String>>[],
           'releasedSanxiPairs': <List<String>>[],
         },
       },
@@ -1058,6 +1137,37 @@ class FakeTransport implements ProtocolTransport {
       'connected': true,
     },
   ];
+
+  static Map<String, dynamic> _emptyBotMatchStats() => {
+    for (final playerId in const [
+      'poc-user',
+      'bot-east',
+      'bot-north',
+      'bot-west',
+    ])
+      playerId: {
+        'selfDrawCount': 0,
+        'discardWinCount': 0,
+        'dealInCount': 0,
+        'flowerAwardCount': 0,
+      },
+  };
+
+  static Map<String, dynamic> _botDemoSettlementHands(
+    int roundNumber,
+    List<String> localHand,
+  ) {
+    List<String> hand(int offset) => List<String>.from(
+      _botDemoWinningHands[(roundNumber - 1 + offset) %
+          _botDemoWinningHands.length],
+    );
+    return {
+      'poc-user': localHand,
+      'bot-east': hand(1),
+      'bot-north': hand(2),
+      'bot-west': hand(3),
+    };
+  }
 
   static Map<String, dynamic> _botDemoPreStartRound({
     int roundNumber = 1,

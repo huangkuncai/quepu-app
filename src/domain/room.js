@@ -1396,6 +1396,11 @@ export class Room {
           meldsByPlayer: this.currentRound.meldsByPlayer
         })
       });
+      settlement = {
+        ...settlement,
+        revealedHandsByPlayer: clone(this._privateRoundState?.handsByPlayer ?? {}),
+        revealedRemainingWall: clone(this._privateRoundState?.remainingWall ?? [])
+      };
     } catch (cause) {
       throw new AppError('INVALID_ACTION', { cause });
     }
@@ -1866,15 +1871,19 @@ export class Room {
 
   _settleSusongWallDraw(command) {
     const players = this._orderedPlayers().map(player => player.id);
-    const settlement = scoreSusongRound({
+    const settlement = {
+      ...scoreSusongRound({
       config: this.ruleSnapshot.config,
       playerIds: players,
       outcome: 'draw',
       sanxiPairs: deriveSusongSanxiPairs({
         playerIds: players,
-        meldsByPlayer: this.currentRound.meldsByPlayer
-      })
-    });
+          meldsByPlayer: this.currentRound.meldsByPlayer
+        })
+      }),
+      revealedHandsByPlayer: clone(this._privateRoundState?.handsByPlayer ?? {}),
+      revealedRemainingWall: clone(this._privateRoundState?.remainingWall ?? [])
+    };
     this._setStatus(ROOM_STATUS.SETTLING);
     this.currentRound.status = ROOM_STATUS.SETTLING;
     this.currentRound.settlement = clone(settlement);

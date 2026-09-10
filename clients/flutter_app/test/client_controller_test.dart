@@ -258,7 +258,18 @@ void main() {
     expect(settlement['outcome'], 'self_draw');
     expect(settlement['winnerIds'], ['poc-user']);
     expect(settlement['transfers'], hasLength(3));
-    expect((settlement['deltaByPlayer'] as Map)['poc-user'], 15);
+    expect((settlement['deltaByPlayer'] as Map)['poc-user'], 18);
+    expect(
+      (settlement['transfers'] as List)
+          .map((transfer) => (transfer as Map)['amount'])
+          .toList(),
+      [6, 5, 7],
+    );
+    final firstTrace =
+        ((settlement['transfers'] as List).first as Map)['trace'] as List;
+    expect((firstTrace[0] as Map)['count'], 2);
+    expect((firstTrace[1] as Map)['count'], 2);
+    expect(settlement['scoreAuthority'], 'server');
 
     await client.nextRound('demo-room');
     await Future<void>.delayed(const Duration(milliseconds: 30));
@@ -268,7 +279,7 @@ void main() {
     expect(nextRound['roundNumber'], 2);
     expect(nextRound['openingStage'], 'choose_zeng');
     expect(nextRound['settlement'], isNull);
-    expect((nextRoom['scores'] as Map)['poc-user'], 15);
+    expect((nextRoom['scores'] as Map)['poc-user'], 18);
 
     await transport.chooseBotDemoZeng(1);
     await Future<void>.delayed(const Duration(milliseconds: 30));
