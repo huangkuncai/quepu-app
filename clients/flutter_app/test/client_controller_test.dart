@@ -158,6 +158,7 @@ void main() {
         5,
       );
       expect((openedRound['wall'] as Map)['wallRemaining'], 78);
+      expect(openedRound['availableActions'], contains('self_draw'));
 
       await client.action(
         'demo-room',
@@ -227,6 +228,37 @@ void main() {
       await client.dispose();
     },
   );
+
+  test('local bot demo offers and settles a valid self draw', () async {
+    final transport = FakeTransport()..enableBotDemo();
+    final client = ClientSessionController(
+      transport: transport,
+      deviceId: 'bot-demo-win-device',
+      platform: 'android',
+    );
+
+    await client.login('13800000000', '000000');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await client.createRoom();
+    await client.joinRoom('demo-room');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await transport.chooseBotDemoZeng(2);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await client.choosePiao('demo-room', false);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    await client.action('demo-room', 'self_draw');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final room = client.snapshot.roomSnapshot!;
+    final settlement = (room['round'] as Map)['settlement'] as Map;
+    expect(room['status'], 'settling');
+    expect(settlement['outcome'], 'self_draw');
+    expect(settlement['winnerIds'], ['poc-user']);
+    expect(settlement['transfers'], hasLength(3));
+    expect((settlement['deltaByPlayer'] as Map)['poc-user'], 15);
+
+    await client.dispose();
+  });
 
   test(
     'fresh controller adopts room id from an authoritative room sync',

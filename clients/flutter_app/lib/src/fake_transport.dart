@@ -315,6 +315,9 @@ class FakeTransport implements ProtocolTransport {
           final action = payload['action']?.toString();
           if (action == 'discard' && payload['args'] is Map) {
             _advanceBotDemo((payload['args'] as Map)['tileId']?.toString());
+          } else if (action == 'self_draw' && _settleBotDemoSelfDraw()) {
+            // The deterministic local demo uses the same server-shaped
+            // settlement envelope as an authoritative room.
           } else if (!_resolveBotDemoReaction(action)) {
             _emit(_error('INVALID_ACTION', '当前动作不可用', requestId, commandId));
             return;
@@ -427,6 +430,40 @@ class FakeTransport implements ProtocolTransport {
       'black_flower-3',
       'green_dragon',
     ];
+    final melds = Map<String, dynamic>.from(
+      (round['meldsByPlayer'] as Map?) ?? const <String, dynamic>{},
+    );
+    melds.putIfAbsent(
+      'bot-east',
+      () => [
+        {
+          'action': 'peng',
+          'tileIds': ['dots-3-1', 'dots-3-2', 'dots-3-3'],
+        },
+      ],
+    );
+    melds.putIfAbsent(
+      'bot-north',
+      () => [
+        {
+          'action': 'chi',
+          'tileIds': ['bamboo-3-1', 'bamboo-4-1', 'bamboo-5-1'],
+        },
+      ],
+    );
+    melds.putIfAbsent(
+      'bot-west',
+      () => [
+        {
+          'action': 'concealed_kong',
+          'tileIds': ['east-1', 'east-2', 'east-3', 'east-4'],
+        },
+      ],
+    );
+    final handCounts = Map<String, dynamic>.from(
+      (wall['handCountsByPlayer'] as Map?) ?? const <String, dynamic>{},
+    );
+    handCounts.addAll({'bot-east': 10, 'bot-north': 10, 'bot-west': 10});
     _room = {
       ..._room,
       'turnPlayerId': 'poc-user',
@@ -443,6 +480,7 @@ class FakeTransport implements ProtocolTransport {
         'availableReactions': reactions,
         'flowerStates': flowerStates,
         'flowerTilesByPlayer': flowerTiles,
+        'meldsByPlayer': melds,
         'reactionOptions': isChiWindow
             ? {
                 'chi': [
@@ -459,6 +497,7 @@ class FakeTransport implements ProtocolTransport {
             : <String, dynamic>{},
         'wall': {
           ...wall,
+          'handCountsByPlayer': handCounts,
           'wallRemaining': ((wall['wallRemaining'] as int? ?? 83) - 3).clamp(
             14,
             144,
@@ -533,7 +572,7 @@ class FakeTransport implements ProtocolTransport {
           'flowerTilesByPlayer': flowerTiles,
           'turnPhase': 'discard',
           'pendingReaction': null,
-          'availableActions': ['discard'],
+          'availableActions': _botDemoTurnActions(hand, melds),
           'availableReactions': <String>[],
           'reactionOptions': <String, dynamic>{},
           'wall': {...wall, 'wallRemaining': wallRemaining.clamp(14, 144)},
@@ -571,6 +610,7 @@ class FakeTransport implements ProtocolTransport {
         'tileIds': [...consumed, discarded],
       },
     ];
+    final localMelds = (melds['poc-user'] as List?)?.length ?? 0;
     _room = {
       ..._room,
       'round': {
@@ -580,7 +620,7 @@ class FakeTransport implements ProtocolTransport {
         'meldsByPlayer': melds,
         'turnPhase': 'discard',
         'pendingReaction': null,
-        'availableActions': ['discard'],
+        'availableActions': _botDemoTurnActions(hand, melds, localMelds),
         'availableReactions': <String>[],
         'reactionOptions': <String, dynamic>{},
         'wall': {...wall, 'wallRemaining': wallRemaining.clamp(14, 144)},
@@ -656,7 +696,7 @@ class FakeTransport implements ProtocolTransport {
         'openingStage': null,
         'turnPhase': 'discard',
         'privateHand': hand,
-        'availableActions': ['discard'],
+        'availableActions': _botDemoTurnActions(hand, round['meldsByPlayer']),
         'flowerStates': flowerStates,
         'flowerTilesByPlayer': flowerTiles,
         'wall': {...wall, 'wallRemaining': remaining.clamp(14, 144)},
@@ -709,6 +749,75 @@ class FakeTransport implements ProtocolTransport {
         'availableActions': nextPending == 0 ? ['discard'] : <String>[],
         'flowerStates': flowerStates,
         'flowerTilesByPlayer': flowerTiles,
+      },
+    };
+    return true;
+  }
+
+  bool _settleBotDemoSelfDraw() {
+    final round = Map<String, dynamic>.from(
+      (_room['round'] as Map?) ?? const <String, dynamic>{},
+    );
+    if (!(List<String>.from(
+      (round['availableActions'] as List?) ?? const <String>[],
+    )).contains('self_draw')) {
+      return false;
+    }
+    const deltas = {
+      'poc-user': 15,
+      'bot-east': -5,
+      'bot-north': -5,
+      'bot-west': -5,
+    };
+    const scoreOrderVersion = 'zeng-piao-flower-sanxi-v1';
+    final transfers = ['bot-east', 'bot-north', 'bot-west']
+        .map(
+          (payerId) => {
+            'kind': 'win',
+            'from': payerId,
+            'to': 'poc-user',
+            'amount': 5,
+            'tier': 'small',
+            'scoreOrderVersion': scoreOrderVersion,
+            'trace': const [
+              {'stage': 'winner_zeng', 'value': 0},
+              {'stage': 'payer_zeng', 'value': 0},
+              {'stage': 'piao', 'status': 'not_piao', 'value': 0},
+              {'stage': 'flower_tier', 'value': 5},
+              {'stage': 'sanxi', 'multiplier': 1, 'value': 5},
+            ],
+          },
+        )
+        .toList();
+    _room = {
+      ..._room,
+      'status': 'settling',
+      'turnPlayerId': null,
+      'scores': deltas,
+      'round': {
+        ...round,
+        'turnPhase': null,
+        'availableActions': <String>[],
+        'settlement': {
+          'outcome': 'self_draw',
+          'winnerIds': ['poc-user'],
+          'deltaByPlayer': deltas,
+          'scoreOrderVersion': scoreOrderVersion,
+          'wins': [
+            {
+              'winnerId': 'poc-user',
+              'tier': 'small',
+              'flowerCount':
+                  ((round['flowerStates'] as Map?)?['poc-user']
+                      as Map?)?['countedFlowers'] ??
+                  0,
+              'piao': false,
+              'gangWinCount': 0,
+            },
+          ],
+          'transfers': transfers,
+          'releasedSanxiPairs': <List<String>>[],
+        },
       },
     };
     return true;
@@ -910,7 +1019,15 @@ class FakeTransport implements ProtocolTransport {
         .subtract(const Duration(seconds: 1))
         .toUtc()
         .toIso8601String(),
-    'wall': {'wallRemaining': 83},
+    'wall': {
+      'wallRemaining': 83,
+      'handCountsByPlayer': {
+        'poc-user': 14,
+        'bot-east': 13,
+        'bot-north': 13,
+        'bot-west': 13,
+      },
+    },
     'discardsByPlayer': <String, dynamic>{
       'poc-user': <String>[],
       'bot-east': <String>[],
@@ -944,7 +1061,7 @@ class FakeTransport implements ProtocolTransport {
       'characters-6-1',
       'characters-7-1',
       'bamboo-2-1',
-      'bamboo-3-1',
+      'bamboo-2-2',
       'dots-6-1',
       'red_dragon-1',
       'green_dragon-1',
@@ -982,4 +1099,66 @@ class FakeTransport implements ProtocolTransport {
       RegExp(r'^(red|black)_flower-[1-4]$').hasMatch(tileId)
       ? tileId
       : tileId.replaceFirst(RegExp(r'-\d+$'), '');
+
+  static List<String> _botDemoTurnActions(
+    List<String> hand,
+    Object? rawMelds, [
+    int? knownMeldCount,
+  ]) {
+    final melds = rawMelds is Map ? rawMelds['poc-user'] : null;
+    final meldCount = knownMeldCount ?? (melds is List ? melds.length : 0);
+    return ['discard', if (_isBotDemoWinningHand(hand, meldCount)) 'self_draw'];
+  }
+
+  static bool _isBotDemoWinningHand(List<String> hand, int meldCount) {
+    final faces = hand
+        .where((tile) => !_isBotDemoFlower(tile))
+        .map((tile) => tile.replaceFirst(RegExp(r'-\d+$'), ''))
+        .toList(growable: false);
+    final required = (4 - meldCount) * 3 + 2;
+    if (faces.length != required) return false;
+    final counts = <String, int>{};
+    for (final face in faces) {
+      counts[face] = (counts[face] ?? 0) + 1;
+    }
+    if (meldCount == 0 &&
+        counts.length == 7 &&
+        counts.values.every((count) => count == 2)) {
+      return true;
+    }
+    for (final pair in counts.keys.toList(growable: false)) {
+      if ((counts[pair] ?? 0) < 2) continue;
+      final remaining = Map<String, int>.from(counts);
+      remaining[pair] = remaining[pair]! - 2;
+      if (_consumeBotDemoMelds(remaining)) return true;
+    }
+    return false;
+  }
+
+  static bool _consumeBotDemoMelds(Map<String, int> counts) {
+    final face = counts.keys.cast<String?>().firstWhere(
+      (candidate) => (counts[candidate] ?? 0) > 0,
+      orElse: () => null,
+    );
+    if (face == null) return true;
+    if ((counts[face] ?? 0) >= 3) {
+      final triplet = Map<String, int>.from(counts);
+      triplet[face] = triplet[face]! - 3;
+      if (_consumeBotDemoMelds(triplet)) return true;
+    }
+    final suited = RegExp(r'^(characters|bamboo|dots)-(\d)$').firstMatch(face);
+    final value = int.tryParse(suited?.group(2) ?? '');
+    if (suited != null && value != null && value <= 7) {
+      final next = '${suited.group(1)}-${value + 1}';
+      final after = '${suited.group(1)}-${value + 2}';
+      if ((counts[next] ?? 0) > 0 && (counts[after] ?? 0) > 0) {
+        final sequence = Map<String, int>.from(counts);
+        sequence[face] = sequence[face]! - 1;
+        sequence[next] = sequence[next]! - 1;
+        sequence[after] = sequence[after]! - 1;
+        if (_consumeBotDemoMelds(sequence)) return true;
+      }
+    }
+    return false;
+  }
 }

@@ -1586,21 +1586,54 @@ class _MahjongTableSurface extends StatelessWidget {
                 ),
               ),
               Positioned(
-                top: badgeHeight + 9,
-                left: width * 0.29,
-                right: width * 0.29,
-                height: compact ? 53 : 62,
+                top: badgeHeight + 42,
+                left: width * 0.26,
+                right: width * 0.26,
+                height: compact ? 42 : 48,
                 child: _PublicTilesLane(player: _seat(2), round: round),
               ),
               Positioned(
-                left: badgeWidth + 13,
+                top: badgeHeight + 4,
+                left: width * 0.31,
+                right: width * 0.31,
+                height: 32,
+                child: _OpponentHandLane(
+                  player: _seat(2),
+                  round: round,
+                  vertical: false,
+                ),
+              ),
+              Positioned(
+                left: badgeWidth + 5,
+                top: height * 0.29,
+                width: 28,
+                height: height * 0.35,
+                child: _OpponentHandLane(
+                  player: _seat(3),
+                  round: round,
+                  vertical: true,
+                ),
+              ),
+              Positioned(
+                right: badgeWidth + 5,
+                top: height * 0.29,
+                width: 28,
+                height: height * 0.35,
+                child: _OpponentHandLane(
+                  player: _seat(1),
+                  round: round,
+                  vertical: true,
+                ),
+              ),
+              Positioned(
+                left: badgeWidth + 39,
                 top: sideTop,
                 bottom: sideBottom,
                 width: sideLaneWidth,
                 child: _PublicTilesLane(player: _seat(3), round: round),
               ),
               Positioned(
-                right: badgeWidth + 13,
+                right: badgeWidth + 39,
                 top: sideTop,
                 bottom: sideBottom,
                 width: sideLaneWidth,
@@ -1614,30 +1647,30 @@ class _MahjongTableSurface extends StatelessWidget {
                 child: _PublicTilesLane(player: _seat(0), round: round),
               ),
               Positioned(
-                left: width * 0.36,
-                right: width * 0.36,
-                top: badgeHeight + 76,
+                left: width * 0.39,
+                right: width * 0.39,
+                top: badgeHeight + 96,
                 height: compact ? 54 : 64,
                 child: _DiscardRiver(player: _seat(2), round: round),
               ),
               Positioned(
-                left: badgeWidth + sideLaneWidth + 22,
-                top: height * 0.43,
-                width: width * 0.19,
-                height: compact ? 58 : 72,
+                left: badgeWidth + sideLaneWidth + 54,
+                top: height * 0.37,
+                width: 96,
+                height: compact ? 92 : 112,
                 child: _DiscardRiver(player: _seat(3), round: round),
               ),
               Positioned(
-                right: badgeWidth + sideLaneWidth + 22,
-                top: height * 0.43,
-                width: width * 0.19,
-                height: compact ? 58 : 72,
+                right: badgeWidth + sideLaneWidth + 54,
+                top: height * 0.37,
+                width: 96,
+                height: compact ? 92 : 112,
                 child: _DiscardRiver(player: _seat(1), round: round),
               ),
               Positioned(
-                left: width * 0.36,
-                right: width * 0.36,
-                bottom: handHeight + 62,
+                left: width * 0.39,
+                right: width * 0.39,
+                bottom: handHeight + 66,
                 height: compact ? 54 : 64,
                 child: _DiscardRiver(player: _seat(0), round: round),
               ),
@@ -1762,17 +1795,6 @@ class _PublicTilesLane extends StatelessWidget {
         ? List<Object?>.from(melds![playerId] as List)
         : const <Object?>[];
     final flowerTileValues = _stringValues(flowerTiles?[playerId]);
-    final meldLabel = meldValues
-        .map(_dynamicMap)
-        .whereType<Map<String, dynamic>>()
-        .map((meld) {
-          final action = _gameActionLabel(meld['action']?.toString() ?? '副露');
-          final tiles = _stringValues(meld['tileIds'])
-              .map(_mahjongFaceLabel)
-              .join('');
-          return '$action$tiles';
-        })
-        .join(' / ');
     return ClipRect(
       child: Align(
         alignment: Alignment.topLeft,
@@ -1784,36 +1806,27 @@ class _PublicTilesLane extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
             child: SingleChildScrollView(
-              child: Column(
+              scrollDirection: Axis.horizontal,
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${_playerName(player!)} · 花 $flowerCount',
+                    '${_playerName(player!)}  花$flowerCount',
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xffffe4a3),
                       fontWeight: FontWeight.w700,
                       fontSize: 10,
                     ),
                   ),
-                  if (meldLabel.isNotEmpty)
-                    Text(
-                      '副露 $meldLabel',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 9),
-                    ),
-                  if (flowerTileValues.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Wrap(
-                      spacing: 2,
-                      runSpacing: 2,
-                      children: flowerTileValues
-                          .map((tileId) => _MiniMahjongTile(tileId: tileId))
-                          .toList(growable: false),
-                    ),
+                  const SizedBox(width: 5),
+                  for (final raw in meldValues) ...[
+                    _PublicMeld(meld: _dynamicMap(raw) ?? const {}),
+                    const SizedBox(width: 5),
+                  ],
+                  for (final tileId in flowerTileValues) ...[
+                    _MiniMahjongTile(tileId: tileId),
+                    const SizedBox(width: 2),
                   ],
                 ],
               ),
@@ -1821,6 +1834,82 @@ class _PublicTilesLane extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PublicMeld extends StatelessWidget {
+  const _PublicMeld({required this.meld});
+
+  final Map<String, dynamic> meld;
+
+  @override
+  Widget build(BuildContext context) {
+    final action = meld['action']?.toString() ?? '';
+    final tiles = _stringValues(meld['tileIds']);
+    final concealed = action == 'concealed_kong';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _gameActionLabel(action),
+          style: const TextStyle(
+            color: Color(0xff9ee3cc),
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 2),
+        for (var index = 0; index < tiles.length; index += 1) ...[
+          if (concealed && index == 1)
+            const _MiniMahjongBack()
+          else
+            _MiniMahjongTile(tileId: tiles[index]),
+          const SizedBox(width: 1),
+        ],
+      ],
+    );
+  }
+}
+
+class _OpponentHandLane extends StatelessWidget {
+  const _OpponentHandLane({
+    required this.player,
+    required this.round,
+    required this.vertical,
+  });
+
+  final Map<String, dynamic>? player;
+  final Map<String, dynamic>? round;
+  final bool vertical;
+
+  @override
+  Widget build(BuildContext context) {
+    final playerId = player?['id']?.toString();
+    if (playerId == null) return const SizedBox.shrink();
+    final wall = _dynamicMap(round?['wall']);
+    final counts = _dynamicMap(wall?['handCountsByPlayer']);
+    final count = (_intValue(counts?[playerId]) ?? 13).clamp(0, 14);
+    if (count == 0) return const SizedBox.shrink();
+    final tiles = List<Widget>.generate(
+      count,
+      (_) => Padding(
+        padding: EdgeInsets.only(
+          right: vertical ? 0 : 1,
+          bottom: vertical ? 1 : 0,
+        ),
+        child: RotatedBox(
+          quarterTurns: vertical ? 1 : 0,
+          child: const _MiniMahjongBack(),
+        ),
+      ),
+    );
+    return FittedBox(
+      alignment: Alignment.center,
+      fit: BoxFit.contain,
+      child: vertical
+          ? Column(mainAxisSize: MainAxisSize.min, children: tiles)
+          : Row(mainAxisSize: MainAxisSize.min, children: tiles),
     );
   }
 }
@@ -1879,6 +1968,23 @@ class _MiniMahjongTile extends StatelessWidget {
       label: _mahjongFaceLabel(tileId),
       excludeSemantics: true,
       child: _MahjongFaceArt(tileId: tileId, compact: true),
+    ),
+  );
+}
+
+class _MiniMahjongBack extends StatelessWidget {
+  const _MiniMahjongBack();
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '暗牌',
+    image: true,
+    child: Image.asset(
+      'assets/mahjong/apk_tiles/back.png',
+      width: 24,
+      height: 30,
+      fit: BoxFit.fill,
+      filterQuality: FilterQuality.high,
     ),
   );
 }
