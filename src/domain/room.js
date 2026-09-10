@@ -2033,6 +2033,13 @@ export class Room {
       && this.currentRound.flowerStates[playerId]?.status !== 'piao') {
       throw new AppError('INVALID_ACTION');
     }
+    const mustDiscardFlower = this.currentRound.flowerStates[playerId]?.status === 'piao'
+      && hand.some(isSusongReplacementFlower);
+    if (mustDiscardFlower && !isSusongReplacementFlower(tileId)) {
+      throw new AppError('INVALID_ACTION', {
+        details: [{ path: 'args.tileId', message: 'piao player must discard one flower before any ordinary tile' }]
+      });
+    }
     const latestOwnBoundary = [...privateState.turnHistory].reverse().find(operation =>
       operation?.playerId === playerId && ['chi', 'draw', 'discard'].includes(operation.action));
     if (latestOwnBoundary?.action === 'chi'
@@ -3614,7 +3621,7 @@ function normalizePrivateRoundState(input, players, round) {
       } else if (operation.action === 'discard') {
         const discarded = String(operation.tileId);
         const handIndex = replayHands[operation.playerId].indexOf(discarded);
-        if (handIndex < 0 || isSusongReplacementFlower(discarded)) {
+        if (handIndex < 0) {
           throw new TypeError('turn history discards an unavailable tile');
         }
         replayHands[operation.playerId].splice(handIndex, 1);

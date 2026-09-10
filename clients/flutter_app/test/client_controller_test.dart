@@ -327,9 +327,18 @@ void main() {
       0,
     );
     expect((piaoRound['privateHand'] as List), hasLength(14));
-    final flowerTile = (piaoRound['privateHand'] as List)
+    final piaoHand = (piaoRound['privateHand'] as List)
         .map((tile) => tile.toString())
-        .firstWhere(_isReplacementFlower);
+        .toList();
+    final flowerTile = piaoHand.firstWhere(_isReplacementFlower);
+    final ordinaryTile = piaoHand.firstWhere(
+      (tile) => !_isReplacementFlower(tile),
+    );
+    await client.action('demo-room', 'discard', args: {'tileId': ordinaryTile});
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final rejectedRound = client.snapshot.roomSnapshot!['round'] as Map;
+    expect(rejectedRound['privateHand'], contains(ordinaryTile));
+    expect((rejectedRound['discardsByPlayer'] as Map)['poc-user'], isEmpty);
     await client.action('demo-room', 'discard', args: {'tileId': flowerTile});
     await Future<void>.delayed(const Duration(milliseconds: 30));
 

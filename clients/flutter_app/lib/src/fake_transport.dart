@@ -312,11 +312,22 @@ class FakeTransport implements ProtocolTransport {
           _emit(_error('ROOM_NOT_FOUND', '演示房间不存在', requestId, commandId));
           return;
         }
-        _roomVersion += 1;
         if (_room['demoMode'] == 'bots') {
           final action = payload['action']?.toString();
           if (action == 'discard' && payload['args'] is Map) {
-            _advanceBotDemo((payload['args'] as Map)['tileId']?.toString());
+            if (!_advanceBotDemo(
+              (payload['args'] as Map)['tileId']?.toString(),
+            )) {
+              _emit(
+                _error(
+                  'INVALID_ACTION',
+                  '飘花时手中有花必须先打一张花',
+                  requestId,
+                  commandId,
+                ),
+              );
+              return;
+            }
           } else if (action == 'self_draw' && _settleBotDemoSelfDraw()) {
             // The deterministic local demo uses the same server-shaped
             // settlement envelope as an authoritative room.
@@ -325,6 +336,7 @@ class FakeTransport implements ProtocolTransport {
             return;
           }
         }
+        _roomVersion += 1;
         _room = {
           ..._room,
           'version': _roomVersion,
@@ -406,15 +418,20 @@ class FakeTransport implements ProtocolTransport {
     _closed.add(null);
   }
 
-  void _advanceBotDemo(String? tileId) {
-    if (tileId == null) return;
+  bool _advanceBotDemo(String? tileId) {
+    if (tileId == null) return false;
     final round = Map<String, dynamic>.from(
       (_room['round'] as Map?) ?? const <String, dynamic>{},
     );
     final hand = List<String>.from(
       (round['privateHand'] as List?) ?? const <String>[],
     );
-    if (!hand.remove(tileId)) return;
+    final localPiao =
+        ((round['flowerStates'] as Map?)?['poc-user'] as Map?)?['status'] ==
+        'piao';
+    final mustDiscardFlower = localPiao && hand.any(_isBotDemoFlower);
+    if (mustDiscardFlower && !_isBotDemoFlower(tileId)) return false;
+    if (!hand.remove(tileId)) return false;
     final discards = <String, dynamic>{
       ...Map<String, dynamic>.from(
         (round['discardsByPlayer'] as Map?) ?? const <String, dynamic>{},
@@ -446,9 +463,6 @@ class FakeTransport implements ProtocolTransport {
         .where((candidate) => candidate.startsWith('dots-6-'))
         .length;
     final isPengWindow = upstreamDiscard == 'dots-6-4' && matchingDots >= 2;
-    final localPiao =
-        ((round['flowerStates'] as Map?)?['poc-user'] as Map?)?['status'] ==
-        'piao';
     final reactions = isChiWindow
         ? <String>['chi', 'pass']
         : isPengWindow
@@ -562,6 +576,10 @@ class FakeTransport implements ProtocolTransport {
         },
       },
     };
+    if (reactions.length == 1 && reactions.single == 'pass') {
+      return _resolveBotDemoReaction('pass');
+    }
+    return true;
   }
 
   bool _resolveBotDemoReaction(String? action) {

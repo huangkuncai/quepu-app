@@ -1246,10 +1246,15 @@ class _RoomTable extends StatelessWidget {
     final awaitsBotZengChoice =
         openingStage == 'choose_zeng' && client.transport is FakeTransport;
     final privateHand = _stringValues(round?['privateHand']);
+    final mustDiscardFlower =
+        currentFlowerState?['status']?.toString() == 'piao' &&
+        privateHand.any(_isSusongFlowerTileId);
     final availableActions = _stringValues(round?['availableActions']);
     final availableReactions = _stringValues(round?['availableReactions']);
     final hasAuthoritativeActions =
         availableActions.isNotEmpty || availableReactions.isNotEmpty;
+    final onlyPassiveReaction =
+        availableReactions.length == 1 && availableReactions.single == 'pass';
     if (settlement != null && (status == 'settling' || status == 'finished')) {
       return _RoomSettlementTable(
         client: client,
@@ -1310,21 +1315,18 @@ class _RoomTable extends StatelessWidget {
           label: const Text('不飘·补花'),
         ),
       ],
-      if (hasAuthoritativeActions)
+      if (onlyPassiveReaction)
+        _AutomaticPass(
+          key: ValueKey('auto-pass-${snapshot.roomVersion}'),
+          onPass: () => _run(() => client.action(roomId, 'pass'), context),
+        )
+      else if (hasAuthoritativeActions)
         _AuthoritativeActionButtons(
           client: client,
           roomId: roomId,
           round: round!,
           connected: connected,
           run: (operation) => _run(operation, context),
-        )
-      else if (status == 'playing' && openingStage == null)
-        OutlinedButton.icon(
-          onPressed: connected
-              ? () => _run(() => client.action(roomId, 'pass'), context)
-              : null,
-          icon: const Icon(Icons.touch_app_outlined, size: 17),
-          label: const Text('过'),
         ),
     ];
     return Stack(
@@ -1341,6 +1343,7 @@ class _RoomTable extends StatelessWidget {
             readyCount: readyCount,
             privateHand: privateHand,
             canDiscard: connected && availableActions.contains('discard'),
+            mustDiscardFlower: mustDiscardFlower,
             controls: controls,
             ownerId: room['ownerId']?.toString(),
             dealerSeat: _intValue(round?['dealerSeat']),
@@ -1436,6 +1439,7 @@ class _MahjongTableSurface extends StatelessWidget {
     required this.readyCount,
     required this.privateHand,
     required this.canDiscard,
+    required this.mustDiscardFlower,
     required this.controls,
     required this.ownerId,
     required this.dealerSeat,
@@ -1452,6 +1456,7 @@ class _MahjongTableSurface extends StatelessWidget {
   final int readyCount;
   final List<String> privateHand;
   final bool canDiscard;
+  final bool mustDiscardFlower;
   final List<Widget> controls;
   final String? ownerId;
   final int? dealerSeat;
@@ -1466,12 +1471,12 @@ class _MahjongTableSurface extends StatelessWidget {
       final width = constraints.maxWidth;
       final height = constraints.maxHeight;
       final compact = height < 390;
-      final badgeWidth = (width * 0.115).clamp(92.0, 122.0).toDouble();
-      final badgeHeight = compact ? 57.0 : 64.0;
+      final badgeWidth = (width * 0.10).clamp(92.0, 120.0).toDouble();
+      final badgeHeight = compact ? 48.0 : 52.0;
       final handHeight = compact ? 56.0 : 64.0;
-      final sideLaneWidth = (width * 0.17).clamp(135.0, 180.0).toDouble();
-      final sideTop = compact ? 108.0 : 126.0;
-      final sideBottom = handHeight + 56;
+      final scores = _dynamicMap(room['scores']) ?? const {};
+      final sideLaneWidth = (width * 0.07).clamp(64.0, 82.0).toDouble();
+      final riverWidth = (width * 0.09).clamp(104.0, 132.0).toDouble();
       final tablePlayers = seats.whereType<Map<String, dynamic>>().toList(
         growable: false,
       );
@@ -1554,6 +1559,7 @@ class _MahjongTableSurface extends StatelessWidget {
                   ownerId: ownerId,
                   playing: playing,
                   isDealer: dealerSeat == 2,
+                  score: _intValue(scores[_seat(2)?['id']?.toString()]) ?? 0,
                 ),
               ),
               Positioned(
@@ -1567,6 +1573,7 @@ class _MahjongTableSurface extends StatelessWidget {
                   ownerId: ownerId,
                   playing: playing,
                   isDealer: dealerSeat == 3,
+                  score: _intValue(scores[_seat(3)?['id']?.toString()]) ?? 0,
                 ),
               ),
               Positioned(
@@ -1580,6 +1587,7 @@ class _MahjongTableSurface extends StatelessWidget {
                   ownerId: ownerId,
                   playing: playing,
                   isDealer: dealerSeat == 1,
+                  score: _intValue(scores[_seat(1)?['id']?.toString()]) ?? 0,
                 ),
               ),
               Positioned(
@@ -1593,13 +1601,14 @@ class _MahjongTableSurface extends StatelessWidget {
                   ownerId: ownerId,
                   playing: playing,
                   isDealer: dealerSeat == 0,
+                  score: _intValue(scores[_seat(0)?['id']?.toString()]) ?? 0,
                 ),
               ),
               Positioned(
-                top: badgeHeight + 42,
-                left: width * 0.26,
-                right: width * 0.26,
-                height: compact ? 42 : 48,
+                top: badgeHeight + 4,
+                right: width * 0.10,
+                width: width * 0.22,
+                height: compact ? 38 : 44,
                 child: _PublicTilesLane(
                   player: _seat(2),
                   players: tablePlayers,
@@ -1609,9 +1618,9 @@ class _MahjongTableSurface extends StatelessWidget {
               ),
               Positioned(
                 top: badgeHeight + 4,
-                left: width * 0.31,
-                right: width * 0.31,
-                height: 32,
+                left: width * 0.32,
+                right: width * 0.32,
+                height: 28,
                 child: _OpponentHandLane(
                   player: _seat(2),
                   round: round,
@@ -1619,9 +1628,9 @@ class _MahjongTableSurface extends StatelessWidget {
                 ),
               ),
               Positioned(
-                left: badgeWidth + 5,
+                left: badgeWidth + 3,
                 top: height * 0.29,
-                width: 28,
+                width: 25,
                 height: height * 0.35,
                 child: _OpponentHandLane(
                   player: _seat(3),
@@ -1630,9 +1639,9 @@ class _MahjongTableSurface extends StatelessWidget {
                 ),
               ),
               Positioned(
-                right: badgeWidth + 5,
+                right: badgeWidth + 3,
                 top: height * 0.29,
-                width: 28,
+                width: 25,
                 height: height * 0.35,
                 child: _OpponentHandLane(
                   player: _seat(1),
@@ -1641,10 +1650,10 @@ class _MahjongTableSurface extends StatelessWidget {
                 ),
               ),
               Positioned(
-                left: badgeWidth + 39,
-                top: sideTop,
-                bottom: sideBottom,
+                left: badgeWidth + 32,
+                top: height * 0.35,
                 width: sideLaneWidth,
+                height: height * 0.30,
                 child: _PublicTilesLane(
                   player: _seat(3),
                   players: tablePlayers,
@@ -1653,10 +1662,10 @@ class _MahjongTableSurface extends StatelessWidget {
                 ),
               ),
               Positioned(
-                right: badgeWidth + 39,
-                top: sideTop,
-                bottom: sideBottom,
+                right: badgeWidth + 32,
+                top: height * 0.35,
                 width: sideLaneWidth,
+                height: height * 0.30,
                 child: _PublicTilesLane(
                   player: _seat(1),
                   players: tablePlayers,
@@ -1665,10 +1674,10 @@ class _MahjongTableSurface extends StatelessWidget {
                 ),
               ),
               Positioned(
-                left: badgeWidth + 13,
-                bottom: handHeight + 5,
-                width: sideLaneWidth + 60,
-                height: compact ? 46 : 54,
+                left: badgeWidth + 10,
+                bottom: handHeight + 8,
+                width: width * 0.29,
+                height: compact ? 40 : 46,
                 child: _PublicTilesLane(
                   player: _seat(0),
                   players: tablePlayers,
@@ -1677,10 +1686,10 @@ class _MahjongTableSurface extends StatelessWidget {
                 ),
               ),
               Positioned(
-                left: width * 0.58,
-                width: width * 0.16,
-                top: badgeHeight + 96,
-                height: compact ? 54 : 64,
+                left: (width - riverWidth) / 2,
+                width: riverWidth,
+                top: badgeHeight + 20,
+                height: compact ? 64 : 76,
                 child: _DiscardRiver(
                   player: _seat(2),
                   round: round,
@@ -1688,9 +1697,9 @@ class _MahjongTableSurface extends StatelessWidget {
                 ),
               ),
               Positioned(
-                left: width * 0.32,
-                top: height * 0.39,
-                width: width * 0.10,
+                left: badgeWidth + sideLaneWidth + 48,
+                top: height * 0.35,
+                width: riverWidth * 0.72,
                 height: compact ? 92 : 112,
                 child: _DiscardRiver(
                   player: _seat(3),
@@ -1699,9 +1708,9 @@ class _MahjongTableSurface extends StatelessWidget {
                 ),
               ),
               Positioned(
-                right: width * 0.32,
-                top: height * 0.39,
-                width: width * 0.10,
+                right: badgeWidth + sideLaneWidth + 48,
+                top: height * 0.35,
+                width: riverWidth * 0.72,
                 height: compact ? 92 : 112,
                 child: _DiscardRiver(
                   player: _seat(1),
@@ -1710,10 +1719,10 @@ class _MahjongTableSurface extends StatelessWidget {
                 ),
               ),
               Positioned(
-                left: width * 0.36,
-                width: width * 0.18,
-                bottom: handHeight + 66,
-                height: compact ? 54 : 64,
+                left: (width - riverWidth) / 2,
+                width: riverWidth,
+                bottom: handHeight + 8,
+                height: compact ? 64 : 76,
                 child: _DiscardRiver(
                   player: _seat(0),
                   round: round,
@@ -1765,10 +1774,26 @@ class _MahjongTableSurface extends StatelessWidget {
                       final tileId = orderedPrivateHand[index];
                       return _MahjongTile(
                         tileId: tileId,
-                        enabled: canDiscard,
+                        enabled:
+                            canDiscard &&
+                            (!mustDiscardFlower ||
+                                _isSusongFlowerTileId(tileId)),
                         onTap: () => onDiscard(tileId),
                       );
                     },
+                  ),
+                ),
+              if (canDiscard && mustDiscardFlower)
+                Positioned(
+                  right: 12,
+                  bottom: handHeight + 8,
+                  child: const Text(
+                    '手中有花，请先打一张花',
+                    style: TextStyle(
+                      color: Color(0xffffd369),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
             ],
@@ -1777,6 +1802,28 @@ class _MahjongTableSurface extends StatelessWidget {
       );
     },
   );
+}
+
+class _AutomaticPass extends StatefulWidget {
+  const _AutomaticPass({required this.onPass, super.key});
+
+  final Future<void> Function() onPass;
+
+  @override
+  State<_AutomaticPass> createState() => _AutomaticPassState();
+}
+
+class _AutomaticPassState extends State<_AutomaticPass> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onPass();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _TableCenterMark extends StatelessWidget {
@@ -1989,13 +2036,10 @@ class _PublicTilesLane extends StatelessWidget {
         player?['id']?.toString() ?? player?['playerId']?.toString();
     if (playerId == null) return const SizedBox.shrink();
     final melds = _dynamicMap(round?['meldsByPlayer']);
-    final flowers = _dynamicMap(round?['flowerStates']);
     final flowerTiles = _dynamicMap(round?['flowerTilesByPlayer']);
     final discardedFlowerTiles = _dynamicMap(
       round?['discardedFlowerTilesByPlayer'],
     );
-    final flowerState = _dynamicMap(flowers?[playerId]);
-    final flowerCount = _intValue(flowerState?['countedFlowers']) ?? 0;
     final meldValues = melds?[playerId] is List
         ? List<Object?>.from(melds![playerId] as List)
         : const <Object?>[];
@@ -2009,8 +2053,8 @@ class _PublicTilesLane extends StatelessWidget {
         alignment: Alignment.topLeft,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: const Color(0x33000000),
-            borderRadius: BorderRadius.circular(7),
+            color: const Color(0x18000000),
+            borderRadius: BorderRadius.circular(4),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
@@ -2021,16 +2065,6 @@ class _PublicTilesLane extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '${_playerName(player!)}  花$flowerCount',
-                    maxLines: 1,
-                    style: const TextStyle(
-                      color: Color(0xffffe4a3),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 10,
-                    ),
-                  ),
-                  SizedBox(width: vertical ? 0 : 5, height: vertical ? 3 : 0),
                   for (final raw in meldValues) ...[
                     _PublicMeld(
                       meld: _dynamicMap(raw) ?? const {},
@@ -2104,14 +2138,6 @@ class _PublicMeld extends StatelessWidget {
       };
       displayTiles.insert(insertAt, claimedTile);
     }
-    final label = Text(
-      '${_gameActionLabel(action)}${providerDirection == null ? '' : '·$providerDirection'}',
-      style: const TextStyle(
-        color: Color(0xff9ee3cc),
-        fontSize: 9,
-        fontWeight: FontWeight.w700,
-      ),
-    );
     final tileWidgets = <Widget>[
       for (var index = 0; index < displayTiles.length; index += 1)
         Padding(
@@ -2121,25 +2147,53 @@ class _PublicMeld extends StatelessWidget {
           ),
           child: concealed && index == 1
               ? const _MiniMahjongBack()
-              : displayTiles[index] == claimedTile
-              ? RotatedBox(
-                  quarterTurns: 1,
-                  child: _MiniMahjongTile(tileId: displayTiles[index]),
-                )
-              : _MiniMahjongTile(tileId: displayTiles[index]),
+              : _MeldMiniTile(
+                  tileId: displayTiles[index],
+                  providerDirection: displayTiles[index] == claimedTile
+                      ? providerDirection
+                      : null,
+                ),
         ),
     ];
     return Flex(
       direction: vertical ? Axis.vertical : Axis.horizontal,
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        label,
-        SizedBox(width: vertical ? 0 : 2, height: vertical ? 2 : 0),
-        ...tileWidgets,
-      ],
+      children: tileWidgets,
     );
   }
+}
+
+class _MeldMiniTile extends StatelessWidget {
+  const _MeldMiniTile({required this.tileId, this.providerDirection});
+
+  final String tileId;
+  final String? providerDirection;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    alignment: Alignment.center,
+    children: [
+      _MiniMahjongTile(tileId: tileId),
+      if (providerDirection != null)
+        IgnorePointer(
+          child: RotatedBox(
+            quarterTurns: switch (providerDirection) {
+              '上家' => 3,
+              '下家' => 1,
+              '对家' => 0,
+              _ => 0,
+            },
+            child: const Icon(
+              Icons.arrow_upward_rounded,
+              size: 15,
+              color: Color(0xff18a54b),
+              shadows: [Shadow(color: Colors.white, blurRadius: 2)],
+            ),
+          ),
+        ),
+    ],
+  );
 }
 
 class _OpponentHandLane extends StatelessWidget {
@@ -3554,13 +3608,9 @@ class _AuthoritativeActionButtons extends StatelessWidget {
       for (final raw in chiOptions.whereType<Map>()) {
         final option = Map<String, dynamic>.from(raw);
         final index = option['candidateIndex'];
-        final sequence = _stringValues(option['sequence'])
-            .map(_mahjongFaceLabel)
-            .join('');
+        final sequence = _stringValues(option['sequence']);
         if (index is int) {
-          buttons.add(
-            _button('chi', {'candidateIndex': index}, suffix: sequence),
-          );
+          buttons.add(_chiButton(index, sequence));
         }
       }
     }
@@ -3611,6 +3661,35 @@ class _AuthoritativeActionButtons extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       ),
       child: Text(label),
+    );
+  }
+
+  Widget _chiButton(int candidateIndex, List<String> sequence) {
+    return FilledButton.tonal(
+      onPressed: connected
+          ? () => run(
+              () => client.action(
+                roomId,
+                'chi',
+                args: {'candidateIndex': candidateIndex},
+              ),
+            )
+          : null,
+      style: FilledButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('吃'),
+          const SizedBox(width: 4),
+          for (final face in sequence) ...[
+            _MiniMahjongTile(tileId: '$face-9'),
+            const SizedBox(width: 1),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -3776,6 +3855,14 @@ String _mahjongLogicalFace(String tileId) {
   ).firstMatch(tileId);
   return honor?.group(1) ?? tileId;
 }
+
+bool _isSusongFlowerTileId(String tileId) => const {
+  'red_dragon',
+  'green_dragon',
+  'white_dragon',
+  'red_flower',
+  'black_flower',
+}.contains(_mahjongLogicalFace(tileId));
 
 List<String> _susongWaitingFaces(List<String> hand, int meldCount) {
   final faces = hand
@@ -3987,6 +4074,7 @@ class _SeatTile extends StatelessWidget {
     required this.player,
     required this.ownerId,
     required this.playing,
+    required this.score,
     this.isDealer = false,
   });
 
@@ -3994,6 +4082,7 @@ class _SeatTile extends StatelessWidget {
   final Map<String, dynamic>? player;
   final String? ownerId;
   final bool playing;
+  final int score;
   final bool isDealer;
 
   @override
@@ -4001,7 +4090,6 @@ class _SeatTile extends StatelessWidget {
     final occupied = player != null;
     final name = occupied ? _playerName(player!) : '等待加入';
     final online = player?['connected'] == true;
-    final ready = player?['ready'] == true;
     final isOwner = occupied && player!['id']?.toString() == ownerId;
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -4013,73 +4101,82 @@ class _SeatTile extends StatelessWidget {
         boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 5)],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+        child: Row(
           children: [
-            Row(
-              children: [
-                Text(
-                  '座位 ${seat + 1}',
-                  style: const TextStyle(fontSize: 9, color: Color(0xffb9d5ce)),
+            CircleAvatar(
+              radius: 15,
+              backgroundColor: occupied
+                  ? const Color(0xff2d806d)
+                  : const Color(0xff49615b),
+              child: Text(
+                occupied ? name.characters.first : '${seat + 1}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
                 ),
-                const Spacer(),
-                Icon(
-                  online ? Icons.wifi : Icons.wifi_off,
-                  size: 12,
-                  color: online ? const Color(0xff69d7ae) : Colors.grey,
-                ),
-              ],
+              ),
             ),
-            Row(
-              children: [
-                if (isDealer) ...[
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: const Color(0xffffd369),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 3),
-                      child: Text(
-                        '庄',
-                        style: TextStyle(
-                          color: Color(0xff573a00),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
+            const SizedBox(width: 4),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (isDealer) ...[
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: const Color(0xffffd369),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 2),
+                            child: Text(
+                              '庄',
+                              style: TextStyle(
+                                color: Color(0xff573a00),
+                                fontSize: 8,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                      ],
+                      Expanded(
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                          ),
                         ),
                       ),
-                    ),
+                      Icon(
+                        online ? Icons.wifi : Icons.wifi_off,
+                        size: 9,
+                        color: online ? const Color(0xff69d7ae) : Colors.grey,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 3),
-                ],
-                Expanded(
-                  child: Text(
-                    name,
+                  Text(
+                    occupied ? '$score 分' : '空位',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
+                      color: occupied
+                          ? const Color(0xffffe4a3)
+                          : const Color(0xffa8beb8),
+                      fontSize: 9,
                       fontWeight: FontWeight.w800,
-                      fontSize: 12,
                     ),
                   ),
-                ),
-              ],
-            ),
-            Text(
-              occupied
-                  ? playing
-                        ? '对局中${isDealer ? ' · 庄家' : ''}${isOwner ? ' · 房主' : ''}'
-                        : '${ready ? '已准备' : '未准备'}${isOwner ? ' · 房主' : ''}'
-                  : '空位',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: occupied && (playing || ready)
-                    ? const Color(0xff8be0c4)
-                    : const Color(0xffa8beb8),
-                fontSize: 9,
+                ],
               ),
             ),
           ],

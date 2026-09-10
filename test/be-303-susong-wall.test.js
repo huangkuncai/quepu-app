@@ -1596,9 +1596,11 @@ test('strong-piao live flower stays in hand and is one normal discard', () => {
     }
   }
   room.beginPlaying({ actorId: 'A' });
-  const aDiscard = room.snapshot({ viewerId: 'A' }).round.privateHand.find(tileId => !isSusongReplacementFlower(tileId));
+  const aHand = room.snapshot({ viewerId: 'A' }).round.privateHand;
+  const aDiscard = aHand.find(isSusongReplacementFlower)
+    ?? aHand.find(tileId => !isSusongReplacementFlower(tileId));
   room.applyAction('A', { action: 'discard', args: { tileId: aDiscard } });
-  passSusongReaction(room, 'piao-reaction');
+  if (room.currentRound.turnPhase === 'reaction') passSusongReaction(room, 'piao-reaction');
   const wallBefore = room.currentRound.wall.wallRemaining;
   const result = room.applyAction('B', 'draw');
   assert.equal(result.flowerDisposition, 'kept_for_discard');
@@ -1609,7 +1611,14 @@ test('strong-piao live flower stays in hand and is one normal discard', () => {
   assert.equal(room.currentRound.turnPhase, 'discard');
   assert.equal(JSON.stringify(result.event).includes('tileId'), false);
   const flowerTileId = bViewer.round.privateHand.find(isSusongReplacementFlower);
+  const ordinaryTileId = bViewer.round.privateHand.find(tileId => !isSusongReplacementFlower(tileId));
   assert.ok(flowerTileId);
+  assert.ok(ordinaryTileId);
+  assert.throws(
+    () => room.applyAction('B', { action: 'discard', args: { tileId: ordinaryTileId } }),
+    error => error.code === 'INVALID_ACTION'
+      && error.details?.[0]?.message === 'piao player must discard one flower before any ordinary tile'
+  );
   room.applyAction('B', { action: 'discard', args: { tileId: flowerTileId } });
   assert.ok(room.currentRound.discardsByPlayer.B.includes(flowerTileId));
   assert.equal(room.currentRound.pendingReaction, null);

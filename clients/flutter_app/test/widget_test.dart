@@ -122,10 +122,10 @@ void main() {
     await tester.tap(find.bySemanticsLabel('1万').last);
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.bySemanticsLabel(RegExp('听牌提示')), findsOneWidget);
-    expect(find.textContaining('吃 1万2万3万'), findsOneWidget);
-    expect(find.text('碰·对家'), findsOneWidget);
-    expect(find.text('吃·上家'), findsOneWidget);
-    expect(find.text('暗杠'), findsOneWidget);
+    expect(find.text('吃'), findsOneWidget);
+    expect(find.textContaining('·上家'), findsNothing);
+    expect(find.textContaining('·对家'), findsNothing);
+    expect(find.byIcon(Icons.arrow_upward_rounded), findsWidgets);
     expect(find.text('过'), findsOneWidget);
     expect(find.textContaining('弃牌'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -212,8 +212,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('房间 demo-room'), findsOneWidget);
-    expect(find.text('座位 1'), findsOneWidget);
-    expect(find.text('座位 4'), findsOneWidget);
+    expect(find.text('等待加入'), findsNWidgets(4));
     expect(find.text('加入房间'), findsOneWidget);
 
     await tester.tap(find.text('加入房间'));
@@ -328,9 +327,10 @@ void main() {
       expect(find.textContaining('第 2/8 局'), findsOneWidget);
       expect(find.textContaining('剩余 63 张'), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp('东南西北方位')), findsOneWidget);
-      expect(find.textContaining('演示玩家  花4'), findsOneWidget);
+      expect(find.text('演示玩家'), findsOneWidget);
+      expect(find.text('0 分'), findsOneWidget);
       expect(find.text('空位'), findsNWidgets(3));
-      expect(find.text('碰'), findsOneWidget);
+      expect(find.text('碰'), findsNothing);
       expect(find.bySemanticsLabel('东'), findsAtLeastNWidgets(3));
       expect(find.bySemanticsLabel('3筒'), findsOneWidget);
       expect(find.bySemanticsLabel('白'), findsOneWidget);
@@ -578,6 +578,11 @@ void main() {
     inject(2, {'status': 'piao', 'pendingFlowerDiscards': 0});
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.textContaining('打花'), findsNothing);
+    expect(find.text('手中有花，请先打一张花'), findsOneWidget);
+    final messagesBeforeOrdinaryTap = transport.sentMessages.length;
+    await tester.tap(find.bySemanticsLabel('1万'));
+    await tester.pump(const Duration(milliseconds: 30));
+    expect(transport.sentMessages, hasLength(messagesBeforeOrdinaryTap));
     expect(find.bySemanticsLabel('中'), findsOneWidget);
     await tester.tap(find.bySemanticsLabel('中'));
     await tester.pump(const Duration(milliseconds: 30));
@@ -588,6 +593,28 @@ void main() {
       'action': 'discard',
       'args': {'tileId': 'red_dragon-1'},
     });
+    final passiveSnapshot = snapshot({'status': 'piao'});
+    final passiveRound = passiveSnapshot['round'] as Map<String, dynamic>;
+    passiveRound['availableActions'] = <String>[];
+    passiveRound['availableReactions'] = ['pass'];
+    transport.inject({
+      'protocolVersion': '1.0',
+      'type': 'room_event',
+      'eventId': '33333333-3333-4333-8333-000000000003',
+      'roomId': 'demo-room',
+      'roomVersion': 3,
+      'payload': {'snapshot': passiveSnapshot},
+      'occurredAt': DateTime.now().toUtc().toIso8601String(),
+    });
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('过'), findsNothing);
+    final automaticPass = transport.sentMessages.lastWhere(
+      (message) =>
+          message['type'] == 'action' &&
+          (message['payload'] as Map?)?['action'] == 'pass',
+    );
+    expect(automaticPass['payload'], {'action': 'pass'});
+    await tester.pump(const Duration(milliseconds: 30));
     expect(tester.takeException(), isNull);
   });
 
