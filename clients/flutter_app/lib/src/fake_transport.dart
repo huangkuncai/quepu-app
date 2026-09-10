@@ -723,7 +723,8 @@ class FakeTransport implements ProtocolTransport {
     );
     final removed = hand.where(_isBotDemoFlower).toList(growable: false);
     hand.removeWhere(_isBotDemoFlower);
-    hand.addAll(_botReplacementTiles.take(removed.length));
+    final roundNumber = round['roundNumber'] as int? ?? 1;
+    hand.addAll(_botDemoOpeningReplacements(roundNumber).take(removed.length));
     final wall = Map<String, dynamic>.from(
       (round['wall'] as Map?) ?? const <String, dynamic>{},
     );
@@ -1071,68 +1072,64 @@ class FakeTransport implements ProtocolTransport {
     'availableReactions': <String>[],
   };
 
-  static Map<String, dynamic> _botDemoDealtRound({int roundNumber = 1}) => {
-    'roundNumber': roundNumber,
-    'openingStage': 'choose_piao',
-    'turnPhase': 'opening_choice',
-    'dealerSeat': 0,
-    'turnDeadlineAt': DateTime.now()
-        .subtract(const Duration(seconds: 1))
-        .toUtc()
-        .toIso8601String(),
-    'wall': {
-      'wallRemaining': 83,
-      'handCountsByPlayer': {
-        'poc-user': 14,
-        'bot-east': 13,
-        'bot-north': 13,
-        'bot-west': 13,
+  static Map<String, dynamic> _botDemoDealtRound({int roundNumber = 1}) {
+    final winningHand =
+        _botDemoWinningHands[(roundNumber - 1) % _botDemoWinningHands.length];
+    return {
+      'roundNumber': roundNumber,
+      'openingStage': 'choose_piao',
+      'turnPhase': 'opening_choice',
+      'dealerSeat': 0,
+      'turnDeadlineAt': DateTime.now()
+          .subtract(const Duration(seconds: 1))
+          .toUtc()
+          .toIso8601String(),
+      'wall': {
+        'wallRemaining': 83,
+        'handCountsByPlayer': {
+          'poc-user': 14,
+          'bot-east': 13,
+          'bot-north': 13,
+          'bot-west': 13,
+        },
       },
-    },
-    'discardsByPlayer': <String, dynamic>{
-      'poc-user': <String>[],
-      'bot-east': <String>[],
-      'bot-north': <String>[],
-      'bot-west': <String>[],
-    },
-    'meldsByPlayer': <String, dynamic>{},
-    'flowerStates': {
-      'poc-user': {
-        'status': 'awaiting_piao_choice',
-        'openingFlowers': 5,
-        'countedFlowers': 0,
-        'pendingFlowerDiscards': 5,
-        'pendingFlowerReplacements': 0,
+      'discardsByPlayer': <String, dynamic>{
+        'poc-user': <String>[],
+        'bot-east': <String>[],
+        'bot-north': <String>[],
+        'bot-west': <String>[],
       },
-      'bot-east': {'status': 'not_activated', 'countedFlowers': 0},
-      'bot-north': {'status': 'not_activated', 'countedFlowers': 0},
-      'bot-west': {'status': 'not_activated', 'countedFlowers': 0},
-    },
-    'flowerTilesByPlayer': {
-      'poc-user': <String>[],
-      'bot-east': <String>[],
-      'bot-north': <String>[],
-      'bot-west': <String>[],
-    },
-    'privateHand': [
-      'characters-1-1',
-      'characters-2-1',
-      'characters-3-1',
-      'characters-5-1',
-      'characters-6-1',
-      'characters-7-1',
-      'bamboo-2-1',
-      'bamboo-2-2',
-      'dots-6-1',
-      'red_dragon-1',
-      'green_dragon-1',
-      'white_dragon-1',
-      'red_flower-1',
-      'black_flower-1',
-    ],
-    'availableActions': <String>[],
-    'availableReactions': <String>[],
-  };
+      'meldsByPlayer': <String, dynamic>{},
+      'flowerStates': {
+        'poc-user': {
+          'status': 'awaiting_piao_choice',
+          'openingFlowers': 5,
+          'countedFlowers': 0,
+          'pendingFlowerDiscards': 5,
+          'pendingFlowerReplacements': 0,
+        },
+        'bot-east': {'status': 'not_activated', 'countedFlowers': 0},
+        'bot-north': {'status': 'not_activated', 'countedFlowers': 0},
+        'bot-west': {'status': 'not_activated', 'countedFlowers': 0},
+      },
+      'flowerTilesByPlayer': {
+        'poc-user': <String>[],
+        'bot-east': <String>[],
+        'bot-north': <String>[],
+        'bot-west': <String>[],
+      },
+      'privateHand': [
+        ...winningHand.take(9),
+        'red_dragon-1',
+        'green_dragon-1',
+        'white_dragon-1',
+        'red_flower-1',
+        'black_flower-1',
+      ],
+      'availableActions': <String>[],
+      'availableReactions': <String>[],
+    };
+  }
 
   static const _botEastDiscards = ['east-4', 'bamboo-1-4', 'dots-9-4'];
 
@@ -1147,6 +1144,78 @@ class FakeTransport implements ProtocolTransport {
     'dots-6-2',
     'dots-6-3',
   ];
+
+  static const _botDemoWinningHands = <List<String>>[
+    [
+      'characters-1-1',
+      'characters-2-1',
+      'characters-3-1',
+      'characters-5-1',
+      'characters-6-1',
+      'characters-7-1',
+      'bamboo-2-1',
+      'bamboo-2-2',
+      'dots-6-1',
+      'dots-1-2',
+      'dots-2-2',
+      'dots-3-2',
+      'dots-6-2',
+      'dots-6-3',
+    ],
+    [
+      'characters-2-1',
+      'characters-3-1',
+      'characters-4-1',
+      'bamboo-3-1',
+      'bamboo-4-1',
+      'bamboo-5-1',
+      'dots-4-1',
+      'dots-5-1',
+      'dots-6-1',
+      'east-1',
+      'east-2',
+      'east-3',
+      'south-1',
+      'south-2',
+    ],
+    [
+      'characters-7-1',
+      'characters-8-1',
+      'characters-9-1',
+      'bamboo-1-1',
+      'bamboo-2-1',
+      'bamboo-3-1',
+      'dots-7-1',
+      'dots-8-1',
+      'dots-9-1',
+      'west-1',
+      'west-2',
+      'west-3',
+      'north-1',
+      'north-2',
+    ],
+    [
+      'characters-1-1',
+      'characters-1-2',
+      'characters-1-3',
+      'bamboo-4-1',
+      'bamboo-5-1',
+      'bamboo-6-1',
+      'dots-2-1',
+      'dots-3-1',
+      'dots-4-1',
+      'south-1',
+      'south-2',
+      'south-3',
+      'east-1',
+      'east-2',
+    ],
+  ];
+
+  static List<String> _botDemoOpeningReplacements(int roundNumber) =>
+      _botDemoWinningHands[(roundNumber - 1) % _botDemoWinningHands.length]
+          .skip(9)
+          .toList(growable: false);
 
   static bool _isBotDemoFlower(String tileId) => const {
     'red_dragon',

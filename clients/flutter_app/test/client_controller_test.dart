@@ -246,6 +246,9 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 30));
     await client.choosePiao('demo-room', false);
     await Future<void>.delayed(const Duration(milliseconds: 30));
+    final firstRoundHand = List<String>.from(
+      ((client.snapshot.roomSnapshot!['round'] as Map)['privateHand'] as List),
+    );
 
     await client.action('demo-room', 'self_draw');
     await Future<void>.delayed(const Duration(milliseconds: 30));
@@ -272,6 +275,16 @@ void main() {
     final dealtNextRound = client.snapshot.roomSnapshot!['round'] as Map;
     expect(dealtNextRound['roundNumber'], 2);
     expect(dealtNextRound['openingStage'], 'choose_piao');
+    await client.choosePiao('demo-room', false);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final secondRoundHand = List<String>.from(
+      ((client.snapshot.roomSnapshot!['round'] as Map)['privateHand'] as List),
+    );
+    expect(secondRoundHand, isNot(equals(firstRoundHand)));
+    expect(
+      (client.snapshot.roomSnapshot!['round'] as Map)['availableActions'],
+      contains('self_draw'),
+    );
 
     await client.dispose();
   });

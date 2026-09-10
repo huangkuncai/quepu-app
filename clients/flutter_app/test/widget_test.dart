@@ -463,6 +463,46 @@ void main() {
     );
     expect(nextRound['payload'], {'autoDeal': false});
     expect(nextRound['roomVersion'], 1);
+
+    transport.inject({
+      'protocolVersion': '1.0',
+      'type': 'room_event',
+      'eventId': '33333333-3333-4333-8333-333333333333',
+      'roomId': 'demo-room',
+      'roomVersion': 2,
+      'visibility': 'player',
+      'payload': {
+        'snapshot': {
+          'id': 'demo-room',
+          'ownerId': 'poc-user',
+          'status': 'finished',
+          'maxPlayers': 4,
+          'connectedCount': 4,
+          'totalRounds': 1,
+          'players': [
+            {'id': 'poc-user', 'displayName': '演示玩家', 'seat': 0},
+            {'id': 'B', 'displayName': '玩家B', 'seat': 1},
+            {'id': 'C', 'displayName': '玩家C', 'seat': 2},
+            {'id': 'D', 'displayName': '玩家D', 'seat': 3},
+          ],
+          'scores': {'poc-user': 45, 'B': -15, 'C': -11, 'D': -19},
+          'round': {
+            'roundNumber': 1,
+            'settlement': {
+              'outcome': 'self_draw',
+              'deltaByPlayer': {'poc-user': 45, 'B': -15, 'C': -11, 'D': -19},
+              'wins': <Object?>[],
+              'transfers': <Object?>[],
+            },
+          },
+        },
+      },
+      'occurredAt': DateTime.now().toUtc().toIso8601String(),
+    });
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.text('全场结算 · 总计'), findsOneWidget);
+    expect(find.text('全场总计'), findsOneWidget);
+    expect(find.text('开始下一局'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

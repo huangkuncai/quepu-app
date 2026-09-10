@@ -2161,11 +2161,29 @@ class _RoomSettlementTable extends StatelessWidget {
     final roomStatus = room['status']?.toString();
     final isOwner = room['ownerId']?.toString() == snapshot.userId;
     final connected = snapshot.phase == ConnectionPhase.online;
+    final roundNumber = _intValue(round['roundNumber']) ?? 0;
+    final totalRounds = _intValue(room['totalRounds']);
+    final isFinalRound = totalRounds != null && roundNumber >= totalRounds;
+    final isMatchFinished = roomStatus == 'finished';
     final orderedPlayers = [...players]
       ..sort(
-        (left, right) => (_intValue(left['seat']) ?? 0).compareTo(
-          _intValue(right['seat']) ?? 0,
-        ),
+        isMatchFinished
+            ? (left, right) {
+                final leftId =
+                    left['id']?.toString() ?? left['playerId']?.toString();
+                final rightId =
+                    right['id']?.toString() ?? right['playerId']?.toString();
+                final scoreComparison = (_intValue(scores[rightId]) ?? 0)
+                    .compareTo(_intValue(scores[leftId]) ?? 0);
+                return scoreComparison != 0
+                    ? scoreComparison
+                    : (_intValue(left['seat']) ?? 0).compareTo(
+                        _intValue(right['seat']) ?? 0,
+                      );
+              }
+            : (left, right) => (_intValue(left['seat']) ?? 0).compareTo(
+                _intValue(right['seat']) ?? 0,
+              ),
       );
     return LayoutBuilder(
       builder: (context, constraints) => ListView(
@@ -2176,7 +2194,7 @@ class _RoomSettlementTable extends StatelessWidget {
             child: Column(
               children: [
                 _RoomStatusStrip(
-                  status: '单局结算 · $outcome',
+                  status: isMatchFinished ? '全场结算 · 总计' : '单局结算 · $outcome',
                   version: snapshot.roomVersion,
                   connected: _positiveInt(room['connectedCount']) ?? 0,
                   maxPlayers: _positiveInt(room['maxPlayers']) ?? 4,
@@ -2201,7 +2219,9 @@ class _RoomSettlementTable extends StatelessWidget {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        '第 ${_intValue(round['roundNumber']) ?? '—'} 局积分',
+                                        isMatchFinished
+                                            ? '全场总计'
+                                            : '第 ${roundNumber == 0 ? '—' : roundNumber} 局积分',
                                         style: const TextStyle(
                                           color: Color(0xffffe4a3),
                                           fontSize: 18,
@@ -2222,7 +2242,9 @@ class _RoomSettlementTable extends StatelessWidget {
                                               )
                                             : null,
                                         icon: const Icon(Icons.skip_next),
-                                        label: const Text('开始下一局'),
+                                        label: Text(
+                                          isFinalRound ? '查看总计' : '开始下一局',
+                                        ),
                                       )
                                     else
                                       Text(
@@ -2252,19 +2274,28 @@ class _RoomSettlementTable extends StatelessWidget {
                                           _intValue(deltas[playerId]) ?? 0;
                                       final total =
                                           _intValue(scores[playerId]) ?? 0;
+                                      final shownScore = isMatchFinished
+                                          ? total
+                                          : delta;
                                       return ListTile(
                                         dense: true,
                                         leading: CircleAvatar(
                                           child: Text('${index + 1}'),
                                         ),
                                         title: Text(_playerName(player)),
-                                        subtitle: Text('累计 $total 分'),
+                                        subtitle: Text(
+                                          isMatchFinished
+                                              ? '本局 ${delta > 0 ? '+$delta' : '$delta'} 分'
+                                              : '累计 $total 分',
+                                        ),
                                         trailing: Text(
-                                          delta > 0 ? '+$delta' : '$delta',
+                                          shownScore > 0
+                                              ? '+$shownScore'
+                                              : '$shownScore',
                                           style: TextStyle(
-                                            color: delta > 0
+                                            color: shownScore > 0
                                                 ? const Color(0xffffd369)
-                                                : delta < 0
+                                                : shownScore < 0
                                                 ? const Color(0xffff8d78)
                                                 : const Color(0xffc6e0da),
                                             fontSize: 22,
