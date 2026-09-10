@@ -257,6 +257,22 @@ void main() {
     expect(settlement['transfers'], hasLength(3));
     expect((settlement['deltaByPlayer'] as Map)['poc-user'], 15);
 
+    await client.nextRound('demo-room');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final nextRoom = client.snapshot.roomSnapshot!;
+    final nextRound = nextRoom['round'] as Map;
+    expect(nextRoom['status'], 'ready');
+    expect(nextRound['roundNumber'], 2);
+    expect(nextRound['openingStage'], 'choose_zeng');
+    expect(nextRound['settlement'], isNull);
+    expect((nextRoom['scores'] as Map)['poc-user'], 15);
+
+    await transport.chooseBotDemoZeng(1);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final dealtNextRound = client.snapshot.roomSnapshot!['round'] as Map;
+    expect(dealtNextRound['roundNumber'], 2);
+    expect(dealtNextRound['openingStage'], 'choose_piao');
+
     await client.dispose();
   });
 

@@ -47,7 +47,8 @@ class FakeTransport implements ProtocolTransport {
       throw StateError('bot demo is not awaiting a zeng choice');
     }
     _roomVersion += 1;
-    final dealtRound = _botDemoDealtRound();
+    final roundNumber = round['roundNumber'] as int? ?? 1;
+    final dealtRound = _botDemoDealtRound(roundNumber: roundNumber);
     _room = {
       ..._room,
       'version': _roomVersion,
@@ -339,6 +340,44 @@ class FakeTransport implements ProtocolTransport {
           'turn': 'poc-user',
         };
         _emitRoomEvent(requestId, commandId, 'ROUND_STARTED');
+      case 'next_round':
+        if (_room['demoMode'] != 'bots' || _room['status'] != 'settling') {
+          _emit(_error('ROUND_NOT_PLAYING', '当前不能开始下一局', requestId, commandId));
+          return;
+        }
+        final currentRound = Map<String, dynamic>.from(
+          (_room['round'] as Map?) ?? const <String, dynamic>{},
+        );
+        final currentRoundNumber = currentRound['roundNumber'] as int? ?? 1;
+        final totalRounds = _room['totalRounds'] as int? ?? 4;
+        _roomVersion += 1;
+        if (currentRoundNumber >= totalRounds) {
+          _room = {
+            ..._room,
+            'status': 'finished',
+            'turnPlayerId': null,
+            'version': _roomVersion,
+            'roomVersion': _roomVersion,
+          };
+          _emitRoomEvent(requestId, commandId, 'MATCH_FINISHED');
+          return;
+        }
+        final nextRoundNumber = currentRoundNumber + 1;
+        _botDiscardRound = 0;
+        _room = {
+          ..._room,
+          'status': 'ready',
+          'turnPlayerId': null,
+          'roundNumber': nextRoundNumber,
+          'zengByPlayer': <String, dynamic>{},
+          'round': _botDemoPreStartRound(
+            roundNumber: nextRoundNumber,
+            dealerSeat: 0,
+          ),
+          'version': _roomVersion,
+          'roomVersion': _roomVersion,
+        };
+        _emitRoomEvent(requestId, commandId, 'NEXT_ROUND_READY');
       case 'reconnect':
         if (_roomId == null) {
           _emit(_error('ROOM_NOT_FOUND', '演示房间不存在', requestId, commandId));
@@ -801,11 +840,18 @@ class FakeTransport implements ProtocolTransport {
           },
         )
         .toList();
+    final previousScores = Map<String, dynamic>.from(
+      (_room['scores'] as Map?) ?? const <String, dynamic>{},
+    );
+    final cumulativeScores = <String, int>{
+      for (final entry in deltas.entries)
+        entry.key: (previousScores[entry.key] as int? ?? 0) + entry.value,
+    };
     _room = {
       ..._room,
       'status': 'settling',
       'turnPlayerId': null,
-      'scores': deltas,
+      'scores': cumulativeScores,
       'round': {
         ...round,
         'turnPhase': null,
@@ -1012,18 +1058,21 @@ class FakeTransport implements ProtocolTransport {
     },
   ];
 
-  static Map<String, dynamic> _botDemoPreStartRound() => {
-    'roundNumber': 1,
+  static Map<String, dynamic> _botDemoPreStartRound({
+    int roundNumber = 1,
+    int? dealerSeat,
+  }) => {
+    'roundNumber': roundNumber,
     'openingStage': 'choose_zeng',
     'turnPhase': null,
-    'dealerSeat': null,
+    'dealerSeat': dealerSeat,
     'privateHand': <String>[],
     'availableActions': <String>[],
     'availableReactions': <String>[],
   };
 
-  static Map<String, dynamic> _botDemoDealtRound() => {
-    'roundNumber': 1,
+  static Map<String, dynamic> _botDemoDealtRound({int roundNumber = 1}) => {
+    'roundNumber': roundNumber,
     'openingStage': 'choose_piao',
     'turnPhase': 'opening_choice',
     'dealerSeat': 0,
