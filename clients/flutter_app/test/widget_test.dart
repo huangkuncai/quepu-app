@@ -302,6 +302,12 @@ void main() {
               'flowerStates': {
                 'poc-user': {'status': 'not_piao', 'countedFlowers': 4},
               },
+              'flowerTilesByPlayer': {
+                'poc-user': ['red_dragon'],
+              },
+              'discardedFlowerTilesByPlayer': {
+                'poc-user': ['red_dragon'],
+              },
               'privateHand': ['characters-1-1', 'bamboo-9-2', 'east-1'],
               'availableActions': ['discard', 'concealed_kong'],
               'kongOptions': {
@@ -328,12 +334,10 @@ void main() {
       expect(find.bySemanticsLabel('东'), findsAtLeastNWidgets(3));
       expect(find.bySemanticsLabel('3筒'), findsOneWidget);
       expect(find.bySemanticsLabel('白'), findsOneWidget);
+      expect(find.bySemanticsLabel('中'), findsOneWidget);
       expect(find.textContaining('弃牌'), findsNothing);
       await tester.pump(const Duration(seconds: 2));
-      expect(
-        find.bySemanticsLabel(RegExp('东南西北方位 倒计时 0 秒')),
-        findsOneWidget,
-      );
+      expect(find.bySemanticsLabel(RegExp('东南西北方位 倒计时 0 秒')), findsOneWidget);
       await tester.tap(find.bySemanticsLabel('1万').last);
       await tester.pump(const Duration(milliseconds: 30));
       final action = transport.sentMessages.lastWhere(

@@ -1324,6 +1324,23 @@ class _RoomTable extends StatelessWidget {
           icon: const Icon(Icons.filter_vintage, size: 17),
           label: Text('打花（$pendingFlowerDiscards）'),
         ),
+      if (round?['piaoFlowerDiscardComplete'] == true)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: const Color(0xd9233f37),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xffffd369)),
+          ),
+          child: const Text(
+            '花已打完，请再打出一张普通手牌',
+            style: TextStyle(
+              color: Color(0xffffd369),
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+            ),
+          ),
+        ),
       if (hasAuthoritativeActions)
         _AuthoritativeActionButtons(
           client: client,
@@ -2005,12 +2022,19 @@ class _PublicTilesLane extends StatelessWidget {
     final melds = _dynamicMap(round?['meldsByPlayer']);
     final flowers = _dynamicMap(round?['flowerStates']);
     final flowerTiles = _dynamicMap(round?['flowerTilesByPlayer']);
+    final discardedFlowerTiles = _dynamicMap(
+      round?['discardedFlowerTilesByPlayer'],
+    );
     final flowerState = _dynamicMap(flowers?[playerId]);
     final flowerCount = _intValue(flowerState?['countedFlowers']) ?? 0;
     final meldValues = melds?[playerId] is List
         ? List<Object?>.from(melds![playerId] as List)
         : const <Object?>[];
-    final flowerTileValues = _stringValues(flowerTiles?[playerId]);
+    final discardedFlowerValues = _stringValues(discardedFlowerTiles?[playerId])
+        .toSet();
+    final flowerTileValues = _stringValues(flowerTiles?[playerId])
+        .where((tile) => !discardedFlowerValues.contains(tile))
+        .toList();
     return ClipRect(
       child: Align(
         alignment: Alignment.topLeft,
@@ -2207,7 +2231,13 @@ class _DiscardRiver extends StatelessWidget {
     final playerId =
         player?['id']?.toString() ?? player?['playerId']?.toString();
     final discards = _dynamicMap(round?['discardsByPlayer']);
-    final tiles = _stringValues(discards?[playerId]);
+    final discardedFlowers = _dynamicMap(
+      round?['discardedFlowerTilesByPlayer'],
+    );
+    final tiles = [
+      ..._stringValues(discards?[playerId]),
+      ..._stringValues(discardedFlowers?[playerId]),
+    ];
     if (playerId == null || tiles.isEmpty) return const SizedBox.shrink();
     return Align(
       alignment: Alignment.center,

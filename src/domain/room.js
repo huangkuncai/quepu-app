@@ -1271,9 +1271,9 @@ export class Room {
       isNextPlayer: pending.responderOrder[0] === playerId
     });
     if (this.currentRound?.flowerStates?.[playerId]?.status !== 'piao') return candidates;
-    const face = susongTileFace(pending.tileId);
-    if (!['east', 'south', 'west', 'north'].includes(face)) return candidates;
-    return candidates.filter(candidate => !['peng', 'exposed_kong'].includes(candidate.action));
+    const discardedIsFlower = isSusongReplacementFlower(pending.tileId);
+    return candidates.filter(candidate => candidate.action !== 'exposed_kong'
+      && !(discardedIsFlower && candidate.action === 'peng'));
   }
 
   _susongAvailableReactionActions(playerId) {
@@ -1457,11 +1457,8 @@ export class Room {
     const hand = this._privateRoundState?.handsByPlayer?.[playerId];
     const melds = this.currentRound?.meldsByPlayer?.[playerId] ?? [];
     if (!Array.isArray(hand)) return [];
-    let candidates = getSusongTurnKongCandidates({ hand, melds });
-    if (this.currentRound?.flowerStates?.[playerId]?.status === 'piao') {
-      candidates = candidates.filter(candidate =>
-        !['east', 'south', 'west', 'north'].includes(candidate.face));
-    }
+    if (this.currentRound?.flowerStates?.[playerId]?.status === 'piao') return [];
+    const candidates = getSusongTurnKongCandidates({ hand, melds });
     return action ? candidates.filter(candidate => candidate.action === action) : candidates;
   }
 
@@ -2457,12 +2454,28 @@ export class Room {
               : susongTileFace(tileId))
         ]))
       : null;
+    const publicDiscardedFlowerTiles = this.currentRound
+      && this._privateRoundState?.roundId === this.roundId
+      && Array.isArray(this._privateRoundState.replacementHistory)
+      ? Object.fromEntries(players.map(player => [
+          player.id,
+          this._privateRoundState.replacementHistory
+            .filter(operation => operation?.playerId === player.id && operation?.action === 'discard')
+            .flatMap(operation => operation.removedTileIds ?? [])
+            .map(tileId => /^(red|black)_flower-[1-4]$/.test(tileId)
+              ? tileId
+              : susongTileFace(tileId))
+        ]))
+      : null;
     const round = this.currentRound ? {
       ...this.currentRound,
       ...(derivedSanxiPairs ? {
         sanxiPairs: this.currentRound.settlement?.sanxiPairs ?? derivedSanxiPairs
       } : {}),
       ...(publicFlowerTiles ? { flowerTilesByPlayer: publicFlowerTiles } : {}),
+      ...(publicDiscardedFlowerTiles
+        ? { discardedFlowerTilesByPlayer: publicDiscardedFlowerTiles }
+        : {}),
       ruleSnapshot: publicClone(this.ruleSnapshot)
     } : null;
     const base = {

@@ -856,7 +856,7 @@ test('a player cannot immediately discard the same face that was just claimed by
   );
 });
 
-test('a piao player cannot peng or kong a wind tile', () => {
+test('a piao player may peng a wind tile but cannot expose-kong ordinary tiles', () => {
   const room = susongRoom('piao-wind-claim-room');
   room.dealSusongOpeningRound({ seed: 'f'.padStart(64, '0'), dealerSeat: 0 }, {
     actorId: 'system:susong-rule-engine',
@@ -869,8 +869,27 @@ test('a piao player cannot peng or kong a wind tile', () => {
   });
   room.applyAction('A', { action: 'discard', args: { tileId: 'north-1' } });
 
-  assert.deepEqual(room.snapshot({ viewerId: 'B' }).round.availableReactions, ['pass']);
-  assert.throws(() => room.applyAction('B', 'peng'), error => error.code === 'INVALID_ACTION');
+  assert.deepEqual(room.snapshot({ viewerId: 'B' }).round.availableReactions, ['pass', 'peng']);
+
+  const ordinaryRoom = susongRoom('piao-ordinary-claim-room');
+  ordinaryRoom.dealSusongOpeningRound({ seed: 'b'.padStart(64, '0'), dealerSeat: 0 }, {
+    actorId: 'system:susong-rule-engine',
+    actorRole: 'SYSTEM'
+  });
+  ordinaryRoom.beginPlaying({ actorId: 'A' });
+  ordinaryRoom.currentRound.flowerStates.B = createSusongFlowerState({
+    piaoMode: 'strong',
+    initialFlowerCount: 0
+  });
+  ordinaryRoom.applyAction('A', { action: 'discard', args: { tileId: 'dots-9-2' } });
+  assert.deepEqual(
+    ordinaryRoom.snapshot({ viewerId: 'B' }).round.availableReactions,
+    ['pass', 'peng']
+  );
+  assert.throws(
+    () => ordinaryRoom.applyAction('B', 'exposed_kong'),
+    error => error.code === 'INVALID_ACTION'
+  );
 });
 
 test('a piao player is not offered a concealed wind kong', () => {
@@ -1767,7 +1786,13 @@ test('strong-piao flower discard leaves the wall untouched and reduces only that
   });
   assert.equal(discarded.resolvedCount, 1);
   assert.equal(discarded.wallRemaining, wallBefore);
-  assert.equal(room.snapshot({ viewerId: 'A' }).round.privateHand.length, handBefore - 1);
+  const publicRound = room.snapshot({ viewerId: 'A' }).round;
+  assert.equal(publicRound.privateHand.length, handBefore - 1);
+  assert.equal(publicRound.discardedFlowerTilesByPlayer.A.length, 1);
+  assert.deepEqual(
+    publicRound.discardedFlowerTilesByPlayer.A,
+    publicRound.flowerTilesByPlayer.A
+  );
   assert.equal(JSON.stringify(discarded.event).includes('black_flower-1'), false);
   const persisted = room.persistenceSnapshot();
   assert.equal(persisted.privateRoundState.resolvedFlowerTilesByPlayer.A.length, 1);

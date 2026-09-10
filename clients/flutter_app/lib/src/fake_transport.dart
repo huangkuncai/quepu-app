@@ -446,10 +446,17 @@ class FakeTransport implements ProtocolTransport {
         .where((candidate) => candidate.startsWith('dots-6-'))
         .length;
     final isPengWindow = upstreamDiscard == 'dots-6-4' && matchingDots >= 2;
+    final localPiao =
+        ((round['flowerStates'] as Map?)?['poc-user'] as Map?)?['status'] ==
+        'piao';
     final reactions = isChiWindow
         ? <String>['chi', 'pass']
         : isPengWindow
-        ? <String>[if (matchingDots >= 3) 'exposed_kong', 'peng', 'pass']
+        ? <String>[
+            if (matchingDots >= 3 && !localPiao) 'exposed_kong',
+            'peng',
+            'pass',
+          ]
         : <String>['pass'];
     // The local discard lets the deterministic demo advance the three robot
     // turns. Their piao decisions and flower replacements become public only
@@ -518,6 +525,7 @@ class FakeTransport implements ProtocolTransport {
       'turnPlayerId': 'poc-user',
       'round': {
         ...round,
+        'piaoFlowerDiscardComplete': false,
         'privateHand': hand,
         'discardsByPlayer': discards,
         'turnPhase': 'reaction',
@@ -770,6 +778,10 @@ class FakeTransport implements ProtocolTransport {
     final flowerTiles = Map<String, dynamic>.from(
       (round['flowerTilesByPlayer'] as Map?) ?? const <String, dynamic>{},
     );
+    final discardedFlowerTiles = Map<String, dynamic>.from(
+      (round['discardedFlowerTilesByPlayer'] as Map?) ??
+          const <String, dynamic>{},
+    );
     final current = Map<String, dynamic>.from(
       (flowerStates['poc-user'] as Map?) ?? const <String, dynamic>{},
     );
@@ -790,6 +802,10 @@ class FakeTransport implements ProtocolTransport {
       ...((flowerTiles['poc-user'] as List?) ?? const []),
       _botDemoPublicFlower(removedFlower),
     ];
+    discardedFlowerTiles['poc-user'] = [
+      ...((discardedFlowerTiles['poc-user'] as List?) ?? const []),
+      _botDemoPublicFlower(removedFlower),
+    ];
     _room = {
       ..._room,
       'status': 'playing',
@@ -797,11 +813,13 @@ class FakeTransport implements ProtocolTransport {
       'round': {
         ...round,
         'openingStage': nextPending == 0 ? null : 'discard_piao_flowers',
+        'piaoFlowerDiscardComplete': nextPending == 0,
         'turnPhase': nextPending == 0 ? 'discard' : 'opening_choice',
         'privateHand': hand,
         'availableActions': nextPending == 0 ? ['discard'] : <String>[],
         'flowerStates': flowerStates,
         'flowerTilesByPlayer': flowerTiles,
+        'discardedFlowerTilesByPlayer': discardedFlowerTiles,
       },
     };
     return true;
@@ -1223,6 +1241,12 @@ class FakeTransport implements ProtocolTransport {
         'bot-west': {'status': 'not_activated', 'countedFlowers': 0},
       },
       'flowerTilesByPlayer': {
+        'poc-user': <String>[],
+        'bot-east': <String>[],
+        'bot-north': <String>[],
+        'bot-west': <String>[],
+      },
+      'discardedFlowerTilesByPlayer': {
         'poc-user': <String>[],
         'bot-east': <String>[],
         'bot-north': <String>[],
