@@ -1485,7 +1485,11 @@ class _MahjongTableSurface extends StatelessWidget {
       final handHeight = compact ? 56.0 : 64.0;
       final sideLaneWidth = (width * 0.17).clamp(135.0, 180.0).toDouble();
       final sideTop = compact ? 108.0 : 126.0;
-      final sideBottom = handHeight + 18;
+      final sideBottom = handHeight + 56;
+      final tablePlayers = seats.whereType<Map<String, dynamic>>().toList(
+        growable: false,
+      );
+      final orderedPrivateHand = [...privateHand]..sort(_compareMahjongTileIds);
       final playing = const {
         'dealing',
         'playing',
@@ -1590,7 +1594,12 @@ class _MahjongTableSurface extends StatelessWidget {
                 left: width * 0.26,
                 right: width * 0.26,
                 height: compact ? 42 : 48,
-                child: _PublicTilesLane(player: _seat(2), round: round),
+                child: _PublicTilesLane(
+                  player: _seat(2),
+                  players: tablePlayers,
+                  round: round,
+                  vertical: false,
+                ),
               ),
               Positioned(
                 top: badgeHeight + 4,
@@ -1630,53 +1639,84 @@ class _MahjongTableSurface extends StatelessWidget {
                 top: sideTop,
                 bottom: sideBottom,
                 width: sideLaneWidth,
-                child: _PublicTilesLane(player: _seat(3), round: round),
+                child: _PublicTilesLane(
+                  player: _seat(3),
+                  players: tablePlayers,
+                  round: round,
+                  vertical: true,
+                ),
               ),
               Positioned(
                 right: badgeWidth + 39,
                 top: sideTop,
                 bottom: sideBottom,
                 width: sideLaneWidth,
-                child: _PublicTilesLane(player: _seat(1), round: round),
+                child: _PublicTilesLane(
+                  player: _seat(1),
+                  players: tablePlayers,
+                  round: round,
+                  vertical: true,
+                ),
               ),
               Positioned(
                 left: badgeWidth + 13,
                 bottom: handHeight + 5,
                 width: sideLaneWidth + 60,
                 height: compact ? 46 : 54,
-                child: _PublicTilesLane(player: _seat(0), round: round),
+                child: _PublicTilesLane(
+                  player: _seat(0),
+                  players: tablePlayers,
+                  round: round,
+                  vertical: false,
+                ),
               ),
               Positioned(
-                left: width * 0.39,
-                right: width * 0.39,
+                left: width * 0.58,
+                width: width * 0.16,
                 top: badgeHeight + 96,
                 height: compact ? 54 : 64,
-                child: _DiscardRiver(player: _seat(2), round: round),
+                child: _DiscardRiver(
+                  player: _seat(2),
+                  round: round,
+                  vertical: false,
+                ),
               ),
               Positioned(
-                left: badgeWidth + sideLaneWidth + 54,
-                top: height * 0.37,
-                width: 96,
+                left: width * 0.32,
+                top: height * 0.39,
+                width: width * 0.10,
                 height: compact ? 92 : 112,
-                child: _DiscardRiver(player: _seat(3), round: round),
+                child: _DiscardRiver(
+                  player: _seat(3),
+                  round: round,
+                  vertical: true,
+                ),
               ),
               Positioned(
-                right: badgeWidth + sideLaneWidth + 54,
-                top: height * 0.37,
-                width: 96,
+                right: width * 0.32,
+                top: height * 0.39,
+                width: width * 0.10,
                 height: compact ? 92 : 112,
-                child: _DiscardRiver(player: _seat(1), round: round),
-              ),
-              Positioned(
-                left: width * 0.39,
-                right: width * 0.39,
-                bottom: handHeight + 66,
-                height: compact ? 54 : 64,
-                child: _DiscardRiver(player: _seat(0), round: round),
+                child: _DiscardRiver(
+                  player: _seat(1),
+                  round: round,
+                  vertical: true,
+                ),
               ),
               Positioned(
                 left: width * 0.36,
-                right: width * 0.36,
+                width: width * 0.18,
+                bottom: handHeight + 66,
+                height: compact ? 54 : 64,
+                child: _DiscardRiver(
+                  player: _seat(0),
+                  round: round,
+                  vertical: false,
+                ),
+              ),
+              Positioned(
+                left: width * 0.43,
+                right: width * 0.43,
                 top: height * 0.38,
                 height: compact ? 64 : 78,
                 child: _TableCenterMark(
@@ -1707,10 +1747,10 @@ class _MahjongTableSurface extends StatelessWidget {
                   height: handHeight,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    itemCount: privateHand.length,
+                    itemCount: orderedPrivateHand.length,
                     separatorBuilder: (_, _) => const SizedBox(width: 3),
                     itemBuilder: (context, index) {
-                      final tileId = privateHand[index];
+                      final tileId = orderedPrivateHand[index];
                       return _MahjongTile(
                         tileId: tileId,
                         enabled: canDiscard,
@@ -1776,10 +1816,17 @@ class _TableCenterMark extends StatelessWidget {
 }
 
 class _PublicTilesLane extends StatelessWidget {
-  const _PublicTilesLane({required this.player, required this.round});
+  const _PublicTilesLane({
+    required this.player,
+    required this.players,
+    required this.round,
+    required this.vertical,
+  });
 
   final Map<String, dynamic>? player;
+  final List<Map<String, dynamic>> players;
   final Map<String, dynamic>? round;
+  final bool vertical;
 
   @override
   Widget build(BuildContext context) {
@@ -1806,9 +1853,11 @@ class _PublicTilesLane extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
             child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
+              scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
+              child: Flex(
+                direction: vertical ? Axis.vertical : Axis.horizontal,
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '${_playerName(player!)}  花$flowerCount',
@@ -1819,15 +1868,31 @@ class _PublicTilesLane extends StatelessWidget {
                       fontSize: 10,
                     ),
                   ),
-                  const SizedBox(width: 5),
+                  SizedBox(width: vertical ? 0 : 5, height: vertical ? 3 : 0),
                   for (final raw in meldValues) ...[
-                    _PublicMeld(meld: _dynamicMap(raw) ?? const {}),
-                    const SizedBox(width: 5),
+                    _PublicMeld(
+                      meld: _dynamicMap(raw) ?? const {},
+                      player: player!,
+                      players: players,
+                      vertical: vertical,
+                    ),
+                    SizedBox(width: vertical ? 0 : 5, height: vertical ? 4 : 0),
                   ],
-                  for (final tileId in flowerTileValues) ...[
-                    _MiniMahjongTile(tileId: tileId),
-                    const SizedBox(width: 2),
-                  ],
+                  if (flowerTileValues.isNotEmpty)
+                    Flex(
+                      direction: vertical ? Axis.vertical : Axis.horizontal,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final tileId in flowerTileValues)
+                          Padding(
+                            padding: EdgeInsets.only(
+                              right: vertical ? 0 : 1,
+                              bottom: vertical ? 1 : 0,
+                            ),
+                            child: _MiniFlowerTile(tileId: tileId),
+                          ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -1839,34 +1904,77 @@ class _PublicTilesLane extends StatelessWidget {
 }
 
 class _PublicMeld extends StatelessWidget {
-  const _PublicMeld({required this.meld});
+  const _PublicMeld({
+    required this.meld,
+    required this.player,
+    required this.players,
+    required this.vertical,
+  });
 
   final Map<String, dynamic> meld;
+  final Map<String, dynamic> player;
+  final List<Map<String, dynamic>> players;
+  final bool vertical;
 
   @override
   Widget build(BuildContext context) {
     final action = meld['action']?.toString() ?? '';
     final tiles = _stringValues(meld['tileIds']);
     final concealed = action == 'concealed_kong';
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          _gameActionLabel(action),
-          style: const TextStyle(
-            color: Color(0xff9ee3cc),
-            fontSize: 9,
-            fontWeight: FontWeight.w700,
+    final providerDirection = _meldProviderDirection(player, meld, players);
+    final claimedTileId = meld['claimedTileId']?.toString();
+    final claimedIndex = !concealed && tiles.isNotEmpty
+        ? tiles.indexWhere((tile) => tile == claimedTileId)
+        : -1;
+    final resolvedClaimedIndex = claimedIndex >= 0
+        ? claimedIndex
+        : (!concealed && providerDirection != null ? tiles.length - 1 : -1);
+    final claimedTile = resolvedClaimedIndex >= 0
+        ? tiles[resolvedClaimedIndex]
+        : null;
+    final displayTiles = [...tiles];
+    if (claimedTile != null) {
+      displayTiles.removeAt(resolvedClaimedIndex);
+      final insertAt = switch (providerDirection) {
+        '上家' => 0,
+        '对家' => displayTiles.length ~/ 2,
+        _ => displayTiles.length,
+      };
+      displayTiles.insert(insertAt, claimedTile);
+    }
+    final label = Text(
+      '${_gameActionLabel(action)}${providerDirection == null ? '' : '·$providerDirection'}',
+      style: const TextStyle(
+        color: Color(0xff9ee3cc),
+        fontSize: 9,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+    final tileWidgets = <Widget>[
+      for (var index = 0; index < displayTiles.length; index += 1)
+        Padding(
+          padding: EdgeInsets.only(
+            right: vertical ? 0 : 1,
+            bottom: vertical ? 1 : 0,
           ),
+          child: concealed && index == 1
+              ? const _MiniMahjongBack()
+              : displayTiles[index] == claimedTile
+              ? RotatedBox(
+                  quarterTurns: 1,
+                  child: _MiniMahjongTile(tileId: displayTiles[index]),
+                )
+              : _MiniMahjongTile(tileId: displayTiles[index]),
         ),
-        const SizedBox(width: 2),
-        for (var index = 0; index < tiles.length; index += 1) ...[
-          if (concealed && index == 1)
-            const _MiniMahjongBack()
-          else
-            _MiniMahjongTile(tileId: tiles[index]),
-          const SizedBox(width: 1),
-        ],
+    ];
+    return Flex(
+      direction: vertical ? Axis.vertical : Axis.horizontal,
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        label,
+        SizedBox(width: vertical ? 0 : 2, height: vertical ? 2 : 0),
+        ...tileWidgets,
       ],
     );
   }
@@ -1915,10 +2023,15 @@ class _OpponentHandLane extends StatelessWidget {
 }
 
 class _DiscardRiver extends StatelessWidget {
-  const _DiscardRiver({required this.player, required this.round});
+  const _DiscardRiver({
+    required this.player,
+    required this.round,
+    required this.vertical,
+  });
 
   final Map<String, dynamic>? player;
   final Map<String, dynamic>? round;
+  final bool vertical;
 
   @override
   Widget build(BuildContext context) {
@@ -1930,9 +2043,10 @@ class _DiscardRiver extends StatelessWidget {
     return Align(
       alignment: Alignment.center,
       child: Wrap(
+        direction: vertical ? Axis.vertical : Axis.horizontal,
         alignment: WrapAlignment.center,
-        spacing: 2,
-        runSpacing: 2,
+        spacing: 1,
+        runSpacing: 1,
         children: [
           for (var index = 0; index < tiles.length; index += 1)
             _MiniMahjongTile(
@@ -1966,6 +2080,24 @@ class _MiniMahjongTile extends StatelessWidget {
     ),
     child: Semantics(
       label: _mahjongFaceLabel(tileId),
+      excludeSemantics: true,
+      child: _MahjongFaceArt(tileId: tileId, compact: true),
+    ),
+  );
+}
+
+class _MiniFlowerTile extends StatelessWidget {
+  const _MiniFlowerTile({required this.tileId});
+
+  final String tileId;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 17,
+    height: 22,
+    child: Semantics(
+      label: _mahjongFaceLabel(tileId),
+      image: true,
       excludeSemantics: true,
       child: _MahjongFaceArt(tileId: tileId, compact: true),
     ),
@@ -2875,6 +3007,69 @@ String _mahjongLogicalFace(String tileId) {
     r'^(east|south|west|north|red_dragon|green_dragon|white_dragon|red_flower|black_flower)-\d+$',
   ).firstMatch(tileId);
   return honor?.group(1) ?? tileId;
+}
+
+int _compareMahjongTileIds(String left, String right) {
+  final leftKey = _mahjongSortKey(left);
+  final rightKey = _mahjongSortKey(right);
+  for (var index = 0; index < leftKey.length; index += 1) {
+    final comparison = leftKey[index].compareTo(rightKey[index]);
+    if (comparison != 0) return comparison;
+  }
+  return left.compareTo(right);
+}
+
+List<int> _mahjongSortKey(String tileId) {
+  final face = _mahjongLogicalFace(tileId);
+  final suited = RegExp(r'^(characters|bamboo|dots)-(\d)$').firstMatch(face);
+  if (suited != null) {
+    final family = const {'characters': 0, 'bamboo': 1, 'dots': 2};
+    return [
+      family[suited.group(1)]!,
+      int.parse(suited.group(2)!),
+      int.tryParse(tileId.split('-').last) ?? 0,
+    ];
+  }
+  const honors = {
+    'east': 0,
+    'south': 1,
+    'west': 2,
+    'north': 3,
+    'red_dragon': 4,
+    'green_dragon': 5,
+    'white_dragon': 6,
+    'red_flower': 7,
+    'black_flower': 8,
+  };
+  return [
+    face == 'red_flower' || face == 'black_flower' ? 4 : 3,
+    honors[face] ?? 99,
+    int.tryParse(tileId.split('-').last) ?? 0,
+  ];
+}
+
+String? _meldProviderDirection(
+  Map<String, dynamic> claimant,
+  Map<String, dynamic> meld,
+  List<Map<String, dynamic>> players,
+) {
+  final providerId = meld['fromPlayerId']?.toString();
+  if (providerId == null || providerId.isEmpty) return null;
+  final claimantSeat = _intValue(claimant['seat']);
+  final provider = players.cast<Map<String, dynamic>?>().firstWhere(
+    (candidate) =>
+        candidate?['id']?.toString() == providerId ||
+        candidate?['playerId']?.toString() == providerId,
+    orElse: () => null,
+  );
+  final providerSeat = _intValue(provider?['seat']);
+  if (claimantSeat == null || providerSeat == null) return null;
+  return switch ((providerSeat - claimantSeat) % 4) {
+    3 => '上家',
+    2 => '对家',
+    1 => '下家',
+    _ => null,
+  };
 }
 
 class _RoomStatusStrip extends StatelessWidget {

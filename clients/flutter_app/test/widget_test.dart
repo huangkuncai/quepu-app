@@ -111,11 +111,19 @@ void main() {
     expect(find.text('剩余 78 张'), findsOneWidget);
     expect(find.bySemanticsLabel('暗牌'), findsNWidgets(39));
     expect(find.bySemanticsLabel('1万'), findsWidgets);
+    expect(
+      tester.getCenter(find.bySemanticsLabel('7万').last).dx,
+      lessThan(tester.getCenter(find.bySemanticsLabel('2条').last).dx),
+    );
+    expect(
+      tester.getCenter(find.bySemanticsLabel('2条').last).dx,
+      lessThan(tester.getCenter(find.bySemanticsLabel('1筒').last).dx),
+    );
     await tester.tap(find.bySemanticsLabel('1万').last);
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.textContaining('吃 1万2万3万'), findsOneWidget);
-    expect(find.text('碰'), findsOneWidget);
-    expect(find.text('吃'), findsOneWidget);
+    expect(find.text('碰·对家'), findsOneWidget);
+    expect(find.text('吃·上家'), findsOneWidget);
     expect(find.text('暗杠'), findsOneWidget);
     expect(find.text('过'), findsOneWidget);
     expect(find.textContaining('弃牌'), findsNothing);

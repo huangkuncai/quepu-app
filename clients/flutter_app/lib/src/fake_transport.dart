@@ -438,6 +438,9 @@ class FakeTransport implements ProtocolTransport {
       () => [
         {
           'action': 'peng',
+          'playerId': 'bot-east',
+          'fromPlayerId': 'bot-west',
+          'claimedTileId': 'dots-3-3',
           'tileIds': ['dots-3-1', 'dots-3-2', 'dots-3-3'],
         },
       ],
@@ -447,6 +450,9 @@ class FakeTransport implements ProtocolTransport {
       () => [
         {
           'action': 'chi',
+          'playerId': 'bot-north',
+          'fromPlayerId': 'bot-east',
+          'claimedTileId': 'bamboo-3-1',
           'tileIds': ['bamboo-3-1', 'bamboo-4-1', 'bamboo-5-1'],
         },
       ],
@@ -456,6 +462,9 @@ class FakeTransport implements ProtocolTransport {
       () => [
         {
           'action': 'concealed_kong',
+          'playerId': 'bot-west',
+          'fromPlayerId': null,
+          'claimedTileId': null,
           'tileIds': ['east-1', 'east-2', 'east-3', 'east-4'],
         },
       ],
@@ -607,6 +616,9 @@ class FakeTransport implements ProtocolTransport {
       ...((melds['poc-user'] as List?) ?? const []),
       {
         'action': action,
+        'playerId': 'poc-user',
+        'fromPlayerId': discarderId,
+        'claimedTileId': discarded,
         'tileIds': [...consumed, discarded],
       },
     ];
