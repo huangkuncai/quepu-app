@@ -28,14 +28,12 @@ test('8931 room options normalize to an immutable semantic snapshot', () => {
   assert.deepEqual(toLegacy8931Config(config), { times: 16, branch: '2469', zun: 5, piao: 2, hu: 1, maxPlayerNum: 4 });
 });
 
-test('strong piao with no opening flower discards later flowers and stays no-flower', () => {
+test('strong piao keeps later flowers uncounted for a normal future discard', () => {
   let state = createSusongFlowerState({ piaoMode: 'strong', initialFlowerCount: 0 });
   assert.equal(state.status, 'piao');
   state = recordSusongFlowerDraw(state);
-  assert.equal(state.pendingFlowerDiscards, 1);
+  assert.equal(state.pendingFlowerDiscards, 0);
   assert.equal(state.countedFlowers, 0);
-  assert.equal(evaluateSusongWin({ flowerState: state, winSource: 'self_draw' }).reason, 'FLOWER_DISCARD_REQUIRED');
-  state = resolveSusongFlowers(state, { discard: 1 });
   assert.deepEqual(evaluateSusongWin({ flowerState: state, winSource: 'discard' }), {
     allowed: false,
     tier: null,
@@ -58,15 +56,14 @@ test('strong-piao and optional zero-flower states share the no-flower payer rule
   ), false);
 });
 
-test('strong piao with opening flowers requires a choice and discards all flowers when chosen', () => {
+test('strong piao with opening flowers requires a choice and keeps flowers uncounted', () => {
   const waiting = createSusongFlowerState({ piaoMode: 'strong', initialFlowerCount: 2 });
   assert.equal(waiting.status, 'awaiting_piao_choice');
   assert.equal(evaluateSusongWin({ flowerState: waiting, winSource: 'self_draw' }).reason, 'PIAO_CHOICE_REQUIRED');
   let state = createSusongFlowerState({ piaoMode: 'strong', initialFlowerCount: 2, choosesPiao: true });
-  assert.equal(state.pendingFlowerDiscards, 2);
-  state = resolveSusongFlowers(state, { discard: 2 });
+  assert.equal(state.pendingFlowerDiscards, 0);
   state = recordSusongFlowerDraw(state, 1);
-  assert.equal(state.pendingFlowerDiscards, 1);
+  assert.equal(state.pendingFlowerDiscards, 0);
   assert.equal(state.countedFlowers, 0);
 });
 

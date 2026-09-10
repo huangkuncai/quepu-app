@@ -117,7 +117,7 @@ export function createSusongFlowerState({
       mode,
       status: 'piao',
       openingFlowers,
-      pendingFlowerDiscards: openingFlowers
+      pendingFlowerDiscards: 0
     });
   }
 
@@ -147,8 +147,7 @@ export function recordSusongFlowerDraw(current, count = 1) {
   if (state.status === 'piao') {
     return flowerState({
       ...state,
-      drawnFlowers: state.drawnFlowers + drawn,
-      pendingFlowerDiscards: state.pendingFlowerDiscards + drawn
+      drawnFlowers: state.drawnFlowers + drawn
     });
   }
   return flowerState({

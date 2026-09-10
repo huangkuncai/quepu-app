@@ -526,20 +526,36 @@ void main() {
     await tester.tap(find.text('进入牌桌'));
     await tester.pumpAndSettle();
 
-    Map<String, dynamic> snapshot(Map<String, dynamic> flowerState) => {
-      'id': 'demo-room',
-      'roomId': 'demo-room',
-      'ownerId': 'poc-user',
-      'status': 'dealing',
-      'maxPlayers': 4,
-      'players': [
-        {'id': 'poc-user', 'displayName': '演示玩家', 'seat': 0, 'connected': true},
-      ],
-      'round': {
-        'roundNumber': 1,
-        'flowerStates': {'poc-user': flowerState},
-      },
-    };
+    Map<String, dynamic> snapshot(Map<String, dynamic> flowerState) {
+      final playing = flowerState['status'] == 'piao';
+      return {
+        'id': 'demo-room',
+        'roomId': 'demo-room',
+        'ownerId': 'poc-user',
+        'status': playing ? 'playing' : 'dealing',
+        'turnPlayerId': playing ? 'poc-user' : null,
+        'maxPlayers': 4,
+        'players': [
+          {
+            'id': 'poc-user',
+            'displayName': '演示玩家',
+            'seat': 0,
+            'connected': true,
+          },
+        ],
+        'round': {
+          'roundNumber': 1,
+          'turnPhase': playing ? 'discard' : null,
+          'flowerStates': {'poc-user': flowerState},
+          if (playing) ...{
+            'privateHand': ['red_dragon-1', 'characters-1-1'],
+            'availableActions': ['discard'],
+            'discardsByPlayer': {'poc-user': <String>[]},
+            'wall': {'wallRemaining': 83},
+          },
+        },
+      };
+    }
 
     void inject(int version, Map<String, dynamic> flowerState) {
       transport.inject({
@@ -558,23 +574,20 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('飘花'), findsOneWidget);
     expect(find.text('不飘·补花'), findsOneWidget);
-    await tester.tap(find.text('飘花'));
-    await tester.pump(const Duration(milliseconds: 30));
-    final choose = transport.sentMessages.lastWhere(
-      (message) => message['type'] == 'choose_piao',
-    );
-    expect(choose['payload'], {'choosesPiao': true});
 
-    inject(2, {'status': 'piao', 'pendingFlowerDiscards': 2});
+    inject(2, {'status': 'piao', 'pendingFlowerDiscards': 0});
     await tester.pump(const Duration(milliseconds: 80));
-    expect(find.text('打花（2）'), findsOneWidget);
-    await tester.tap(find.text('打花（2）'));
+    expect(find.textContaining('打花'), findsNothing);
+    expect(find.bySemanticsLabel('中'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('中'));
     await tester.pump(const Duration(milliseconds: 30));
     final discard = transport.sentMessages.lastWhere(
-      (message) => message['type'] == 'resolve_flower',
+      (message) => message['type'] == 'action',
     );
-    expect(discard['payload'], {'action': 'discard'});
-    expect(discard.containsKey('tileId'), isFalse);
+    expect(discard['payload'], {
+      'action': 'discard',
+      'args': {'tileId': 'red_dragon-1'},
+    });
     expect(tester.takeException(), isNull);
   });
 

@@ -617,6 +617,13 @@ class FakeTransport implements ProtocolTransport {
           ...((flowerTiles['poc-user'] as List?) ?? const []),
           _botDemoPublicFlower(drawnTile),
         ];
+      } else if (_isBotDemoFlower(drawnTile) &&
+          flowerState['status'] == 'piao') {
+        hand.add(drawnTile);
+        flowerStates['poc-user'] = {
+          ...flowerState,
+          'drawnFlowers': (flowerState['drawnFlowers'] as int? ?? 0) + 1,
+        };
       } else if (!_isBotDemoFlower(drawnTile)) {
         hand.add(drawnTile);
       }
@@ -706,21 +713,21 @@ class FakeTransport implements ProtocolTransport {
     final current = Map<String, dynamic>.from(
       (flowerStates['poc-user'] as Map?) ?? const <String, dynamic>{},
     );
-    final openingFlowers = current['openingFlowers'] as int? ?? 0;
     if (choosesPiao) {
       flowerStates['poc-user'] = {
         ...current,
         'status': 'piao',
         'countedFlowers': 0,
-        'pendingFlowerDiscards': openingFlowers,
+        'pendingFlowerDiscards': 0,
         'pendingFlowerReplacements': 0,
       };
       _room = {
         ..._room,
         'round': {
           ...round,
-          'openingStage': 'discard_piao_flowers',
-          'turnPhase': 'opening_choice',
+          'openingStage': null,
+          'turnPhase': 'discard',
+          'availableActions': ['discard'],
           'flowerStates': flowerStates,
         },
       };

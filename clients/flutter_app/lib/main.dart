@@ -1245,8 +1245,6 @@ class _RoomTable extends StatelessWidget {
             : status == 'dealing');
     final awaitsBotZengChoice =
         openingStage == 'choose_zeng' && client.transport is FakeTransport;
-    final pendingFlowerDiscards =
-        _intValue(currentFlowerState?['pendingFlowerDiscards']) ?? 0;
     final privateHand = _stringValues(round?['privateHand']);
     final availableActions = _stringValues(round?['availableActions']);
     final availableReactions = _stringValues(round?['availableReactions']);
@@ -1311,36 +1309,7 @@ class _RoomTable extends StatelessWidget {
           icon: const Icon(Icons.layers_outlined, size: 17),
           label: const Text('不飘·补花'),
         ),
-      ] else if (pendingFlowerDiscards > 0 &&
-          (isBotDemo
-              ? status == 'playing' &&
-                    room['turnPlayerId']?.toString() == snapshot.userId
-              : status == 'dealing'))
-        FilledButton.icon(
-          onPressed: connected
-              ? () =>
-                    _run(() => client.resolveFlower(roomId, 'discard'), context)
-              : null,
-          icon: const Icon(Icons.filter_vintage, size: 17),
-          label: Text('打花（$pendingFlowerDiscards）'),
-        ),
-      if (round?['piaoFlowerDiscardComplete'] == true)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: const Color(0xd9233f37),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xffffd369)),
-          ),
-          child: const Text(
-            '花已打完，请再打出一张普通手牌',
-            style: TextStyle(
-              color: Color(0xffffd369),
-              fontWeight: FontWeight.w800,
-              fontSize: 11,
-            ),
-          ),
-        ),
+      ],
       if (hasAuthoritativeActions)
         _AuthoritativeActionButtons(
           client: client,

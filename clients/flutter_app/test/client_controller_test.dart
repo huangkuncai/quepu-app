@@ -300,57 +300,50 @@ void main() {
     await client.dispose();
   });
 
-  test(
-    'piao flowers enter the river before a normal discard advances bots',
-    () async {
-      final transport = FakeTransport()..enableBotDemo();
-      final client = ClientSessionController(
-        transport: transport,
-        deviceId: 'bot-demo-piao-device',
-        platform: 'android',
-      );
+  test('a piao flower is one normal discard and then bots advance', () async {
+    final transport = FakeTransport()..enableBotDemo();
+    final client = ClientSessionController(
+      transport: transport,
+      deviceId: 'bot-demo-piao-device',
+      platform: 'android',
+    );
 
-      await client.login('13800000000', '000000');
-      await Future<void>.delayed(const Duration(milliseconds: 30));
-      await client.createRoom();
-      await client.joinRoom('demo-room');
-      await Future<void>.delayed(const Duration(milliseconds: 30));
-      await transport.chooseBotDemoZeng(2);
-      await Future<void>.delayed(const Duration(milliseconds: 30));
-      await client.choosePiao('demo-room', true);
-      await Future<void>.delayed(const Duration(milliseconds: 30));
+    await client.login('13800000000', '000000');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await client.createRoom();
+    await client.joinRoom('demo-room');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await transport.chooseBotDemoZeng(2);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await client.choosePiao('demo-room', true);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
 
-      for (var remaining = 5; remaining > 0; remaining -= 1) {
-        await client.resolveFlower('demo-room', 'discard');
-        await Future<void>.delayed(const Duration(milliseconds: 30));
-        final round = client.snapshot.roomSnapshot!['round'] as Map;
-        expect(
-          (round['discardedFlowerTilesByPlayer'] as Map)['poc-user'],
-          hasLength(6 - remaining),
-        );
-      }
+    final piaoRound = client.snapshot.roomSnapshot!['round'] as Map;
+    expect(piaoRound['openingStage'], isNull);
+    expect(piaoRound['turnPhase'], 'discard');
+    expect(
+      ((piaoRound['flowerStates'] as Map)['poc-user']
+          as Map)['pendingFlowerDiscards'],
+      0,
+    );
+    expect((piaoRound['privateHand'] as List), hasLength(14));
+    final flowerTile = (piaoRound['privateHand'] as List)
+        .map((tile) => tile.toString())
+        .firstWhere(_isReplacementFlower);
+    await client.action('demo-room', 'discard', args: {'tileId': flowerTile});
+    await Future<void>.delayed(const Duration(milliseconds: 30));
 
-      final afterFlowers = client.snapshot.roomSnapshot!['round'] as Map;
-      expect(afterFlowers['piaoFlowerDiscardComplete'], isTrue);
-      expect(afterFlowers['turnPhase'], 'discard');
-      expect(afterFlowers['availableActions'], ['discard']);
-      final ordinaryTile = (afterFlowers['privateHand'] as List).first
-          .toString();
-      await client.action(
-        'demo-room',
-        'discard',
-        args: {'tileId': ordinaryTile},
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 30));
-
-      final advanced = client.snapshot.roomSnapshot!['round'] as Map;
-      expect(advanced['piaoFlowerDiscardComplete'], isFalse);
-      expect((advanced['discardsByPlayer'] as Map)['bot-east'], isNotEmpty);
-      expect((advanced['discardsByPlayer'] as Map)['bot-north'], isNotEmpty);
-      expect((advanced['discardsByPlayer'] as Map)['bot-west'], isNotEmpty);
-      await client.dispose();
-    },
-  );
+    final advanced = client.snapshot.roomSnapshot!['round'] as Map;
+    expect(
+      (advanced['discardsByPlayer'] as Map)['poc-user'],
+      contains(flowerTile),
+    );
+    expect((advanced['privateHand'] as List), hasLength(13));
+    expect((advanced['discardsByPlayer'] as Map)['bot-east'], isNotEmpty);
+    expect((advanced['discardsByPlayer'] as Map)['bot-north'], isNotEmpty);
+    expect((advanced['discardsByPlayer'] as Map)['bot-west'], isNotEmpty);
+    await client.dispose();
+  });
 
   test(
     'fresh controller adopts room id from an authoritative room sync',

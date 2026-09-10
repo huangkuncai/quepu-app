@@ -1265,6 +1265,7 @@ export class Room {
     const hand = this._privateRoundState?.handsByPlayer?.[playerId];
     if (!pending || !Array.isArray(hand)) return [];
     if (pending.kind === 'added_kong') return [];
+    if (isSusongReplacementFlower(pending.tileId)) return [];
     const candidates = getSusongDiscardReactionCandidates({
       hand,
       tileId: pending.tileId,
@@ -1972,19 +1973,22 @@ export class Room {
       let resolvedCount = 0;
       if (isSusongReplacementFlower(draw.tileId)) {
         flowerState = drawnFlowerState;
-        const flowerAction = flowerState.status === 'piao' ? 'discard' : 'replace';
-        const resolution = resolvePrivateSusongFlowers({
-          privateState,
-          playerId,
-          action: flowerAction,
-          flowerState
-        });
-        this._privateRoundState = resolution.privateState;
-        flowerState = resolution.flowerState;
-        flowerDisposition = flowerAction === 'discard' ? 'discarded' : 'replaced';
-        resolvedCount = resolution.resolvedCount;
-        if (flowerAction === 'discard') this._advanceSusongTurn(playerId);
-        else {
+        if (flowerState.status === 'piao') {
+          this._privateRoundState = privateState;
+          flowerDisposition = 'kept_for_discard';
+          this.currentRound.turnPhase = 'discard';
+          this._setTurnDeadline();
+        } else {
+          const resolution = resolvePrivateSusongFlowers({
+            privateState,
+            playerId,
+            action: 'replace',
+            flowerState
+          });
+          this._privateRoundState = resolution.privateState;
+          flowerState = resolution.flowerState;
+          flowerDisposition = 'replaced';
+          resolvedCount = resolution.resolvedCount;
           this.currentRound.turnPhase = 'discard';
           this._setTurnDeadline();
         }
@@ -2025,7 +2029,10 @@ export class Room {
     }
 
     const tileId = normalizeId(args?.tileId, 'args.tileId', { max: 128 });
-    if (isSusongReplacementFlower(tileId)) throw new AppError('INVALID_ACTION');
+    if (isSusongReplacementFlower(tileId)
+      && this.currentRound.flowerStates[playerId]?.status !== 'piao') {
+      throw new AppError('INVALID_ACTION');
+    }
     const latestOwnBoundary = [...privateState.turnHistory].reverse().find(operation =>
       operation?.playerId === playerId && ['chi', 'draw', 'discard'].includes(operation.action));
     if (latestOwnBoundary?.action === 'chi'
@@ -2043,7 +2050,8 @@ export class Room {
     this._privateRoundState = privateState;
     this.currentRound.discardsByPlayer[playerId].push(tileId);
     this.currentRound.wall.handCountsByPlayer[playerId] = hand.length;
-    this._openSusongReactionWindow(playerId, tileId);
+    if (isSusongReplacementFlower(tileId)) this._advanceSusongTurn(playerId);
+    else this._openSusongReactionWindow(playerId, tileId);
     const event = this._append('SUSONG_TILE_DISCARDED', {
       matchId: this.matchId,
       roundId: this.roundId,
@@ -2057,7 +2065,7 @@ export class Room {
       turnStartedAt: this.currentRound.turnStartedAt,
       turnDeadlineAt: this.currentRound.turnDeadlineAt
     }, command);
-    if (this.ruleSnapshot.config?.forcedHu === true) {
+    if (this.ruleSnapshot.config?.forcedHu === true && this.currentRound.pendingReaction) {
       const winners = this.currentRound.pendingReaction.responderOrder
         .map(id => this._susongWinningCandidate(id, 'discard'))
         .filter(Boolean);

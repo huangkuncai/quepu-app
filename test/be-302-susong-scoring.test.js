@@ -504,8 +504,6 @@ test('strong-piao round actions persist opening choice, flower discard and draw 
   assert.equal(initialized.flowerStates.B.status, 'awaiting_piao_choice');
 
   room.chooseSusongPiao('B', true, { actorId: 'B', commandId: 'B-piao' });
-  room.resolveSusongFlower('B', 'discard', { actorId: 'B', commandId: 'B-flower-1' });
-  room.resolveSusongFlower('B', 'discard', { actorId: 'B', commandId: 'B-flower-2' });
   room.chooseSusongPiao('C', false, { actorId: 'C', commandId: 'C-no-piao' });
   assert.throws(
     () => room.resolveSusongFlower('C', 'discard', { actorId: 'C' }),
@@ -518,8 +516,8 @@ test('strong-piao round actions persist opening choice, flower discard and draw 
     actorRole: 'SYSTEM',
     commandId: 'A-draw-flower'
   });
-  assert.equal(room.snapshot().round.flowerStates.A.pendingFlowerDiscards, 1);
-  room.resolveSusongFlower('A', 'discard', { actorId: 'A', commandId: 'A-discard-flower' });
+  assert.equal(room.snapshot().round.flowerStates.A.pendingFlowerDiscards, 0);
+  assert.equal(room.snapshot().round.flowerStates.A.drawnFlowers, 1);
   assert.equal(room.snapshot().round.flowerStates.A.countedFlowers, 0);
 
   const recovered = Room.fromSnapshot(beforeFlowers);

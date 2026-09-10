@@ -1581,7 +1581,7 @@ test('non-piao live flower is replaced server-side without exposing either priva
   assert.deepEqual(Room.fromSnapshot(room.persistenceSnapshot()).persistenceSnapshot(), room.persistenceSnapshot());
 });
 
-test('strong-piao live flower is discarded server-side and advances the turn', () => {
+test('strong-piao live flower stays in hand and is one normal discard', () => {
   const flowerSeed = '3c'.padStart(64, '0');
   const room = susongRoom('turn-flower-discard-room', 'strong');
   room.dealSusongOpeningRound({ seed: flowerSeed, dealerSeat: 0 }, {
@@ -1601,12 +1601,20 @@ test('strong-piao live flower is discarded server-side and advances the turn', (
   passSusongReaction(room, 'piao-reaction');
   const wallBefore = room.currentRound.wall.wallRemaining;
   const result = room.applyAction('B', 'draw');
-  assert.equal(result.flowerDisposition, 'discarded');
+  assert.equal(result.flowerDisposition, 'kept_for_discard');
   assert.equal(room.currentRound.wall.wallRemaining, wallBefore - 1);
-  assert.equal(room.snapshot({ viewerId: 'B' }).round.privateHand.length, 13);
+  const bViewer = room.snapshot({ viewerId: 'B' });
+  assert.equal(bViewer.round.privateHand.length, 14);
+  assert.equal(room.turn, 'B');
+  assert.equal(room.currentRound.turnPhase, 'discard');
+  assert.equal(JSON.stringify(result.event).includes('tileId'), false);
+  const flowerTileId = bViewer.round.privateHand.find(isSusongReplacementFlower);
+  assert.ok(flowerTileId);
+  room.applyAction('B', { action: 'discard', args: { tileId: flowerTileId } });
+  assert.ok(room.currentRound.discardsByPlayer.B.includes(flowerTileId));
+  assert.equal(room.currentRound.pendingReaction, null);
   assert.equal(room.turn, 'C');
   assert.equal(room.currentRound.turnPhase, 'draw');
-  assert.equal(JSON.stringify(result.event).includes('tileId'), false);
 });
 
 test('Susong live wall settles as a zero-score draw at the reserved 14-tile boundary', () => {
@@ -1769,7 +1777,7 @@ test('RoomActor forces an atomic private checkpoint even with sparse snapshots',
   assert.equal('privateRoundState' in restarted.snapshot(), false);
 });
 
-test('strong-piao flower discard leaves the wall untouched and reduces only that private hand', () => {
+test('choosing strong-piao keeps opening flowers in hand without touching the wall', () => {
   const room = susongRoom('strong-piao-wall-room', 'strong');
   room.dealSusongOpeningRound({ seed, dealerSeat: 2 }, {
     actorId: 'system:susong-rule-engine',
@@ -1777,25 +1785,15 @@ test('strong-piao flower discard leaves the wall untouched and reduces only that
     commandId: 'strong-piao-deal'
   });
   assert.equal(room.currentRound.flowerStates.A.status, 'awaiting_piao_choice');
-  room.chooseSusongPiao('A', true, { actorId: 'A', commandId: 'A-choose-piao' });
   const wallBefore = room.currentRound.wall.wallRemaining;
   const handBefore = room.snapshot({ viewerId: 'A' }).round.privateHand.length;
-  const discarded = room.resolveSusongFlower('A', 'discard', {
-    actorId: 'A',
-    commandId: 'A-discard-opening-flower'
-  });
-  assert.equal(discarded.resolvedCount, 1);
-  assert.equal(discarded.wallRemaining, wallBefore);
+  room.chooseSusongPiao('A', true, { actorId: 'A', commandId: 'A-choose-piao' });
   const publicRound = room.snapshot({ viewerId: 'A' }).round;
-  assert.equal(publicRound.privateHand.length, handBefore - 1);
-  assert.equal(publicRound.discardedFlowerTilesByPlayer.A.length, 1);
-  assert.deepEqual(
-    publicRound.discardedFlowerTilesByPlayer.A,
-    publicRound.flowerTilesByPlayer.A
-  );
-  assert.equal(JSON.stringify(discarded.event).includes('black_flower-1'), false);
+  assert.equal(publicRound.privateHand.length, handBefore);
+  assert.equal(publicRound.wall.wallRemaining, wallBefore);
+  assert.equal(publicRound.flowerStates.A.pendingFlowerDiscards, 0);
   const persisted = room.persistenceSnapshot();
-  assert.equal(persisted.privateRoundState.resolvedFlowerTilesByPlayer.A.length, 1);
+  assert.equal(persisted.privateRoundState.resolvedFlowerTilesByPlayer.A.length, 0);
   assert.deepEqual(Room.fromSnapshot(persisted).persistenceSnapshot(), persisted);
 });
 
