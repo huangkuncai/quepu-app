@@ -2226,6 +2226,7 @@ class _PublicMeld extends StatelessWidget {
     final tiles = _stringValues(meld['tileIds']);
     final concealed = action == 'concealed_kong';
     final providerDirection = _meldProviderDirection(player, meld, players);
+    final providerSeat = _meldProviderSeat(meld, players);
     final claimedTileId = meld['claimedTileId']?.toString();
     final claimedIndex = !concealed && tiles.isNotEmpty
         ? tiles.indexWhere((tile) => tile == claimedTileId)
@@ -2260,6 +2261,9 @@ class _PublicMeld extends StatelessWidget {
                   providerDirection: displayTiles[index] == claimedTile
                       ? providerDirection
                       : null,
+                  providerSeat: displayTiles[index] == claimedTile
+                      ? providerSeat
+                      : null,
                 ),
         ),
     ];
@@ -2273,30 +2277,40 @@ class _PublicMeld extends StatelessWidget {
 }
 
 class _MeldMiniTile extends StatelessWidget {
-  const _MeldMiniTile({required this.tileId, this.providerDirection});
+  const _MeldMiniTile({
+    required this.tileId,
+    this.providerDirection,
+    this.providerSeat,
+  });
 
   final String tileId;
   final String? providerDirection;
+  final int? providerSeat;
 
   @override
   Widget build(BuildContext context) => Stack(
     alignment: Alignment.center,
     children: [
       _MiniMahjongTile(tileId: tileId),
-      if (providerDirection != null)
+      if (providerDirection != null && providerSeat != null)
         IgnorePointer(
-          child: RotatedBox(
-            quarterTurns: switch (providerDirection) {
-              '上家' => 3,
-              '下家' => 1,
-              '对家' => 0,
-              _ => 0,
-            },
-            child: const Icon(
-              Icons.arrow_upward_rounded,
-              size: 15,
-              color: Color(0xff18a54b),
-              shadows: [Shadow(color: Colors.white, blurRadius: 2)],
+          child: Semantics(
+            label:
+                '副露来源 $providerDirection，箭头指向${_seatScreenDirection(providerSeat!)}',
+            child: RotatedBox(
+              quarterTurns: switch (providerSeat) {
+                0 => 2,
+                1 => 1,
+                2 => 0,
+                3 => 3,
+                _ => 0,
+              },
+              child: const Icon(
+                Icons.arrow_upward_rounded,
+                size: 15,
+                color: Color(0xff18a54b),
+                shadows: [Shadow(color: Colors.white, blurRadius: 2)],
+              ),
             ),
           ),
         ),
@@ -4123,6 +4137,29 @@ String? _meldProviderDirection(
     _ => null,
   };
 }
+
+int? _meldProviderSeat(
+  Map<String, dynamic> meld,
+  List<Map<String, dynamic>> players,
+) {
+  final providerId = meld['fromPlayerId']?.toString();
+  if (providerId == null || providerId.isEmpty) return null;
+  final provider = players.cast<Map<String, dynamic>?>().firstWhere(
+    (candidate) =>
+        candidate?['id']?.toString() == providerId ||
+        candidate?['playerId']?.toString() == providerId,
+    orElse: () => null,
+  );
+  return _intValue(provider?['seat']);
+}
+
+String _seatScreenDirection(int seat) => switch (seat) {
+  0 => '下',
+  1 => '右',
+  2 => '上',
+  3 => '左',
+  _ => '未知',
+};
 
 class _RoomStatusStrip extends StatelessWidget {
   const _RoomStatusStrip({

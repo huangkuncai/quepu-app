@@ -126,6 +126,7 @@ void main() {
     expect(find.textContaining('·上家'), findsNothing);
     expect(find.textContaining('·对家'), findsNothing);
     expect(find.byIcon(Icons.arrow_upward_rounded), findsWidgets);
+    expect(find.bySemanticsLabel('副露来源 上家，箭头指向右'), findsOneWidget);
     expect(find.text('过'), findsOneWidget);
     expect(find.textContaining('弃牌'), findsNothing);
     tester.view.devicePixelRatio = 1;
