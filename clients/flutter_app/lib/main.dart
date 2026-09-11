@@ -1469,13 +1469,17 @@ class _BotZengChoice extends StatelessWidget {
           Wrap(
             spacing: 5,
             children: [
-              for (var count = minimum.clamp(0, 5); count <= 5; count += 1)
+              for (var count = 0; count <= 5; count += 1)
                 FilledButton.tonal(
-                  onPressed: enabled ? () => onSelected(count) : null,
+                  onPressed: enabled && count >= minimum
+                      ? () => onSelected(count)
+                      : null,
                   style: FilledButton.styleFrom(
                     visualDensity: VisualDensity.compact,
                     minimumSize: const Size(42, 32),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
+                    disabledBackgroundColor: const Color(0x553f514c),
+                    disabledForegroundColor: const Color(0x887f918c),
                   ),
                   child: Text(count == 0 ? '不出增' : '增$count'),
                 ),
