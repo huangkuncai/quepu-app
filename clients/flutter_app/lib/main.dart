@@ -1265,16 +1265,18 @@ class _RoomTable extends StatelessWidget {
         current != null &&
         !isBotDemo &&
         (status == 'waiting' || status == 'ready');
-    final canStart =
-        current != null &&
-        isOwner &&
-        !isBotDemo &&
-        (status == 'waiting' || status == 'ready');
-    final connected = snapshot.phase == ConnectionPhase.online;
     final maxPlayers = _positiveInt(room['maxPlayers']) ?? seats.length;
     final readyCount =
         _positiveInt(room['readyCount']) ??
         players.where((player) => player['ready'] == true).length;
+    final canStart =
+        current != null &&
+        isOwner &&
+        !isBotDemo &&
+        players.length == maxPlayers &&
+        readyCount == maxPlayers &&
+        (status == 'waiting' || status == 'ready');
+    final connected = snapshot.phase == ConnectionPhase.online;
     final connectedCount =
         _positiveInt(room['connectedCount']) ??
         players.where((player) => player['connected'] == true).length;

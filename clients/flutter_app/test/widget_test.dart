@@ -232,10 +232,12 @@ void main() {
     expect(find.text('演示玩家'), findsOneWidget);
     expect(find.text('空位'), findsNWidgets(3));
     expect(find.text('准备'), findsOneWidget);
+    expect(find.text('开始'), findsNothing);
     await tester.tap(find.text('准备'));
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('取消准备'), findsOneWidget);
     expect(find.text('准备 1/4'), findsOneWidget);
+    expect(find.text('开始'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

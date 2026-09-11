@@ -13,6 +13,34 @@ bool _isReplacementFlower(String tileId) => const {
 }.contains(tileId.replaceFirst(RegExp(r'-\d+$'), ''));
 
 void main() {
+  test(
+    'single-player room cannot start before four players are ready',
+    () async {
+      final client = ClientSessionController(
+        transport: FakeTransport(),
+        deviceId: 'single-player-device',
+        platform: 'android',
+      );
+
+      await client.login('13800000000', '000000');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.createRoom();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.joinRoom('demo-room');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      await client.setReady('demo-room');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(client.snapshot.roomSnapshot?['status'], 'waiting');
+      await client.startRound('demo-room');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(client.snapshot.roomSnapshot?['status'], isNot('playing'));
+      expect(client.snapshot.lastErrorCode, 'PLAYERS_NOT_READY');
+      await client.dispose();
+    },
+  );
+
   test('session authorization is scoped to the request callback', () async {
     final client = ClientSessionController(
       transport: FakeTransport(),

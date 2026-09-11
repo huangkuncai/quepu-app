@@ -276,8 +276,9 @@ class FakeTransport implements ProtocolTransport {
           'ready': isReady,
         };
         _roomVersion += 1;
+        final maxPlayers = (_room['maxPlayers'] as num?)?.toInt() ?? 4;
         final everyoneReady =
-            readyPlayers.isNotEmpty &&
+            readyPlayers.length == maxPlayers &&
             readyPlayers.every((player) => player['ready'] == true);
         _room = {
           ..._room,
@@ -351,6 +352,19 @@ class FakeTransport implements ProtocolTransport {
         };
         _emitRoomEvent(requestId, commandId, 'ACTION_APPLIED');
       case 'start_round':
+        final players = List<Map<String, dynamic>>.from(
+          (_room['players'] as List?) ?? const [],
+        );
+        final maxPlayers = (_room['maxPlayers'] as num?)?.toInt() ?? 4;
+        final everyoneReady =
+            players.length == maxPlayers &&
+            players.every((player) => player['ready'] == true);
+        if (!everyoneReady) {
+          _emit(
+            _error('PLAYERS_NOT_READY', '需要4名玩家全部入座并准备', requestId, commandId),
+          );
+          return;
+        }
         _roomVersion += 1;
         _room = {
           ..._room,
