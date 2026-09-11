@@ -1169,7 +1169,16 @@ class RoomPage extends StatelessWidget {
                     title: '房间状态暂不可用',
                     message: '返回大厅后重新进入房间。',
                   )
-                : _RoomTable(client: client, snapshot: snapshot, room: room),
+                : SafeArea(
+                    minimum: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+                    child: _ResponsiveRoomCanvas(
+                      child: _RoomTable(
+                        client: client,
+                        snapshot: snapshot,
+                        room: room,
+                      ),
+                    ),
+                  ),
           ),
         );
       },
@@ -1189,6 +1198,43 @@ class RoomPage extends StatelessWidget {
       }
     }
   }
+}
+
+class _ResponsiveRoomCanvas extends StatelessWidget {
+  const _ResponsiveRoomCanvas({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final viewport = Size(constraints.maxWidth, constraints.maxHeight);
+      final viewportAspect = viewport.height == 0
+          ? 2.0
+          : viewport.width / viewport.height;
+      // A game table behaves more predictably as one scalable coordinate
+      // system than as dozens of independently clamped widgets. Phones use a
+      // wide 960×430 canvas; squarer tablets receive extra vertical room.
+      final referenceSize = viewportAspect >= 1.75
+          ? const Size(960, 430)
+          : const Size(960, 540);
+      return Semantics(
+        label:
+            '自适应牌桌 ${referenceSize.width.toInt()}×${referenceSize.height.toInt()}',
+        container: true,
+        child: ColoredBox(
+          color: const Color(0xff063c31),
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.contain,
+              clipBehavior: Clip.hardEdge,
+              child: SizedBox.fromSize(size: referenceSize, child: child),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _RoomTable extends StatelessWidget {
@@ -2262,27 +2308,36 @@ class _DiscardRiver extends StatelessWidget {
       ..._stringValues(discardedFlowers?[playerId]),
     ];
     if (playerId == null || tiles.isEmpty) return const SizedBox.shrink();
-    return Align(
-      alignment: Alignment.center,
-      child: Wrap(
-        direction: vertical ? Axis.vertical : Axis.horizontal,
-        alignment: WrapAlignment.center,
-        spacing: 1,
-        runSpacing: 1,
-        children: [
-          for (var index = 0; index < tiles.length; index += 1)
-            _MiniMahjongTile(
-              tileId: tiles[index],
-              highlighted: index == tiles.length - 1,
-            ),
-        ],
+    return Semantics(
+      container: true,
+      label: '牌河 ${tiles.map(_mahjongFaceLabel).join(' ')}',
+      child: Align(
+        alignment: Alignment.center,
+        child: Wrap(
+          direction: vertical ? Axis.vertical : Axis.horizontal,
+          alignment: WrapAlignment.center,
+          spacing: 1,
+          runSpacing: 1,
+          children: [
+            for (var index = 0; index < tiles.length; index += 1)
+              _MiniMahjongTile(
+                key: ValueKey('river-$playerId-$index-${tiles[index]}'),
+                tileId: tiles[index],
+                highlighted: index == tiles.length - 1,
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _MiniMahjongTile extends StatelessWidget {
-  const _MiniMahjongTile({required this.tileId, this.highlighted = false});
+  const _MiniMahjongTile({
+    required this.tileId,
+    this.highlighted = false,
+    super.key,
+  });
 
   final String tileId;
   final bool highlighted;

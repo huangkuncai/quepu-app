@@ -128,6 +128,17 @@ void main() {
     expect(find.byIcon(Icons.arrow_upward_rounded), findsWidgets);
     expect(find.text('过'), findsOneWidget);
     expect(find.textContaining('弃牌'), findsNothing);
+    tester.view.devicePixelRatio = 1;
+    for (final size in const [
+      Size(844, 390),
+      Size(1024, 768),
+      Size(1366, 768),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pump();
+      expect(find.bySemanticsLabel(RegExp('自适应牌桌')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'viewport $size');
+    }
     expect(tester.takeException(), isNull);
   });
 
@@ -230,6 +241,10 @@ void main() {
   testWidgets(
     'room table renders server-owned hand and submits selected tile',
     (tester) async {
+      tester.view.physicalSize = const Size(1024, 600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final transport = FakeTransport();
       await tester.pumpWidget(SusongApp(transport: transport));
       await tester.tap(find.text('进入大厅'));
@@ -332,9 +347,11 @@ void main() {
       expect(find.text('空位'), findsNWidgets(3));
       expect(find.text('碰'), findsNothing);
       expect(find.bySemanticsLabel('东'), findsAtLeastNWidgets(3));
-      expect(find.bySemanticsLabel('3筒'), findsOneWidget);
-      expect(find.bySemanticsLabel('白'), findsOneWidget);
-      expect(find.bySemanticsLabel('中'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('river-poc-user-0-dots-3-1')),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel(RegExp('牌河 3筒 白 中')), findsOneWidget);
       expect(find.textContaining('弃牌'), findsNothing);
       await tester.pump(const Duration(seconds: 2));
       expect(find.bySemanticsLabel(RegExp('东南西北方位 倒计时 0 秒')), findsOneWidget);
