@@ -295,8 +295,10 @@ void main() {
     expect(nextRound['openingStage'], 'choose_zeng');
     expect(nextRound['settlement'], isNull);
     expect((nextRoom['scores'] as Map)['poc-user'], 18);
+    expect((nextRoom['zengByPlayer'] as Map)['poc-user'], 2);
 
-    await transport.chooseBotDemoZeng(1);
+    await expectLater(transport.chooseBotDemoZeng(1), throwsStateError);
+    await transport.chooseBotDemoZeng(2);
     await Future<void>.delayed(const Duration(milliseconds: 30));
     final dealtNextRound = client.snapshot.roomSnapshot!['round'] as Map;
     expect(dealtNextRound['roundNumber'], 2);

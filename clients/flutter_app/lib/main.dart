@@ -1291,6 +1291,8 @@ class _RoomTable extends StatelessWidget {
             : status == 'dealing');
     final awaitsBotZengChoice =
         openingStage == 'choose_zeng' && client.transport is FakeTransport;
+    final minimumZeng =
+        _intValue(_dynamicMap(room['zengByPlayer'])?[snapshot.userId]) ?? 0;
     final privateHand = _stringValues(round?['privateHand']);
     final mustDiscardFlower =
         currentFlowerState?['status']?.toString() == 'piao' &&
@@ -1340,6 +1342,7 @@ class _RoomTable extends StatelessWidget {
       if (awaitsBotZengChoice)
         _BotZengChoice(
           enabled: connected,
+          minimum: minimumZeng,
           onSelected: (count) => _run(
             () => (client.transport as FakeTransport).chooseBotDemoZeng(count),
             context,
@@ -1426,9 +1429,14 @@ class _RoomTable extends StatelessWidget {
 }
 
 class _BotZengChoice extends StatelessWidget {
-  const _BotZengChoice({required this.enabled, required this.onSelected});
+  const _BotZengChoice({
+    required this.enabled,
+    required this.minimum,
+    required this.onSelected,
+  });
 
   final bool enabled;
+  final int minimum;
   final ValueChanged<int> onSelected;
 
   @override
@@ -1452,20 +1460,26 @@ class _BotZengChoice extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
+          if (minimum > 0)
+            Text(
+              '本局最低增$minimum（不能低于上局）',
+              style: const TextStyle(color: Color(0xffc6e0da), fontSize: 9),
+            ),
           const SizedBox(height: 5),
           Wrap(
             spacing: 5,
-            children: List.generate(6, (count) {
-              return FilledButton.tonal(
-                onPressed: enabled ? () => onSelected(count) : null,
-                style: FilledButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  minimumSize: const Size(42, 32),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+            children: [
+              for (var count = minimum.clamp(0, 5); count <= 5; count += 1)
+                FilledButton.tonal(
+                  onPressed: enabled ? () => onSelected(count) : null,
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(42, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: Text(count == 0 ? '不出增' : '增$count'),
                 ),
-                child: Text(count == 0 ? '不出增' : '增$count'),
-              );
-            }),
+            ],
           ),
         ],
       ),
@@ -1886,10 +1900,24 @@ class _TableCenterMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final phase = round?['turnPhase']?.toString();
+    final turnPlayerId = room['turnPlayerId']?.toString();
+    final turnPlayer = _roomPlayers(room)
+        .where((player) => player['id']?.toString() == turnPlayerId);
+    final turnSeat = turnPlayer.isEmpty
+        ? null
+        : _intValue(turnPlayer.first['seat']);
+    final activeWind = switch (turnSeat) {
+      2 => '东',
+      3 => '南',
+      1 => '西',
+      0 => '北',
+      _ => null,
+    };
     return Center(
       child: _WindCompass(
         phase: phase ?? status,
         deadlineAt: round?['turnDeadlineAt']?.toString(),
+        activeWind: activeWind,
       ),
     );
   }
@@ -1926,10 +1954,15 @@ class _RemainingTilesBadge extends StatelessWidget {
 }
 
 class _WindCompass extends StatefulWidget {
-  const _WindCompass({required this.phase, required this.deadlineAt});
+  const _WindCompass({
+    required this.phase,
+    required this.deadlineAt,
+    required this.activeWind,
+  });
 
   final String phase;
   final String? deadlineAt;
+  final String? activeWind;
 
   @override
   State<_WindCompass> createState() => _WindCompassState();
@@ -1937,10 +1970,15 @@ class _WindCompass extends StatefulWidget {
 
 class _WindCompassState extends State<_WindCompass> {
   Timer? _timer;
+  Timer? _pulseTimer;
+  bool _pulseOn = true;
 
   @override
   void initState() {
     super.initState();
+    _pulseTimer = Timer.periodic(const Duration(milliseconds: 650), (_) {
+      if (mounted) setState(() => _pulseOn = !_pulseOn);
+    });
     _restart();
   }
 
@@ -1961,7 +1999,26 @@ class _WindCompassState extends State<_WindCompass> {
   @override
   void dispose() {
     _timer?.cancel();
+    _pulseTimer?.cancel();
     super.dispose();
+  }
+
+  Widget _wind(String wind, TextStyle style) {
+    if (widget.activeWind != wind) return Text(wind, style: style);
+    return Opacity(
+      opacity: _pulseOn ? 1 : 0.35,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0x55ffd369),
+          borderRadius: BorderRadius.circular(4),
+          boxShadow: const [BoxShadow(color: Color(0xaaffd369), blurRadius: 7)],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+          child: Text(wind, style: style),
+        ),
+      ),
+    );
   }
 
   @override
@@ -1974,7 +2031,8 @@ class _WindCompassState extends State<_WindCompass> {
       fontWeight: FontWeight.w900,
     );
     return Semantics(
-      label: '东南西北方位 倒计时 ${seconds ?? 0} 秒',
+      label:
+          '东南西北方位${widget.activeWind == null ? '' : ' 当前方位 ${widget.activeWind}'} 倒计时 ${seconds ?? 0} 秒',
       child: Container(
         width: 72,
         height: 72,
@@ -1993,10 +2051,10 @@ class _WindCompassState extends State<_WindCompass> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            const Positioned(top: 4, child: Text('东', style: windStyle)),
-            const Positioned(left: 6, child: Text('南', style: windStyle)),
-            const Positioned(right: 6, child: Text('西', style: windStyle)),
-            const Positioned(bottom: 4, child: Text('北', style: windStyle)),
+            Positioned(top: 3, child: _wind('东', windStyle)),
+            Positioned(left: 4, child: _wind('南', windStyle)),
+            Positioned(right: 4, child: _wind('西', windStyle)),
+            Positioned(bottom: 3, child: _wind('北', windStyle)),
             Container(
               width: 28,
               height: 28,
@@ -3688,14 +3746,6 @@ class _AuthoritativeActionButtons extends StatelessWidget {
           );
         }
       }
-    }
-    if (actions.contains('discard')) {
-      buttons.add(
-        const Text(
-          '请点击手牌出牌',
-          style: TextStyle(color: Color(0xffffd369), fontSize: 12),
-        ),
-      );
     }
     return Wrap(spacing: 6, runSpacing: 6, children: buttons);
   }

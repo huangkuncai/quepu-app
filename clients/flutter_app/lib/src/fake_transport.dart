@@ -46,6 +46,13 @@ class FakeTransport implements ProtocolTransport {
     if (round['openingStage'] != 'choose_zeng') {
       throw StateError('bot demo is not awaiting a zeng choice');
     }
+    final previousZeng = Map<String, dynamic>.from(
+      (_room['zengByPlayer'] as Map?) ?? const <String, dynamic>{},
+    );
+    final minimum = (previousZeng['poc-user'] as num?)?.toInt() ?? 0;
+    if (count < minimum) {
+      throw StateError('zeng cannot decrease between rounds');
+    }
     _roomVersion += 1;
     final roundNumber = round['roundNumber'] as int? ?? 1;
     final dealtRound = _botDemoDealtRound(roundNumber: roundNumber);
@@ -55,9 +62,9 @@ class FakeTransport implements ProtocolTransport {
       'roomVersion': _roomVersion,
       'zengByPlayer': {
         'poc-user': count,
-        'bot-east': 2,
-        'bot-north': 1,
-        'bot-west': 3,
+        'bot-east': _nonDecreasingBotZeng(previousZeng, 'bot-east', 2),
+        'bot-north': _nonDecreasingBotZeng(previousZeng, 'bot-north', 1),
+        'bot-west': _nonDecreasingBotZeng(previousZeng, 'bot-west', 3),
       },
       'status': 'playing',
       'turnPlayerId': 'poc-user',
@@ -382,7 +389,6 @@ class FakeTransport implements ProtocolTransport {
           'status': 'ready',
           'turnPlayerId': null,
           'roundNumber': nextRoundNumber,
-          'zengByPlayer': <String, dynamic>{},
           'round': _botDemoPreStartRound(
             roundNumber: nextRoundNumber,
             dealerSeat: 0,
@@ -1193,6 +1199,15 @@ class FakeTransport implements ProtocolTransport {
         'flowerAwardCount': 0,
       },
   };
+
+  static int _nonDecreasingBotZeng(
+    Map<String, dynamic> previous,
+    String playerId,
+    int proposed,
+  ) {
+    final minimum = (previous[playerId] as num?)?.toInt() ?? 0;
+    return proposed < minimum ? minimum : proposed;
+  }
 
   static Map<String, dynamic> _botDemoSettlementHands(
     int roundNumber,

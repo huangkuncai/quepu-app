@@ -94,7 +94,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('进行中'), findsOneWidget);
     expect(find.text('庄'), findsOneWidget);
-    expect(find.bySemanticsLabel(RegExp('东南西北方位')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('东南西北方位 当前方位 北')), findsOneWidget);
     expect(find.text('飘花'), findsOneWidget);
     expect(find.text('不飘·补花'), findsOneWidget);
     expect(find.text('过'), findsNothing);
@@ -106,7 +106,7 @@ void main() {
     expect(find.bySemanticsLabel('中'), findsWidgets);
     expect(find.bySemanticsLabel('发'), findsWidgets);
     expect(find.bySemanticsLabel('白'), findsWidgets);
-    expect(find.text('请点击手牌出牌'), findsOneWidget);
+    expect(find.text('请点击手牌出牌'), findsNothing);
     expect(find.text('自摸'), findsOneWidget);
     expect(find.textContaining('剩余 78 张'), findsOneWidget);
     expect(find.bySemanticsLabel('暗牌'), findsNWidgets(39));
@@ -354,7 +354,7 @@ void main() {
       expect(find.bySemanticsLabel(RegExp('牌河 3筒 白 中')), findsOneWidget);
       expect(find.textContaining('弃牌'), findsNothing);
       await tester.pump(const Duration(seconds: 2));
-      expect(find.bySemanticsLabel(RegExp('东南西北方位 倒计时 0 秒')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('东南西北方位.*倒计时 0 秒')), findsOneWidget);
       await tester.tap(find.bySemanticsLabel('1万').last);
       await tester.pump(const Duration(milliseconds: 30));
       final action = transport.sentMessages.lastWhere(
