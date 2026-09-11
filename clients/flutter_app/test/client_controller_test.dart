@@ -200,6 +200,21 @@ void main() {
         containsAll(['exposed_kong', 'peng', 'pass']),
       );
       expect((pengRound['wall'] as Map)['wallRemaining'], 71);
+      final publicBotTiles = <String>[
+        for (final playerId in const ['bot-east', 'bot-north', 'bot-west'])
+          ...List<String>.from(
+            ((pengRound['discardsByPlayer'] as Map)[playerId] as List?) ??
+                const [],
+          ),
+        for (final melds in (pengRound['meldsByPlayer'] as Map).values)
+          for (final meld in melds as List)
+            ...List<String>.from((meld as Map)['tileIds'] as List),
+      ];
+      expect(publicBotTiles.toSet(), hasLength(publicBotTiles.length));
+      expect(
+        publicBotTiles.where((tileId) => tileId.startsWith('east-')).length,
+        lessThanOrEqualTo(4),
+      );
 
       await client.action('demo-room', 'pass');
       await Future<void>.delayed(const Duration(milliseconds: 30));

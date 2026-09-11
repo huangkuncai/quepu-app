@@ -445,11 +445,9 @@ class FakeTransport implements ProtocolTransport {
     }
 
     appendDiscard('poc-user', tileId);
-    appendDiscard('bot-east', _botEastDiscards[_botDiscardRound % 3]);
-    appendDiscard('bot-north', _botNorthDiscards[_botDiscardRound % 3]);
-    final upstreamDiscard = _botDiscardRound.isEven
-        ? 'characters-1-4'
-        : 'dots-6-4';
+    appendDiscard('bot-east', _botDemoDiscard(_botDiscardRound, 0));
+    appendDiscard('bot-north', _botDemoDiscard(_botDiscardRound, 1));
+    final upstreamDiscard = _botDemoDiscard(_botDiscardRound, 2);
     appendDiscard('bot-west', upstreamDiscard);
     _botDiscardRound += 1;
     final wall = Map<String, dynamic>.from(
@@ -526,7 +524,7 @@ class FakeTransport implements ProtocolTransport {
           'playerId': 'bot-west',
           'fromPlayerId': null,
           'claimedTileId': null,
-          'tileIds': ['east-1', 'east-2', 'east-3', 'east-4'],
+          'tileIds': ['bamboo-9-1', 'bamboo-9-2', 'bamboo-9-3', 'bamboo-9-4'],
         },
       ],
     );
@@ -1290,9 +1288,26 @@ class FakeTransport implements ProtocolTransport {
     };
   }
 
-  static const _botEastDiscards = ['east-4', 'bamboo-1-4', 'dots-9-4'];
+  static String _botDemoDiscard(int turn, int playerOffset) {
+    // Reserve two west-player discards for the chi/peng tutorial windows.
+    if (playerOffset == 2 && turn == 0) return 'characters-1-4';
+    if (playerOffset == 2 && turn == 1) return 'dots-6-4';
 
-  static const _botNorthDiscards = ['south-3', 'west-3', 'north-3'];
+    // Use each physical suited tile at most once during a demo round. Rank 9
+    // bamboo is reserved for the bot's concealed kong below.
+    final candidates = <String>[];
+    for (final copy in const [4, 3, 2, 1]) {
+      for (final suit in const ['characters', 'bamboo', 'dots']) {
+        for (var rank = 1; rank <= 8; rank += 1) {
+          final tileId = '$suit-$rank-$copy';
+          if (tileId == 'characters-1-4' || tileId == 'dots-6-4') continue;
+          candidates.add(tileId);
+        }
+      }
+    }
+    final index = turn * 3 + playerOffset;
+    return candidates[index % candidates.length];
+  }
 
   static const _botDrawTiles = ['dots-2-4', 'characters-9-4', 'green_dragon-4'];
 
